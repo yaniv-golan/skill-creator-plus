@@ -252,6 +252,7 @@ def generate_html(
     skill_name: str,
     previous: dict[str, dict] | None = None,
     benchmark: dict | None = None,
+    is_static: bool = False,
 ) -> str:
     """Generate the complete standalone HTML page with embedded data."""
     template_path = Path(__file__).parent / "viewer.html"
@@ -272,6 +273,7 @@ def generate_html(
         "runs": runs,
         "previous_feedback": previous_feedback,
         "previous_outputs": previous_outputs,
+        "is_static": is_static,
     }
     if benchmark:
         embedded["benchmark"] = benchmark
@@ -429,7 +431,7 @@ def main() -> None:
             pass
 
     if args.static:
-        html = generate_html(runs, skill_name, previous, benchmark)
+        html = generate_html(runs, skill_name, previous, benchmark, is_static=True)
         args.static.parent.mkdir(parents=True, exist_ok=True)
         args.static.write_text(html)
         print(f"\n  Static viewer written to: {args.static}\n")

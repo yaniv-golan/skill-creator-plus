@@ -1089,24 +1089,14 @@
         reviews.push({ run_id: r.id, feedback: feedbackMap[r.id] || "", timestamp: ts });
       }
       const payload = JSON.stringify({ reviews, status: "complete" }, null, 2);
-      fetch("/api/feedback", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: payload,
-      }).then(() => {
-        // Server mode: feedback.json is on disk, Claude can read it
+      function showServerDone() {
         document.getElementById("server-done").style.display = "";
         document.getElementById("static-done").style.display = "none";
         document.getElementById("done-overlay").classList.add("visible");
-      }).catch(() => {
-        // Static mode (Cowork / headless): no server to write feedback.json.
-        //
-        // Previous behavior: downloaded feedback.json and showed "saved" message.
-        // Problem: Claude cannot access browser downloads, so the feedback loop
-        // was silently broken — user says "I'm done" and Claude has no data.
-        //
-        // New behavior: still download the file (user may want it), but also
-        // show the JSON in a textarea for copy-paste into the chat.
+      }
+
+      function showStaticDone(payload) {
+        // Download feedback.json (so the user has a file if they want it)
         const blob = new Blob([payload], { type: "application/json" });
         const url = URL.createObjectURL(blob);
         const a = document.createElement("a");
@@ -1120,7 +1110,25 @@
         document.getElementById("static-done").style.display = "";
         document.getElementById("static-feedback-json").value = payload;
         document.getElementById("done-overlay").classList.add("visible");
-      });
+      }
+
+      // Use the is_static flag injected by generate_review.py instead of
+      // relying on fetch failure — in Cowork the fetch doesn't fail because
+      // the HTML is served through Cowork's own infrastructure.
+      if (EMBEDDED_DATA.is_static) {
+        showStaticDone(payload);
+      } else {
+        fetch("/api/feedback", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: payload,
+        }).then(() => {
+          showServerDone();
+        }).catch(() => {
+          // Fallback: if fetch fails even without is_static flag
+          showStaticDone(payload);
+        });
+      }
     }
 
     // Copy the feedback JSON to clipboard (static mode helper)
