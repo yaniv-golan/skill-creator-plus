@@ -1,0 +1,13 @@
+Skill Creator Plus
+Copyright 2026 Yaniv Golan
+
+This project is a derivative work based on the skill-creator plugin from
+Anthropic's claude-plugins-official repository, licensed under the
+Apache License, Version 2.0.
+
+Original work: https://github.com/anthropics/claude-plugins-official
+Original license: Apache License 2.0
+
+Components from the original work include the core workflow, evaluation
+agents (grader, comparator, analyzer), eval viewer, and Python scripts.
+See the README for a summary of changes made in this derivative work.

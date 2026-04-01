@@ -1,0 +1,23 @@
+{
+  "name": "skill-creator-plus-marketplace",
+  "owner": {
+    "name": "Yaniv Golan",
+    "email": "yaniv@golan.name"
+  },
+  "metadata": {
+    "description": "Enhanced skill creator with evaluation, benchmarking, and description optimization"
+  },
+  "plugins": [
+    {
+      "name": "skill-creator-plus",
+      "source": "./skill-creator-plus",
+      "description": "Create, test, evaluate, and iteratively improve Claude Code skills",
+      "author": {
+        "name": "Yaniv Golan",
+        "email": "yaniv@golan.name"
+      },
+      "category": "developer-tools",
+      "tags": ["skill", "creator", "evaluation", "benchmarking", "development"]
+    }
+  ]
+}

@@ -1,0 +1,20 @@
+{
+  "name": "skill-creator-plus",
+  "version": "0.1.0",
+  "description": "Create, test, evaluate, and iteratively improve Claude Code skills with built-in benchmarking, blind A/B comparison, and description optimization",
+  "author": {
+    "name": "Yaniv Golan",
+    "email": "yaniv@golan.name"
+  },
+  "repository": "https://github.com/yaniv-golan/skill-creator-plus",
+  "license": "MIT",
+  "keywords": [
+    "skill",
+    "creator",
+    "evaluation",
+    "benchmarking",
+    "claude-code",
+    "plugin"
+  ],
+  "skills": "./skills"
+}

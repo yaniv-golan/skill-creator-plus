@@ -1,0 +1,39 @@
+name: Validate
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Syntax check bundled scripts
+        run: |
+          for f in skill-creator-plus/skills/skill-creator-plus/scripts/*.py; do
+            python -c "import py_compile; py_compile.compile('$f', doraise=True)"
+            echo "OK: $f"
+          done
+
+      - name: Validate skill structure
+        run: |
+          python skill-creator-plus/skills/skill-creator-plus/scripts/quick_validate.py \
+            skill-creator-plus/skills/skill-creator-plus
+
+      - name: Check version consistency
+        run: |
+          ROOT_VERSION=$(cat VERSION | tr -d '[:space:]')
+          PLUGIN_VERSION=$(python3 -c "import json; print(json.load(open('skill-creator-plus/.claude-plugin/plugin.json'))['version'])")
+          if [ "$ROOT_VERSION" != "$PLUGIN_VERSION" ]; then
+            echo "Version mismatch: VERSION=$ROOT_VERSION, plugin.json=$PLUGIN_VERSION"
+            exit 1
+          fi
+          echo "Version consistent: $ROOT_VERSION"
