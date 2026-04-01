@@ -1,5 +1,9 @@
 # Skill Creator Plus
 
+<p align="center">
+  <img src="assets/banner.png" alt="Skill Creator Plus" width="100%">
+</p>
+
 [![Install in Claude Desktop](https://img.shields.io/badge/Install_in_Claude_Desktop-D97757?style=for-the-badge&logo=claude&logoColor=white)](https://yaniv-golan.github.io/skill-creator-plus/install-claude-desktop.html)
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
