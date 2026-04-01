@@ -4,6 +4,7 @@ on:
   push:
     branches: [main]
     paths: ['static/**']
+  workflow_dispatch:
 
 permissions:
   pages: write

@@ -16,6 +16,9 @@ jobs:
         with:
           python-version: '3.11'
 
+      - name: Install dependencies
+        run: pip install pyyaml
+
       - name: Syntax check bundled scripts
         run: |
           for f in skill-creator-plus/skills/skill-creator-plus/scripts/*.py; do
