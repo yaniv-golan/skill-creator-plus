@@ -3,7 +3,7 @@ name: skill-creator-plus
 description: Create, test, evaluate, and iteratively improve Claude skills. Use when users say "create a skill", "make a skill for", "write a SKILL.md", "turn this into a skill", "run evals", "test my skill", "benchmark my skill", "optimize my skill description", "improve triggering", "blind comparison", "A/B test my skill", or want to package a skill for distribution. Also triggers on "skill-creator", editing an existing skill, or reviewing skill quality.
 metadata:
   author: Yaniv Golan
-  version: "0.1.3"
+  version: "0.1.4"
   license: MIT
 ---
 

@@ -69,15 +69,14 @@ def load_run_results(benchmark_dir: Path) -> dict:
     runs_dir = benchmark_dir / "runs"
     if runs_dir.exists():
         search_dir = runs_dir
-    elif list(benchmark_dir.glob("eval-*")):
-        search_dir = benchmark_dir
     else:
-        print(f"No eval directories found in {benchmark_dir} or {benchmark_dir / 'runs'}")
-        return {}
+        search_dir = benchmark_dir
 
     results: dict[str, list] = {}
 
-    for eval_idx, eval_dir in enumerate(sorted(search_dir.glob("eval-*"))):
+    for eval_idx, eval_dir in enumerate(sorted(
+        d for d in search_dir.iterdir() if d.is_dir()
+    )):
         metadata_path = eval_dir / "eval_metadata.json"
         if metadata_path.exists():
             try:
