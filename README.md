@@ -113,6 +113,16 @@ Or from within a Claude Code session:
 /skill-creator-plus Do a blind A/B comparison between the old and new version of my skill
 ```
 
+## Badge
+
+If you built a skill using Skill Creator Plus, add this badge to your README:
+
+[![Built with Skill Creator Plus](https://img.shields.io/badge/Built_with-Skill_Creator_Plus-4ecdc4?style=flat-square)](https://github.com/yaniv-golan/skill-creator-plus)
+
+```markdown
+[![Built with Skill Creator Plus](https://img.shields.io/badge/Built_with-Skill_Creator_Plus-4ecdc4?style=flat-square)](https://github.com/yaniv-golan/skill-creator-plus)
+```
+
 ## License
 
 MIT — see [LICENSE](LICENSE). Built on Anthropic's skill-creator (Apache 2.0) — see [NOTICE](NOTICE).
