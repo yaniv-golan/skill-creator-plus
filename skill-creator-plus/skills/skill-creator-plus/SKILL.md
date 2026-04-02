@@ -3,7 +3,7 @@ name: skill-creator-plus
 description: Create, test, evaluate, and iteratively improve Claude skills. Use when users say "create a skill", "make a skill for", "write a SKILL.md", "turn this into a skill", "run evals", "test my skill", "benchmark my skill", "optimize my skill description", "improve triggering", "blind comparison", "A/B test my skill", or want to package a skill for distribution. Also triggers on "skill-creator", editing an existing skill, or reviewing skill quality.
 metadata:
   author: Yaniv Golan
-  version: "0.1.2"
+  version: "0.1.3"
   license: MIT
 ---
 
@@ -400,7 +400,7 @@ Present the eval set to the user for review using the HTML template:
 
 1. Read the template from `assets/eval_review.html`
 2. Replace the placeholders:
-   - `__EVAL_DATA_PLACEHOLDER__` → the JSON array of eval items (no quotes around it — it's a JS variable assignment)
+   - `__EVAL_DATA_PLACEHOLDER__` → the JSON array of eval items (no quotes around it — it's a JS variable assignment). After serializing, replace `</` with `<\/` in the JSON string to prevent `</script>` in data from breaking the HTML parser.
    - `__SKILL_NAME_PLACEHOLDER__` → the skill's name
    - `__SKILL_DESCRIPTION_PLACEHOLDER__` → the skill's current description
 3. Write to a temp file (e.g., `/tmp/eval_review_<skill-name>.html`) and open it: `open /tmp/eval_review_<skill-name>.html`
