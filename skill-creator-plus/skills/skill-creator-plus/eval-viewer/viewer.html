@@ -655,12 +655,7 @@
          we also show the raw JSON for copy-paste back into the chat. -->
     <div class="done-card" id="static-done" style="display:none; max-width:700px;">
       <h2>Review Complete</h2>
-      <p>Your feedback has been downloaded as <code>feedback.json</code>.</p>
-      <p><strong>To close the loop with Claude</strong>, either:</p>
-      <ol style="text-align:left; margin:0.5em 1.5em;">
-        <li>Move the downloaded <code>feedback.json</code> into the workspace folder Claude is using, <strong>or</strong></li>
-        <li>Copy the JSON below and paste it into the chat:</li>
-      </ol>
+      <p><strong>To close the loop with Claude</strong>, copy the JSON below and paste it into the chat:</p>
       <textarea id="static-feedback-json" readonly
         style="width:100%; height:180px; font-family:monospace; font-size:12px;
                margin:0.75em 0; padding:8px; border:1px solid #555; border-radius:6px;
@@ -1096,14 +1091,10 @@
       }
 
       function showStaticDone(payload) {
-        // Download feedback.json (so the user has a file if they want it)
-        const blob = new Blob([payload], { type: "application/json" });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = "feedback.json";
-        a.click();
-        URL.revokeObjectURL(url);
+        // Skip file download in static mode — in Cowork's embedded viewer,
+        // a.click() on a blob URL navigates the page instead of downloading,
+        // resulting in a blank white page. The copyable textarea below is
+        // the reliable path for getting feedback back to Claude.
 
         // Show the static-mode overlay with copyable JSON
         document.getElementById("server-done").style.display = "none";
