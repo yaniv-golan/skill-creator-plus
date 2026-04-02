@@ -11,6 +11,15 @@
 
 The skill that builds skills. Write a draft, run evals against a baseline, review results in an interactive viewer, improve, and repeat — until your skill actually works. Based on Anthropic's official [`skill-creator`](https://github.com/anthropics/claude-plugins-official) plugin, with bug fixes and best practices baked in.
 
+| | Official `skill-creator` | `skill-creator-plus` |
+|---|---|---|
+| Best practices guide | — | 580-line Anthropic patterns reference |
+| Eval viewer in Cowork | Silent fail on submit | Copyable JSON textarea (fixed) |
+| Description optimizer | Requires separate `ANTHROPIC_API_KEY` | Uses your existing `claude` session |
+| Benchmarking script | Silent empty results | Fixed directory handling |
+| Skill type taxonomy | 3 broad categories | 3 + 9 Anthropic internal types |
+| Pre-packaging checklist | — | Official checklist built in |
+
 ## Why This Over the Built-in?
 
 Anthropic ships a `skill-creator` plugin. It's good, but several parts are broken or missing:
