@@ -365,7 +365,51 @@ Skills can include a form of memory by storing data within them. This can be any
 Important: Data stored in the skill directory may be deleted when you upgrade the skill. For persistent data, use `${CLAUDE_PLUGIN_DATA}` which provides a stable folder per plugin.
 
 ### Store Scripts & Let Claude Compose
-One of the most powerful things you can give Claude is code. Giving Claude scripts and libraries lets it spend its turns on **composition** — deciding what to do next — rather than reconstructing boilerplate. For example, a data science skill might bundle a library of helper functions for fetching data from your event source. Claude can then generate scripts on the fly that compose these functions for advanced analysis.
+
+One of the most powerful things you can give Claude is code. Giving Claude scripts and libraries lets it spend its turns on **composition** — deciding what to do next — rather than reconstructing boilerplate.
+
+**Concrete example:** A data science skill bundles `scripts/event_helpers.py` with functions like `fetch_events()`, `filter_by_date()`, and `aggregate_by_user()`. Without these, Claude writes a 50-line data-fetching function from scratch in every session — consuming context, risking subtle bugs, and wasting turns. With them, Claude writes a short composition script:
+
+```python
+from event_helpers import fetch_events, aggregate_by_user
+data = fetch_events("signup", start="2026-01-01")
+result = aggregate_by_user(data)
+```
+
+Claude spends its turns on *what analysis to run*, not on *how to fetch data*.
+
+#### Why Offload to Scripts
+
+Pre-made scripts are what turn skills from handy prompt bundles into production-grade, executable packages. When Claude runs a bundled script, **only the output enters the context window — not the script's source code.** This is the core leverage:
+
+- **Context window efficiency** — a bundled script is one Bash call whose output enters context; LLM-generated code loads the full source into context and compounds across multi-step workflows and subagents
+- **Reliability** — a bundled script is tested, debugged once, and runs identically every invocation; LLM-generated code is a fresh roll each time, with risk of subtle variation, hallucinated logic, or edge-case bugs
+- **Speed** — no waiting for the LLM to write, debug, and iterate on code; scripts execute instantly in the native environment
+- **Auditability** — scripts are version-controlled, reviewable separately, and easy to test independently of the skill; this matters for shared/distributed skills where users need to trust the code
+- **Composition** — Claude stays in the high-level reasoning role (deciding *what to do*) while scripts handle the heavy lifting the model isn't great at (precise file I/O, custom computations, data transforms, format conversions)
+
+#### When to Script vs. When to Instruct
+
+Not everything belongs in a script. Use this framework to decide what should be code vs. what should stay as SKILL.md instructions.
+
+**Script when the work is deterministic and repeatable:**
+- Data transformation, format conversion, file I/O (e.g., CSV→JSON, DOCX generation, PDF processing)
+- Validation with fixed rules (schema checks, required fields, regex patterns)
+- API calls with specific auth/endpoint details
+- Computationally intensive operations (data analysis, image conversion, custom CLI wrappers)
+- Any logic where 2-3 independent test runs all produce essentially the same helper code
+
+**Instruct when the work requires judgment or adaptability:**
+- Subjective decisions (tone, emphasis, what to include/exclude)
+- Context-dependent choices (which approach fits this user's situation)
+- Flexible error recovery (interpreting unexpected results, deciding next steps)
+- Workflow orchestration where the sequence may vary based on intermediate results
+
+**The convergence signal:** During testing, if 2-3 independent runs each produce similar helper scripts (e.g., all three write a `build_chart.py` with the same matplotlib boilerplate), that's a strong signal to bundle the script. The logic has converged — stop letting Claude reinvent it.
+
+**Example decision walkthrough:** A report-generation skill needs to (1) fetch data from an API, (2) clean/transform it, (3) decide what's interesting, (4) write the narrative, (5) format as PDF.
+- Steps 1, 2, 5 → **Script.** Deterministic, same every time. Only the output (fetched data, cleaned data, PDF path) enters context.
+- Steps 3, 4 → **Instruct.** Requires judgment about what matters and how to frame it.
 
 ### On-Demand Hooks
 Skills can include hooks that are only activated when the skill is called, lasting for the duration of the session. Use this for opinionated hooks that you don't want running all the time but are extremely useful sometimes. Examples:

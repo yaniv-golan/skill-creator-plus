@@ -3,7 +3,7 @@ name: skill-creator-plus
 description: Create, test, evaluate, and iteratively improve Claude skills. Use when users say "create a skill", "make a skill for", "write a SKILL.md", "turn this into a skill", "run evals", "test my skill", "benchmark my skill", "optimize my skill description", "improve triggering", "blind comparison", "A/B test my skill", or want to package a skill for distribution. Also triggers on "skill-creator", editing an existing skill, or reviewing skill quality.
 metadata:
   author: Yaniv Golan
-  version: "0.1.5"
+  version: "0.2.0"
   license: MIT
 ---
 
@@ -163,6 +163,10 @@ Output: feat(auth): implement JWT-based authentication
 Explain the **why** behind instructions instead of heavy-handed MUSTs. Make skills general, not narrow to specific examples. Draft, then review with fresh eyes.
 
 Key principles (see `references/official-guide-patterns.md`, "Practical Lessons" for full details): don't state the obvious (Claude already knows a lot), build a Gotchas section (highest-signal content), avoid railroading Claude (preserve flexibility), and store scripts so Claude composes rather than reconstructs boilerplate.
+
+### Script vs. Instruct
+
+When designing a skill's architecture, decide what goes into bundled `scripts/` vs. what stays as SKILL.md instructions. The rule of thumb: **script deterministic, repeatable work** (validation, data transforms, format conversion, file I/O) — it's faster, more reliable, and only the output enters the context window. **Instruct for judgment calls** and adaptive decisions where flexibility matters. See [Script vs. Instruct decision framework](references/official-guide-patterns.md) ("When to Script vs. When to Instruct") for the full framework and examples.
 
 ### Test Cases
 
@@ -334,7 +338,7 @@ This is the heart of the loop. You've run the test cases, the user has reviewed 
 
 3. **Explain the why.** Try hard to explain the **why** behind everything you're asking the model to do. Today's LLMs are *smart*. They have good theory of mind and when given a good harness can go beyond rote instructions and really make things happen. Even if the feedback from the user is terse or frustrated, try to actually understand the task and why the user is writing what they wrote, and what they actually wrote, and then transmit this understanding into the instructions. If you find yourself writing ALWAYS or NEVER in all caps, or using super rigid structures, that's a yellow flag — if possible, reframe and explain the reasoning so that the model understands why the thing you're asking for is important. That's a more humane, powerful, and effective approach.
 
-4. **Look for repeated work across test cases.** Read the transcripts from the test runs and notice if the subagents all independently wrote similar helper scripts or took the same multi-step approach to something. If all 3 test cases resulted in the subagent writing a `create_docx.py` or a `build_chart.py`, that's a strong signal the skill should bundle that script. Write it once, put it in `scripts/`, and tell the skill to use it. This saves every future invocation from reinventing the wheel.
+4. **Look for repeated work across test cases.** Read the transcripts from the test runs and notice if the subagents all independently wrote similar helper scripts or took the same multi-step approach to something. If all 3 test cases resulted in the subagent writing a `create_docx.py` or a `build_chart.py`, that's a strong signal the skill should bundle that script. Write it once, put it in `scripts/`, and tell the skill to use it. This saves every future invocation from reinventing the wheel. See [Script vs. Instruct decision framework](references/official-guide-patterns.md) ("When to Script vs. When to Instruct") for guidance on what belongs in a script vs. what should stay as instructions.
 
 5. **Check against the official troubleshooting patterns.** Consult `references/official-guide-patterns.md` (Troubleshooting Guide section) for common issues: instructions not followed (too verbose? buried? ambiguous?), skill not triggering (description too generic?), skill over-triggering (needs negative triggers or scope clarification?), large context degradation (SKILL.md too big? move content to references/).
 
