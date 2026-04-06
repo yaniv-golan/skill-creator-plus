@@ -13,7 +13,8 @@ The skill that builds skills. Write a draft, run evals against a baseline, revie
 
 | | Official `skill-creator` | `skill-creator-plus` |
 |---|---|---|
-| Best practices guide | — | 580-line Anthropic patterns reference |
+| Best practices guide | — | 620+ line Anthropic patterns reference |
+| Script vs. Instruct guidance | — | Decision framework for when to bundle scripts vs. use instructions |
 | Eval viewer in Cowork | Silent fail on submit | Copyable JSON textarea (fixed) |
 | Description optimizer | Requires separate `ANTHROPIC_API_KEY` | Uses your existing `claude` session |
 | Benchmarking script | Silent empty results | Fixed directory handling |
