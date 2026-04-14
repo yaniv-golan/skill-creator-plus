@@ -39,7 +39,10 @@ def validate_skill(skill_path):
         return False, f"Invalid YAML in frontmatter: {e}"
 
     # Define allowed properties
-    ALLOWED_PROPERTIES = {'name', 'description', 'license', 'allowed-tools', 'metadata', 'compatibility'}
+    ALLOWED_PROPERTIES = {
+        'name', 'description', 'license', 'allowed-tools', 'metadata', 'compatibility',
+        'disable-model-invocation', 'context', 'argument-hint', 'user-invocable',
+    }
 
     # Check for unexpected properties (excluding nested keys under metadata)
     unexpected_keys = set(frontmatter.keys()) - ALLOWED_PROPERTIES
@@ -90,6 +93,32 @@ def validate_skill(skill_path):
             return False, f"Compatibility must be a string, got {type(compatibility).__name__}"
         if len(compatibility) > 500:
             return False, f"Compatibility is too long ({len(compatibility)} characters). Maximum is 500 characters."
+
+    # Validate context field if present — only 'fork' is a supported value
+    context = frontmatter.get('context')
+    if context is not None:
+        if context != 'fork':
+            return False, f"'context' must be 'fork' (got '{context}'). Only 'context: fork' is supported."
+
+    # Validate disable-model-invocation field if present — must be a boolean
+    disable_invocation = frontmatter.get('disable-model-invocation')
+    if disable_invocation is not None:
+        if not isinstance(disable_invocation, bool):
+            return False, f"'disable-model-invocation' must be a boolean (true or false), got '{disable_invocation}'"
+
+    # Validate user-invocable field if present — must be a boolean
+    user_invocable = frontmatter.get('user-invocable')
+    if user_invocable is not None:
+        if not isinstance(user_invocable, bool):
+            return False, f"'user-invocable' must be a boolean (true or false), got '{user_invocable}'"
+
+    # Validate argument-hint field if present — must be a short string
+    argument_hint = frontmatter.get('argument-hint')
+    if argument_hint is not None:
+        if not isinstance(argument_hint, str):
+            return False, f"'argument-hint' must be a string, got {type(argument_hint).__name__}"
+        if len(argument_hint) > 200:
+            return False, f"'argument-hint' is too long ({len(argument_hint)} characters). Maximum is 200 characters."
 
     return True, "Skill is valid!"
 
