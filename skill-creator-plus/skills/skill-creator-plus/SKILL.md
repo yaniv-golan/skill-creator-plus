@@ -81,11 +81,21 @@ Check available MCPs - if useful for research (searching docs, finding similar s
 
 Based on the user interview, fill in these components:
 
+**Portable fields (work on every agentskills.io host — Claude, Gemini CLI, Cursor, OpenCode, etc.):**
+
 - **name**: Skill identifier (kebab-case only, no spaces or capitals, must match the folder name)
-- **description**: The single most important field — it's how Claude decides whether to load the skill. Write it as a **trigger, not a summary**: `[What it does] + [When to use it] + [Key capabilities]`. Must be under 1024 characters, no XML tags. Make it assertive — Claude tends to undertrigger. See `references/official-guide-patterns.md` (Description Field Formula) for the full formula and good/bad examples.
-- **compatibility**: Required tools, dependencies (optional, rarely needed)
-- **metadata**: Optional but recommended — include author and version
-- For the full list of optional frontmatter fields (`allowed-tools`, `disable-model-invocation`, `context: fork`, `user-invocable`, `argument-hint`, Dynamic Context Injection, path variables, argument substitution), see `references/official-guide-patterns.md` (Advanced Skill Authoring Features section).
+- **description**: The single most important field. It's how agents decide whether to load the skill. Write it as a **trigger, not a summary**: `[What it does] + [When to use it] + [Key capabilities]`. Must be under 1024 characters, no XML tags. Make it assertive — models tend to undertrigger. On portable hosts this is the only discovery text the model sees, so it must stand alone. See `references/official-guide-patterns.md` (Description Field Formula) for the full formula and examples.
+- **license** (optional): License name or bundled license file reference.
+- **compatibility** (optional, max 500 chars): Use when your skill has environment requirements (e.g. "Requires git, docker"; "Designed for Claude Code").
+- **metadata** (optional): Arbitrary key-value pairs. Recommended: `author`, `version`.
+- **allowed-tools** (optional, experimental): Space-separated pre-approved tool patterns.
+
+**Claude-specific extensions (supported; skills remain portable if you don't use them):**
+
+- **when_to_use** (Claude-only): A separate field Claude Code joins with `description` in its skill listing. **Non-Claude hosts ignore this field entirely** — never put load-bearing trigger info here. If you use it, keep `description` self-sufficient and use `when_to_use` purely to add extra phrasing for Claude's matcher. The combined `description + when_to_use` is capped at 1,536 chars in Claude's listing.
+- **allowed-tools / hooks / shell permission-prompt rule (Claude-specific)**: On Claude Code, any non-empty value in `allowed-tools`, `hooks`, or `shell` triggers a user permission prompt on invocation. To keep a skill silently auto-allowed on Claude, leave these empty and rely on session permissions. Other hosts vary.
+- Other Claude-only fields (`model`, `effort`, `agent`, `context: fork`, `paths`, `disable-model-invocation`, `user-invocable`, `argument-hint`, Dynamic Context Injection, path variables): documented in `references/official-guide-patterns.md` (Advanced Skill Authoring Features). Non-Claude hosts silently ignore them.
+
 - **the rest of the skill :)**
 
 ### Skill Writing Guide
