@@ -106,8 +106,10 @@ Current scores ({scores_summary}):
             train_s = f"{h.get('train_passed', h.get('passed', 0))}/{h.get('train_total', h.get('total', 0))}"
             test_s = f"{h.get('test_passed', '?')}/{h.get('test_total', '?')}" if h.get('test_passed') is not None else None
             score_str = f"train={train_s}" + (f", test={test_s}" if test_s else "")
-            prompt += f'<attempt {score_str}>\n'
-            prompt += f'Description: "{h["description"]}"\n'
+            attempt_desc = h["description"]
+            char_count = len(attempt_desc)
+            prompt += f'<attempt {score_str} chars={char_count}>\n'
+            prompt += f'Description: "{attempt_desc}"\n'
             if "results" in h:
                 prompt += "Train results:\n"
                 for r in h["results"]:
