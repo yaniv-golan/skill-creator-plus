@@ -652,6 +652,17 @@ Solutions:
 2. Be more specific: `"Processes PDF legal documents for contract review"` instead of `"Processes documents"`
 3. Clarify scope: `"Use specifically for online payment workflows, not for general financial queries."`
 
+### All Skills Suddenly Stop Triggering (Claude Listing Collapse)
+**Symptom:** On Claude Code, every skill still shows in the slash menu by name, but descriptions are missing — and Claude stops consulting skills it used yesterday. (Specific to Claude; non-Claude hosts have their own discovery mechanisms.)
+
+**Cause:** Claude's skill listing has a character budget (~1% of the context window, ~8,000 chars at 200 K). When the combined listing overflows and each non-bundled skill's share drops below ~20 chars, **every non-bundled skill collapses to name-only at once**. A single bloated `description` or `when_to_use` can take down the whole listing.
+
+**Solutions:**
+1. Find the offender: list each installed skill's `description` + `when_to_use` lengths. The one well above the others is usually the cause.
+2. Trim at the source. Aim well below the per-entry 1,536 cap.
+3. Escape hatch: set `SLASH_COMMAND_TOOL_CHAR_BUDGET` (integer chars) to raise the budget.
+4. Prevention: run this skill's description optimizer (`scripts/run_loop.py`) — it's now length-aware and won't drift into bloated descriptions. Pass `--target-length` if you want a tighter target.
+
 ### Instructions Not Followed
 **Symptom:** Skill loads but Claude doesn't follow instructions.
 
