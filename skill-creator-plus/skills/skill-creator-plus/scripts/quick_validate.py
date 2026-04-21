@@ -38,10 +38,19 @@ def validate_skill(skill_path):
     except yaml.YAMLError as e:
         return False, f"Invalid YAML in frontmatter: {e}"
 
-    # Define allowed properties
+    # Portable spec fields: name, description, license, compatibility, metadata, allowed-tools
+    # Claude-specific documented fields: when_to_use, model, effort, agent, context,
+    #   disable-model-invocation, user-invocable, argument-hint, paths, hooks, shell
+    # Undocumented-but-functional: arguments, version (top-level), created_by
     ALLOWED_PROPERTIES = {
-        'name', 'description', 'license', 'allowed-tools', 'metadata', 'compatibility',
-        'disable-model-invocation', 'context', 'argument-hint', 'user-invocable',
+        # Portable
+        'name', 'description', 'license', 'compatibility', 'metadata', 'allowed-tools',
+        # Claude-specific
+        'when_to_use', 'model', 'effort', 'agent', 'context',
+        'disable-model-invocation', 'user-invocable', 'argument-hint',
+        'paths', 'hooks', 'shell',
+        # Undocumented-but-functional
+        'arguments', 'version', 'created_by',
     }
 
     # Check for unexpected properties (excluding nested keys under metadata)
@@ -119,6 +128,82 @@ def validate_skill(skill_path):
             return False, f"'argument-hint' must be a string, got {type(argument_hint).__name__}"
         if len(argument_hint) > 200:
             return False, f"'argument-hint' is too long ({len(argument_hint)} characters). Maximum is 200 characters."
+
+    # when_to_use — Claude-specific companion to description; joined with it in the skill listing
+    when_to_use_raw = frontmatter.get('when_to_use')
+    when_to_use = ''
+    if when_to_use_raw is not None:
+        if not isinstance(when_to_use_raw, str):
+            return False, f"'when_to_use' must be a string, got {type(when_to_use_raw).__name__}"
+        when_to_use = when_to_use_raw.strip()
+        if '<' in when_to_use or '>' in when_to_use:
+            return False, "when_to_use cannot contain angle brackets (< or >)"
+
+    # Combined listing entry cap (Claude v2.1.116): description + when_to_use truncates at 1,536 chars.
+    # Both are stripped first so the measurement matches what Claude's listing actually renders.
+    combined_len = len(description or '') + len(when_to_use)
+    if combined_len > 1536:
+        return False, (
+            f"description + when_to_use combined is {combined_len} chars. "
+            f"Claude Code truncates skill listing entries at 1536 chars — trim one or both."
+        )
+
+    # effort — keyword or integer (Claude-specific)
+    effort = frontmatter.get('effort')
+    if effort is not None:
+        allowed_effort = {'low', 'medium', 'high', 'xhigh', 'max'}
+        if isinstance(effort, str):
+            if effort not in allowed_effort:
+                return False, (
+                    f"'effort' must be one of {sorted(allowed_effort)} or an integer, got '{effort}'"
+                )
+        elif not isinstance(effort, int) or isinstance(effort, bool):
+            return False, f"'effort' must be a string keyword or integer, got {type(effort).__name__}"
+
+    # model — string alias or 'inherit' (Claude-specific)
+    model = frontmatter.get('model')
+    if model is not None and not isinstance(model, str):
+        return False, f"'model' must be a string, got {type(model).__name__}"
+
+    # agent — subagent type (Claude-specific; meaningful when context: fork)
+    agent = frontmatter.get('agent')
+    if agent is not None and not isinstance(agent, str):
+        return False, f"'agent' must be a string, got {type(agent).__name__}"
+
+    # paths — gitignore-syntax patterns (Claude-specific; docs say "glob" but impl is gitignore)
+    paths = frontmatter.get('paths')
+    if paths is not None:
+        if not isinstance(paths, list) or not all(isinstance(p, str) for p in paths):
+            return False, "'paths' must be a list of strings (gitignore-syntax patterns)"
+
+    # hooks — object keyed by PreToolUse/PostToolUse (Claude-specific)
+    hooks = frontmatter.get('hooks')
+    if hooks is not None and not isinstance(hooks, dict):
+        return False, f"'hooks' must be an object (PreToolUse/PostToolUse keys), got {type(hooks).__name__}"
+
+    # shell — { interpreter: bash | powershell } (Claude-specific)
+    shell = frontmatter.get('shell')
+    if shell is not None:
+        if not isinstance(shell, dict):
+            return False, f"'shell' must be an object, got {type(shell).__name__}"
+        interpreter = shell.get('interpreter')
+        if interpreter is not None and interpreter not in {'bash', 'powershell'}:
+            return False, f"'shell.interpreter' must be 'bash' or 'powershell', got '{interpreter}'"
+
+    # version — top-level informational (separate from metadata.version)
+    version_field = frontmatter.get('version')
+    if version_field is not None and not isinstance(version_field, (str, int, float)):
+        return False, f"'version' must be a string or number, got {type(version_field).__name__}"
+
+    # arguments — undocumented but functional: space-separated named args mapped positionally
+    arguments = frontmatter.get('arguments')
+    if arguments is not None and not isinstance(arguments, str):
+        return False, f"'arguments' must be a space-separated string, got {type(arguments).__name__}"
+
+    # created_by — informational
+    created_by = frontmatter.get('created_by')
+    if created_by is not None and not isinstance(created_by, str):
+        return False, f"'created_by' must be a string, got {type(created_by).__name__}"
 
     return True, "Skill is valid!"
 
