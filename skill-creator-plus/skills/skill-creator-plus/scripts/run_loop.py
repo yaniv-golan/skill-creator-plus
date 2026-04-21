@@ -58,6 +58,8 @@ def run_loop(
     verbose: bool,
     live_report_path: Path | None = None,
     log_dir: Path | None = None,
+    target_length: int = 500,
+    plateau_patience: int = 2,
 ) -> dict:
     """Run the eval + improvement loop."""
     project_root = find_project_root()
@@ -180,6 +182,20 @@ def run_loop(
                 print(f"\nAll train queries passed on iteration {iteration}!", file=sys.stderr)
             break
 
+        # Plateau early-stop: fire when none of the last `plateau_patience` iterations
+        # exceeded the score at iteration (N - plateau_patience). Extra iterations past
+        # a plateau tend to add verbiage chasing 1-2 edge cases and inflate listing
+        # budget cost.
+        if len(history) > plateau_patience:
+            key = "test_passed" if test_set else "train_passed"
+            baseline = history[-(plateau_patience + 1)].get(key) or 0
+            recent_max = max((h.get(key) or 0) for h in history[-plateau_patience:])
+            if recent_max <= baseline:
+                exit_reason = f"plateau (no improvement in {plateau_patience} iterations)"
+                if verbose:
+                    print(f"\nPlateau: no {key} improvement in {plateau_patience} iterations (baseline={baseline}, recent_max={recent_max}). Stopping.", file=sys.stderr)
+                break
+
         if iteration == max_iterations:
             exit_reason = f"max_iterations ({max_iterations})"
             if verbose:
@@ -205,6 +221,7 @@ def run_loop(
             model=model,
             log_dir=log_dir,
             iteration=iteration,
+            target_length=target_length,
         )
         improve_elapsed = time.time() - t0
 
@@ -213,17 +230,27 @@ def run_loop(
 
         current_description = new_description
 
-    # Find the best iteration by TEST score (or train if no test set)
+    # Length-aware selection: pick highest score; on ties, pick the shortest description.
+    # Rationale: an extra 100 chars is a real cost (shared listing budget on Claude).
+    # Verbiage that doesn't improve the score is dead weight.
     if test_set:
-        best = max(history, key=lambda h: h["test_passed"] or 0)
+        def _score_then_shortest(h):
+            # max() with a tuple key sorts lexicographically; negate length so longer = worse
+            return (h.get("test_passed") or 0, -len(h["description"]))
+        best = max(history, key=_score_then_shortest)
         best_score = f"{best['test_passed']}/{best['test_total']}"
     else:
-        best = max(history, key=lambda h: h["train_passed"])
+        def _score_then_shortest(h):
+            return (h.get("train_passed") or 0, -len(h["description"]))
+        best = max(history, key=_score_then_shortest)
         best_score = f"{best['train_passed']}/{best['train_total']}"
 
     if verbose:
         print(f"\nExit reason: {exit_reason}", file=sys.stderr)
-        print(f"Best score: {best_score} (iteration {best['iteration']})", file=sys.stderr)
+        print(f"Best score: {best_score} (iteration {best['iteration']}, {len(best['description'])} chars)", file=sys.stderr)
+        # Show length trajectory so users can see whether the loop drifted long
+        lens = [len(h["description"]) for h in history]
+        print(f"Description length trajectory: {lens}", file=sys.stderr)
 
     return {
         "exit_reason": exit_reason,
@@ -252,6 +279,10 @@ def main():
     parser.add_argument("--runs-per-query", type=int, default=3, help="Number of runs per query")
     parser.add_argument("--trigger-threshold", type=float, default=0.5, help="Trigger rate threshold")
     parser.add_argument("--holdout", type=float, default=0.4, help="Fraction of eval set to hold out for testing (0 to disable)")
+    parser.add_argument("--target-length", type=int, default=500,
+                        help="Soft target length for descriptions (chars). The improver is told this; selection prefers shorter on tied scores.")
+    parser.add_argument("--plateau-patience", type=int, default=2,
+                        help="Stop early if test score doesn't improve for this many consecutive iterations.")
     parser.add_argument("--model", required=True, help="Model for improvement")
     parser.add_argument("--verbose", action="store_true", help="Print progress to stderr")
     parser.add_argument("--report", default="auto", help="Generate HTML report at this path (default: 'auto' for temp file, 'none' to disable)")
@@ -304,6 +335,8 @@ def main():
         verbose=args.verbose,
         live_report_path=live_report_path,
         log_dir=log_dir,
+        target_length=args.target_length,
+        plateau_patience=args.plateau_patience,
     )
 
     # Save JSON output
