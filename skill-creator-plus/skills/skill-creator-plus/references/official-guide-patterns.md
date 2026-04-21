@@ -576,6 +576,62 @@ Key takeaway: skills are designed for reuse and auto-discovery; agents are desig
 
 ---
 
+## Runtime Mechanics & Gotchas (Claude Code)
+
+Everything in this section is Claude-specific (observed from Claude Code v2.1.116). Other agentskills.io hosts have their own runtime behaviors. If your skill must work across hosts, design against the portable spec first, treat these mechanics as bonus behavior you can lean into only when you know the target is Claude.
+
+### Shell substitution (`` !`cmd` ``) — failure modes
+
+Claude Code supports inline shell substitution in skill bodies. Authors should know:
+
+- **CWD is the project working directory, not `${CLAUDE_SKILL_DIR}`.** Scripts needing their own dir need `cd "$(dirname "$0")"` at the top.
+- **Non-zero exit fails the skill invocation.** User sees the command and stderr.
+- **Must appear at line start or after whitespace.** Mid-word backticks won't substitute.
+- **State doesn't persist between `!` blocks.** Each is independent.
+- **Shell substitution runs synchronously before the body is sent.** Long scripts stall the whole turn — consider `context: fork` for non-trivial work.
+
+### MCP-bundled skills — Claude carve-outs
+
+If the skill ships via an MCP server (vs. as a local skill or plugin):
+
+- Shell substitution is **skipped entirely** — `` !`cmd` `` stays as literal text.
+- `${CLAUDE_SKILL_DIR}` is **inert** and passes through unsubstituted.
+- `shell.interpreter` is ignored.
+- `${CLAUDE_SESSION_ID}` still works.
+
+### `paths:` is gitignore syntax, not glob
+
+Claude's public docs call `paths:` patterns "globs." The runtime uses the `ignore` npm package (gitignore syntax). `src/**` and `src/payments/**` work; `src/**.ts` does not. Activation is sticky per-session until `/clear`.
+
+### Auto-allow vs. permission prompt (Claude)
+
+Any **non-empty** value in these three Claude-specific fields triggers a user permission prompt when the skill is invoked:
+
+- `allowed-tools`
+- `hooks`
+- `shell`
+
+For silent auto-allow, keep them absent or empty and rely on the session's existing tool permissions. Unknown/custom frontmatter fields are dropped by the parser — they don't prompt and they don't do anything.
+
+### Live reload — chokidar depth limit
+
+Claude's file watcher scans the skills dir at **depth 2**. `<dir>/<skill-name>/SKILL.md` reloads live; `<dir>/<group>/<skill-name>/SKILL.md` (three levels deep) does not. Don't nest skills two levels deep if you want live reload.
+
+### Skill name collisions — first wins silently
+
+On Claude, priority chain is: bundled → built-in plugins → policy/managed → user (`~/.claude/skills/`) → project (`.claude/skills/` walking up from CWD) → `--add-dir` → legacy `.claude/commands/` → plugin skills → MCP skills. Loser is dropped silently (no warning). If a project skill won't load on Claude, check for a same-named user-level skill.
+
+### Frontmatter fields to avoid
+
+- `progressMessage` — no parser, render path drops it. Dead code in Claude v2.1.116.
+- Any custom/unknown field on Claude — silently dropped.
+
+### SKILL.md filename — case matters on Linux/CI
+
+Must be exactly `SKILL.md` (uppercase) in `.claude/skills/<name>/`. `Skill.md` works on macOS's case-insensitive filesystem but fails silently on Linux/CI. The portable spec also requires uppercase `SKILL.md`.
+
+---
+
 ## Troubleshooting Guide
 
 ### Skill Doesn't Trigger
