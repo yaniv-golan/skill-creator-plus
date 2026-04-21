@@ -57,6 +57,7 @@ def improve_description(
     test_results: dict | None = None,
     log_dir: Path | None = None,
     iteration: int | None = None,
+    target_length: int = 500,
 ) -> str:
     """Call Claude to improve the description based on eval results."""
     failed_triggers = [
@@ -126,20 +127,23 @@ Skill content (for context on what the skill does):
 {skill_content}
 </skill_content>
 
-Based on the failures, write a new and improved description that is more likely to trigger correctly. When I say "based on the failures", it's a bit of a tricky line to walk because we don't want to overfit to the specific cases you're seeing. So what I DON'T want you to do is produce an ever-expanding list of specific queries that this skill should or shouldn't trigger for. Instead, try to generalize from the failures to broader categories of user intent and situations where this skill would be useful or not useful. The reason for this is twofold:
+Based on the failures, write a new and improved description that is more likely to trigger correctly. Important constraints:
 
-1. Avoid overfitting
-2. The list might get loooong and it's injected into ALL queries and there might be a lot of skills, so we don't want to blow too much space on any given description.
+**Portability.** This `description` may run on hosts other than Claude (Gemini CLI, Cursor, OpenCode, etc.), which load ONLY `description` — they ignore any companion field. So `description` must stand alone and fully explain what the skill does and when to use it. Do NOT split content that's needed for triggering into a separate `when_to_use` field — write a single self-contained `description`.
 
-Concretely, your description should not be more than about 100-200 words, even if that comes at the cost of accuracy. There is a hard limit of 1024 characters — descriptions over that will be truncated, so stay comfortably under it.
+**Length.** Aim for around {target_length} characters. The hard limits:
+- `description` field cap: 1,024 characters (agentskills.io spec). Over that, downstream validators reject or truncate.
+- On Claude specifically, the skill listing has a shared character budget across ALL installed skills. Every extra 100 characters you add is a direct cost — if any single skill's share falls below ~20 characters, **every** skill in the listing collapses to name-only. So shorter is better even when you have headroom. Each extra trigger phrase must pay for itself in hit rate.
 
-Here are some tips that we've found to work well in writing these descriptions:
-- The skill should be phrased in the imperative -- "Use this skill for" rather than "this skill does"
-- The skill description should focus on the user's intent, what they are trying to achieve, vs. the implementation details of how the skill works.
-- The description competes with other skills for Claude's attention — make it distinctive and immediately recognizable.
-- If you're getting lots of failures after repeated attempts, change things up. Try different sentence structures or wordings.
+**Don't overfit.** Generalize from failures to broader categories of user intent rather than enumerating specific queries. An ever-expanding list of edge cases wastes budget and doesn't generalize to unseen queries.
 
-I'd encourage you to be creative and mix up the style in different iterations since you'll have multiple opportunities to try different approaches and we'll just grab the highest-scoring one at the end. 
+Tips we've found work well:
+- Phrase the skill in the imperative — "Use this skill for" rather than "this skill does".
+- Focus on user intent (what they're trying to achieve) rather than implementation details.
+- Make it distinctive — the description competes with other skills for the model's attention.
+- If you're getting lots of failures after repeated attempts, change structure or wording — don't just append more clauses.
+
+Be creative and mix up the style across iterations; we'll grab the highest-scoring one at the end (with a tie-break toward shorter descriptions).
 
 Please respond with only the new description text in <new_description> tags, nothing else."""
 
