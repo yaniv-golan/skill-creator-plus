@@ -111,40 +111,58 @@ Examples: `<resource>-orphans` (finds orphaned pods/volumes → posts to Slack �
 
 ## Description Field Formula
 
-The description is the most important part of the skill — it's how Claude decides whether to load it. Structure it as:
+The `description` field is the primary — and on most hosts, the **only** — signal the agent uses to decide whether to load a skill. Write it to stand alone.
 
 ```
 [What it does] + [When to use it] + [Key capabilities]
 ```
 
-### Rules
-- MUST include BOTH what the skill does AND when to use it (trigger conditions)
-- Under 1024 characters
-- No XML tags (< or >)
-- Include specific tasks users might say
-- Mention relevant file types if applicable
+### Portable rules (apply to every agentskills.io-compatible host)
 
-### Good Examples
+- MUST express BOTH what the skill does AND when to use it — in `description` alone.
+- `description` field cap: **1,024 characters** (per the agentskills.io spec).
+- No XML tags (`<` `>`).
+- Include specific phrases users might say; mention relevant file types if applicable.
+
+### Claude-specific addenda (Claude Code v2.1.116)
+
+- **`when_to_use`** is an optional companion field. Claude renders the listing as `<name>: <description> - <when_to_use>`. Non-Claude hosts ignore it entirely — **never move trigger-critical content out of `description` into `when_to_use`**.
+- **Combined listing-entry cap: 1,536 characters** for `description + when_to_use`. Above this, Claude truncates the entry.
+- **Listing budget collapse (the #1 "it used to work" Claude regression):** every skill shares a budget of roughly 1% of the context window (default ~8,000 chars at 200 K tokens). If the combined listing overflows and each non-bundled skill's share drops below ~20 chars, **every non-bundled skill collapses to name-only simultaneously** — no one gets a description. Override with the `SLASH_COMMAND_TOOL_CHAR_BUDGET` env var, or (better) trim `description` / `when_to_use` at the source.
+
+### Good examples (portable)
 
 ```
-# Good - specific and actionable
+# Good — specific and actionable; works on any host
 description: Analyzes Figma design files and generates developer handoff
 documentation. Use when user uploads .fig files, asks for "design specs",
 "component documentation", or "design-to-code handoff".
 
-# Good - includes trigger phrases
+# Good — includes trigger phrases
 description: Manages Linear project workflows including sprint planning,
 task creation, and status tracking. Use when user mentions "sprint",
 "Linear tasks", "project planning", or asks to "create tickets".
 
-# Good - clear value proposition
+# Good — clear value proposition
 description: End-to-end customer onboarding workflow for PayFlow. Handles
 account creation, payment setup, and subscription management. Use when
 user says "onboard new customer", "set up subscription", or "create
 PayFlow account".
 ```
 
-### Bad Examples
+### Good example (Claude-only split, optional)
+
+```
+# Claude-targeted: when_to_use adds extra trigger phrases without removing anything from description
+description: Analyzes Figma design files and generates developer handoff
+documentation. Handles .fig uploads, spec generation, and code stubs.
+when_to_use: Also trigger on "design specs", "component documentation",
+"design-to-code", or "handoff doc".
+```
+
+Note: `description` still fully explains the skill. `when_to_use` only adds Claude-listing phrases. A user on Gemini CLI reading the description alone still understands the skill.
+
+### Bad examples
 
 ```
 # Too vague
@@ -155,6 +173,15 @@ description: Creates sophisticated multi-page documentation systems.
 
 # Too technical, no user triggers
 description: Implements the Project entity model with hierarchical relationships.
+
+# Non-portable: load-bearing content in Claude-only field
+description: A documentation tool.
+when_to_use: Use when user uploads .fig files, asks for design specs or
+handoff docs. Handles Figma parsing and code generation.
+
+# Bloated — risks collapsing the whole Claude listing
+description: A comprehensive tool for handling every possible variant of …
+when_to_use: Use when the user does A, B, C, D, E, F, G … [2,000 chars]
 ```
 
 ---
