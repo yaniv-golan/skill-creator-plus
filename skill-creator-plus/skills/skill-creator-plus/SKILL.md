@@ -435,14 +435,20 @@ python -m scripts.run_loop \
   --skill-path <path-to-skill> \
   --model <model-id-powering-this-session> \
   --max-iterations 5 \
+  --target-length 500 \
+  --plateau-patience 2 \
   --verbose
 ```
 
 Use the model ID from your system prompt (the one powering the current session) so the triggering test matches what the user actually experiences.
 
-While it runs, periodically tail the output to give the user updates on which iteration it's on and what the scores look like.
+`--target-length` is a soft target, not a hard cap. The improver is told about it; selection breaks ties by preferring shorter descriptions. Default 500 chars — shrink it if the user has many skills installed and is at risk of Claude's listing-budget collapse; raise it to 800+ if trigger accuracy genuinely needs more surface area. The hard cap stays at 1,024 chars (agentskills.io `description` field limit).
 
-This handles the full optimization loop automatically. It splits the eval set into 60% train and 40% held-out test, evaluates the current description (running each query 3 times to get a reliable trigger rate), then calls Claude to propose improvements based on what failed. It re-evaluates each new description on both train and test, iterating up to 5 times. When it's done, it opens an HTML report in the browser showing the results per iteration and returns JSON with `best_description` — selected by test score rather than train score to avoid overfitting.
+`--plateau-patience` stops the loop early if the test score hasn't improved in N consecutive iterations, instead of burning all 5 iterations appending verbiage to chase edge cases. Default 2.
+
+While it runs, periodically tail the output to give the user updates on which iteration it's on, what the scores look like, and how description length is trending.
+
+This handles the full optimization loop automatically. It splits the eval set into 60% train and 40% held-out test, evaluates the current description (running each query 3 times to get a reliable trigger rate), then calls Claude to propose improvements based on what failed. It re-evaluates each new description on both train and test, iterating up to 5 times (or until plateau). When it's done, it opens an HTML report in the browser showing the results per iteration and returns JSON with `best_description` — selected by test score (with shorter winning ties) rather than train score to avoid overfitting.
 
 ### How skill triggering works
 
