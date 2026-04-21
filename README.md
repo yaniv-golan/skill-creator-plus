@@ -15,8 +15,10 @@ The skill that builds skills. Write a draft, run evals against a baseline, revie
 |---|---|---|
 | Best practices guide | — | 620+ line Anthropic patterns reference |
 | Script vs. Instruct guidance | — | Decision framework for when to bundle scripts vs. use instructions |
+| Cross-host portability | — | Validates full [agentskills.io](https://agentskills.io/specification) spec + Claude-specific fields |
+| Claude Code runtime docs | — | v2.1.116 listing budget, collapse mode, truncation thresholds, live-reload behavior |
 | Eval viewer in Cowork | Silent fail on submit | Copyable JSON textarea (fixed) |
-| Description optimizer | Requires separate `ANTHROPIC_API_KEY` | Uses your existing `claude` session |
+| Description optimizer | Requires separate `ANTHROPIC_API_KEY`; drifts toward 1,024-char bloat | Uses your existing `claude` session; length-aware selection + plateau early-stop |
 | Benchmarking script | Silent empty results | Fixed directory handling |
 | Skill type taxonomy | 3 broad categories | 3 + 9 Anthropic internal types |
 | Pre-packaging checklist | — | Official checklist built in |
@@ -26,8 +28,10 @@ The skill that builds skills. Write a draft, run evals against a baseline, revie
 Anthropic ships a `skill-creator` plugin. It's good, but several parts are broken or missing:
 
 - **Best practices guide included** — 620+ lines of patterns, structural templates, troubleshooting guide, and checklists extracted from Anthropic's [Complete Guide to Building Skills for Claude](https://resources.anthropic.com/hubfs/The-Complete-Guide-to-Building-Skill-for-Claude.pdf) and Thariq's [Lessons from Building Claude Code Skills](https://x.com/trq212/status/2024574133011673516). Includes a "Script vs. Instruct" decision framework for when to bundle pre-made scripts vs. keep logic as instructions — covering context window efficiency, reliability, and auditability. The built-in doesn't ship any of this.
+- **Cross-host portability** — skills produced here validate against the full [agentskills.io](https://agentskills.io/specification) cross-host spec so they run on Claude, Gemini CLI, Cursor, OpenCode, and other hosts. Claude-specific fields (`when_to_use`, `model`, `paths`, `hooks`, etc.) are supported but flagged as optional extensions, never load-bearing.
+- **Claude Code runtime docs** — documents v2.1.116 mechanics most skill authors hit the hard way: the ~8 KB total listing budget, the ~20-char collapse threshold that silently breaks *every* skill when any one gets too long, per-entry 1,536-char truncation, gitignore-syntax `paths:` matching (the docs say "glob" — they're wrong), and chokidar depth-2 live-reload.
 - **Eval viewer actually works in Cowork** — the built-in silently fails: you write feedback, click "Submit All Reviews", it says "saved" — but nothing reaches Claude. This version reliably shows copyable JSON you can paste back.
-- **Description optimizer doesn't crash** — the built-in calls the Anthropic SDK directly, requiring a separate `ANTHROPIC_API_KEY` most users don't have. This version uses `claude -p`, which just works with your existing session.
+- **Description optimizer doesn't bloat or crash** — the built-in calls the Anthropic SDK directly, requiring a separate `ANTHROPIC_API_KEY` most users don't have, and drifts toward 1,024-char descriptions that trigger the listing-collapse failure mode. This version uses `claude -p` (just works with your existing session), plus length-aware tie-break-shortest selection, plateau early-stop, and a tunable target length so descriptions stay tight.
 - **Benchmarking script fixed** — the built-in's aggregation script silently produces empty results due to undocumented directory structure requirements. Fixed and tested.
 
 See the [CHANGELOG](CHANGELOG.md) for the full list of fixes.
