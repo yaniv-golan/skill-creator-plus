@@ -107,17 +107,31 @@ def load_run_results(benchmark_dir: Path) -> dict:
                 with open(grading_file) as f:
                     grading = json.load(f)
             except json.JSONDecodeError as e:
-                print(f"Warning: Invalid JSON in {grading_file}: {e}")
+                print(f"Warning: Invalid JSON in {grading_file}: {e}", file=sys.stderr)
                 continue
 
-            # Extract metrics
+            # Extract metrics — schema uses top-level `summary` key (see references/schemas.md
+            # and agents/grader.md). Warn loudly if it's missing rather than silently zeroing —
+            # a malformed or schema-divergent grading.json otherwise produces 0% pass rates with
+            # no signal to the user.
+            summary = grading.get("summary")
+            if not isinstance(summary, dict) or "pass_rate" not in summary:
+                print(
+                    f"Warning: {grading_file} has no `summary` object with `pass_rate` "
+                    f"(grading.json schema requires top-level `summary`, see references/schemas.md). "
+                    f"Metrics for this run will be zero — fix the grader output or this aggregate "
+                    f"will misreport.",
+                    file=sys.stderr,
+                )
+                summary = {}
+
             result = {
                 "eval_id": eval_id,
                 "run_number": 1,
-                "pass_rate": grading.get("summary", {}).get("pass_rate", 0.0),
-                "passed": grading.get("summary", {}).get("passed", 0),
-                "failed": grading.get("summary", {}).get("failed", 0),
-                "total": grading.get("summary", {}).get("total", 0),
+                "pass_rate": summary.get("pass_rate", 0.0),
+                "passed": summary.get("passed", 0),
+                "failed": summary.get("failed", 0),
+                "total": summary.get("total", 0),
             }
 
             # Extract timing — check grading.json first, then sibling timing.json
@@ -247,6 +261,20 @@ def generate_benchmark(benchmark_dir: Path, skill_name: str = "", skill_path: st
         for r in config
     ))
 
+    # Compute runs_per_configuration from actual data rather than hardcoding.
+    # The schema's `runs_per_configuration` means "how many independent runs
+    # exist per (eval_id, configuration) pair" — used for variance estimation.
+    # The current loader produces one run per config_dir, so this is typically
+    # 1, but if a future loader supports multiple grading.json files per
+    # (eval, config) pair this auto-handles. Surfaces the max across pairs so
+    # uneven coverage is reported as the upper bound, not zero.
+    pair_counts: dict[tuple[int, str], int] = {}
+    for config, runs in results.items():
+        for run in runs:
+            key = (run["eval_id"], config)
+            pair_counts[key] = pair_counts.get(key, 0) + 1
+    runs_per_config = max(pair_counts.values(), default=0)
+
     benchmark = {
         "metadata": {
             "skill_name": skill_name or "<skill-name>",
@@ -255,7 +283,7 @@ def generate_benchmark(benchmark_dir: Path, skill_name: str = "", skill_path: st
             "analyzer_model": "<model-name>",
             "timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
             "evals_run": eval_ids,
-            "runs_per_configuration": 3
+            "runs_per_configuration": runs_per_config,
         },
         "runs": runs,
         "run_summary": run_summary,
