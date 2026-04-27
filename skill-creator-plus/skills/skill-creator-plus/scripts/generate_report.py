@@ -302,7 +302,19 @@ def generate_html(data: dict, auto_refresh: bool = False, skill_name: str = "") 
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Generate HTML report from run_loop output")
+    parser = argparse.ArgumentParser(
+        description="Generate HTML report from run_loop output",
+        epilog=(
+            "Examples:\n"
+            "  python -m scripts.generate_report results.json -o report.html\n"
+            "  cat results.json | python -m scripts.generate_report - -o report.html\n"
+            "\n"
+            "Exit codes:\n"
+            "  0  report generated\n"
+            "  1  input could not be read or parsed"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
     parser.add_argument("input", help="Path to JSON output from run_loop.py (or - for stdin)")
     parser.add_argument("-o", "--output", default=None, help="Output HTML file (default: stdout)")
     parser.add_argument("--skill-name", default="", help="Skill name to include in the report title")

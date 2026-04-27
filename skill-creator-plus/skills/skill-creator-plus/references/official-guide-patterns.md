@@ -438,6 +438,55 @@ Not everything belongs in a script. Use this framework to decide what should be 
 - Steps 1, 2, 5 → **Script.** Deterministic, same every time. Only the output (fetched data, cleaned data, PDF path) enters context.
 - Steps 3, 4 → **Instruct.** Requires judgment about what matters and how to frame it.
 
+### Designing Scripts for Agent Use
+
+A script that works fine for a human can be unusable for an agent. When an agent runs your script, it reads stdout and stderr to decide what to do next — design choices that seem cosmetic to a human are load-bearing for agents. Apply these conventions to every script you bundle.
+
+**Non-interactive only.** Agents run in non-interactive shells. A script that blocks on a TTY prompt, password input, or confirmation menu hangs forever. Accept all input via flags, environment variables, or stdin — never `input()`, `read`, or interactive selection libraries. If a required value is missing, fail fast with a clear error stating what's needed.
+
+```
+# Bad: hangs waiting for input
+$ python scripts/deploy.py
+Target environment: _
+
+# Good: clear error with guidance
+$ python scripts/deploy.py
+Error: --env is required. Options: development, staging, production.
+Usage: python scripts/deploy.py --env staging --tag v1.2.3
+```
+
+**Document the interface with `--help`.** The agent learns what your script does primarily by running `--help`. Include a one-line description, all flags with their meanings, and 1–2 example invocations. Keep it concise — the output enters the agent's context window.
+
+**Structured output, not free-form text.** Prefer JSON, CSV, or TSV over whitespace-aligned tables. Structured formats are unambiguous to parse, compose with `jq`/`cut`/`awk`, and survive minor changes without breaking downstream parsing. Send data to stdout and progress/diagnostics to stderr so the agent can capture clean output without losing diagnostic information.
+
+**Helpful error messages.** When the agent gets an error, the message directly shapes its next attempt. "Error: invalid input" wastes a turn. State what went wrong, what was expected, and what to try:
+
+```
+Error: --format must be one of: json, csv, table.
+       Received: "xml"
+```
+
+**Meaningful exit codes.** Use distinct exit codes for different failure types (e.g., `0` success, `1` invalid args, `2` not found, `3` auth failure). Document them in `--help` so the agent knows what each code means and can branch accordingly.
+
+**Idempotent by default.** Agents may retry commands after a partial failure or timeout. "Create if not exists" is safer than "create and fail on duplicate." Where genuine destructive operations are unavoidable, require an explicit `--confirm` or `--force` flag rather than running silently.
+
+**Dry-run support for destructive operations.** A `--dry-run` flag lets the agent preview what will happen and surface it to the user before committing. This pairs naturally with the [Plan-validate-execute](#validation-loops) pattern.
+
+**Predictable output size.** Many agent harnesses truncate tool output beyond a threshold (often 10–30 K characters), silently dropping critical information. If your script can produce large output, default to a summary or a reasonable limit and support pagination flags (`--limit`, `--offset`). For genuinely large output that doesn't paginate, require an `--output FILE` flag so the agent explicitly opts in to capturing it on disk.
+
+**Inline dependencies where the ecosystem supports it.** Use [PEP 723](https://peps.python.org/pep-0723/) for Python (run with `uv run`), Deno's `npm:`/`jsr:` specifiers, Bun auto-install, or `bundler/inline` for Ruby. This lets the script run with a single command — no separate manifest file, no install step, no environment surprises.
+
+```python
+# /// script
+# dependencies = ["beautifulsoup4>=4.12,<5"]
+# ///
+
+from bs4 import BeautifulSoup
+# ...
+```
+
+The common thread: scripts are agent tools, not human CLIs. Design them so a fresh agent reading only `--help` can use them correctly on the first try.
+
 ### On-Demand Hooks
 Skills can include hooks that are only activated when the skill is called, lasting for the duration of the session. Use this for opinionated hooks that you don't want running all the time but are extremely useful sometimes. Examples:
 - `/careful` — blocks rm -rf, DROP TABLE, force-push, kubectl delete via PreToolUse matcher on Bash

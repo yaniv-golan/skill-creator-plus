@@ -257,7 +257,23 @@ def run_eval(
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Run trigger evaluation for a skill description")
+    parser = argparse.ArgumentParser(
+        description="Run trigger evaluation for a skill description",
+        epilog=(
+            "Example:\n"
+            "  python -m scripts.run_eval \\\n"
+            "    --eval-set trigger-eval.json \\\n"
+            "    --skill-path ./my-skill \\\n"
+            "    --model claude-opus-4-7\n"
+            "\n"
+            "Output: JSON results to stdout. Requires the `claude` CLI on PATH.\n"
+            "\n"
+            "Exit codes:\n"
+            "  0  evaluation completed (regardless of pass rate)\n"
+            "  1  eval-set unreadable, skill not found, or `claude` CLI missing"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
     parser.add_argument("--eval-set", required=True, help="Path to eval set JSON file")
     parser.add_argument("--skill-path", required=True, help="Path to skill directory")
     parser.add_argument("--description", default=None, help="Override description to test")

@@ -1,6 +1,6 @@
 {
   "name": "skill-creator-plus",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Create, test, evaluate, and iteratively improve Claude Code skills with built-in benchmarking, blind A/B comparison, and description optimization",
   "author": {
     "name": "Yaniv Golan",

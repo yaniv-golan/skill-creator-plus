@@ -198,7 +198,23 @@ Please respond with only the new description text in <new_description> tags, not
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Improve a skill description based on eval results")
+    parser = argparse.ArgumentParser(
+        description="Improve a skill description based on eval results",
+        epilog=(
+            "Example:\n"
+            "  python -m scripts.improve_description \\\n"
+            "    --eval-results results.json \\\n"
+            "    --skill-path ./my-skill \\\n"
+            "    --model claude-opus-4-7\n"
+            "\n"
+            "Output: writes the improved description JSON to stdout.\n"
+            "\n"
+            "Exit codes:\n"
+            "  0  improvement returned successfully\n"
+            "  1  skill not found, eval-results unreadable, or model invocation failed"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
     parser.add_argument("--eval-results", required=True, help="Path to eval results JSON (from run_eval.py)")
     parser.add_argument("--skill-path", required=True, help="Path to skill directory")
     parser.add_argument("--history", default=None, help="Path to history JSON (previous attempts)")

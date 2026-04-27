@@ -3,7 +3,7 @@ name: skill-creator-plus
 description: Create, test, evaluate, and iteratively improve Claude skills. Use when users say "create a skill", "make a skill for", "write a SKILL.md", "turn this into a skill", "run evals", "test my skill", "benchmark my skill", "optimize my skill description", "improve triggering", "blind comparison", "A/B test my skill", or want to package a skill for distribution. Also triggers on "skill-creator", editing an existing skill, or reviewing skill quality.
 metadata:
   author: Yaniv Golan
-  version: "0.3.0"
+  version: "0.4.0"
   license: MIT
 ---
 
@@ -176,7 +176,23 @@ Key principles (see `references/official-guide-patterns.md`, "Practical Lessons"
 
 ### Script vs. Instruct
 
-When designing a skill's architecture, decide what goes into bundled `scripts/` vs. what stays as SKILL.md instructions. The rule of thumb: **script deterministic, repeatable work** (validation, data transforms, format conversion, file I/O) — it's faster, more reliable, and only the output enters the context window. **Instruct for judgment calls** and adaptive decisions where flexibility matters. See [Script vs. Instruct decision framework](references/official-guide-patterns.md) ("When to Script vs. When to Instruct") for the full framework and examples.
+When designing a skill's architecture, decide what goes into bundled `scripts/` vs. what stays as SKILL.md instructions. Use this as a first-pass heuristic at draft time:
+
+**Script when the work is:**
+- Deterministic and repeatable (data transforms, format conversion, file I/O)
+- Validatable by a fixed rule or exit code (schema checks, regex, required fields)
+- API calls with specific auth/endpoint details
+- The kind of boilerplate Claude would otherwise re-derive every run
+
+**Instruct when the work needs:**
+- Judgment (tone, what to include/exclude, how to frame results)
+- Context-dependent decisions (which approach fits this user's situation)
+- Flexible error recovery (interpreting unexpected results, deciding next steps)
+- Workflow orchestration where the sequence may vary
+
+This is a starting point, not the final answer. The strongest signal for what to script comes later, from observing convergence across eval runs (see "Look for repeated work across test cases" below) — if 2-3 independent runs all reinvent the same helper, that's empirical evidence the logic belongs in a script. Don't over-script upfront; let the convergence signal guide you. See [Script vs. Instruct decision framework](references/official-guide-patterns.md) ("When to Script vs. When to Instruct") for the full framework and examples.
+
+**When you do bundle a script, design it for agent consumption** — non-interactive, `--help`-documented, structured output (JSON/CSV), helpful errors, meaningful exit codes, idempotent by default. A script that works fine for a human can be unusable for an agent. See [official-guide-patterns.md](references/official-guide-patterns.md) ("Designing Scripts for Agent Use") for the full conventions.
 
 ### Test Cases
 
@@ -269,7 +285,7 @@ This is the only opportunity to capture this data — it comes through the task 
 
 Once all runs are done:
 
-1. **Grade each run** — spawn a grader subagent (or grade inline) that reads `agents/grader.md` and evaluates each assertion against the outputs. Save results to `grading.json` in each config directory (e.g., `eval-1/with_skill/grading.json`). The grading.json expectations array must use the fields `text`, `passed`, and `evidence` (not `name`/`met`/`details` or other variants) — the viewer depends on these exact field names. For assertions that can be checked programmatically, write and run a script rather than eyeballing it — scripts are faster, more reliable, and can be reused across iterations.
+1. **Grade each run** — spawn a grader subagent (or grade inline) that reads `agents/grader.md` and evaluates each assertion against the outputs. Save results to `grading.json` in each config directory (e.g., `eval-1/with_skill/grading.json`). The grading.json expectations array must use the fields `text`, `passed`, and `evidence` (not `name`/`met`/`details` or other variants) — the viewer depends on these exact field names. For assertions that can be checked programmatically, write and run a script rather than eyeballing it — scripts are faster, more reliable, and can be reused across iterations. If a check is also something a user of the finished skill would benefit from running themselves (e.g., a `validate_X.py` or `smoke_test_X.sh`), bundle it in the skill's `scripts/` directory so the same code serves both the eval grader and end users.
 
 2. **Aggregate into benchmark** — run the aggregation script from the skill-creator directory:
    ```bash
@@ -348,7 +364,7 @@ This is the heart of the loop. You've run the test cases, the user has reviewed 
 
 3. **Explain the why.** Try hard to explain the **why** behind everything you're asking the model to do. Today's LLMs are *smart*. They have good theory of mind and when given a good harness can go beyond rote instructions and really make things happen. Even if the feedback from the user is terse or frustrated, try to actually understand the task and why the user is writing what they wrote, and what they actually wrote, and then transmit this understanding into the instructions. If you find yourself writing ALWAYS or NEVER in all caps, or using super rigid structures, that's a yellow flag — if possible, reframe and explain the reasoning so that the model understands why the thing you're asking for is important. That's a more humane, powerful, and effective approach.
 
-4. **Look for repeated work across test cases.** Read the transcripts from the test runs and notice if the subagents all independently wrote similar helper scripts or took the same multi-step approach to something. If all 3 test cases resulted in the subagent writing a `create_docx.py` or a `build_chart.py`, that's a strong signal the skill should bundle that script. Write it once, put it in `scripts/`, and tell the skill to use it. This saves every future invocation from reinventing the wheel. See [Script vs. Instruct decision framework](references/official-guide-patterns.md) ("When to Script vs. When to Instruct") for guidance on what belongs in a script vs. what should stay as instructions.
+4. **Look for repeated work across test cases.** Read the transcripts from the test runs and notice if the subagents all independently wrote similar helper scripts or took the same multi-step approach to something. If all 3 test cases resulted in the subagent writing a `create_docx.py` or a `build_chart.py`, that's a strong signal the skill should bundle that script. Write it once, put it in `scripts/`, and tell the skill to use it. This saves every future invocation from reinventing the wheel. This works in both directions: scripts you bundle for end users (validators, smoke tests) can also be reused as eval-time grader assertions in later iterations. See [Script vs. Instruct decision framework](references/official-guide-patterns.md) ("When to Script vs. When to Instruct") for guidance on what belongs in a script vs. what should stay as instructions.
 
 5. **Check against the official troubleshooting patterns.** Consult `references/official-guide-patterns.md` (Troubleshooting Guide section) for common issues: instructions not followed (too verbose? buried? ambiguous?), skill not triggering (description too generic?), skill over-triggering (needs negative triggers or scope clarification?), large context degradation (SKILL.md too big? move content to references/).
 

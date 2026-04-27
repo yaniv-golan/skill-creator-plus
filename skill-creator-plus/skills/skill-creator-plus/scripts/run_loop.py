@@ -269,7 +269,25 @@ def run_loop(
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Run eval + improve loop")
+    parser = argparse.ArgumentParser(
+        description="Run eval + improve loop",
+        epilog=(
+            "Example:\n"
+            "  python -m scripts.run_loop \\\n"
+            "    --eval-set trigger-eval.json \\\n"
+            "    --skill-path ./my-skill \\\n"
+            "    --model claude-opus-4-7 \\\n"
+            "    --max-iterations 5 --target-length 500 --plateau-patience 2 --verbose\n"
+            "\n"
+            "Output: JSON results to stdout; HTML report opened in browser unless --report=none.\n"
+            "Note: makes real (paid) `claude -p` calls. Use --report=none for headless runs.\n"
+            "\n"
+            "Exit codes:\n"
+            "  0  loop completed (returned a best_description)\n"
+            "  1  eval-set unreadable, skill not found, or all iterations failed"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
     parser.add_argument("--eval-set", required=True, help="Path to eval set JSON file")
     parser.add_argument("--skill-path", required=True, help="Path to skill directory")
     parser.add_argument("--description", default=None, help="Override starting description")

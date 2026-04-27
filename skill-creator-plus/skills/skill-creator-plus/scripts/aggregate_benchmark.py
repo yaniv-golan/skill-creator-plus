@@ -324,7 +324,20 @@ def generate_markdown(benchmark: dict) -> str:
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Aggregate benchmark run results into summary statistics"
+        description="Aggregate benchmark run results into summary statistics",
+        epilog=(
+            "Examples:\n"
+            "  python -m scripts.aggregate_benchmark <workspace>/iteration-1\n"
+            "  python -m scripts.aggregate_benchmark <workspace>/iteration-2 --skill-name my-skill\n"
+            "\n"
+            "Output: writes benchmark.json and benchmark.md to the benchmark directory\n"
+            "(or to --output if given). Overwrites existing files.\n"
+            "\n"
+            "Exit codes:\n"
+            "  0  benchmark generated successfully\n"
+            "  1  benchmark directory not found or aggregation failed"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument(
         "benchmark_dir",

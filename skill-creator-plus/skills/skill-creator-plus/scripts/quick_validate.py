@@ -3,11 +3,22 @@
 Quick validation script for skills - minimal version
 """
 
-import sys
+import argparse
+import json
 import os
 import re
-import yaml
+import sys
 from pathlib import Path
+
+try:
+    import yaml
+except ImportError:
+    print(
+        "Error: PyYAML is required for quick_validate.py.\n"
+        "Install with: pip install pyyaml  (or: pip install -r scripts/requirements.txt)",
+        file=sys.stderr,
+    )
+    sys.exit(2)
 
 def validate_skill(skill_path):
     """Basic validation of a skill"""
@@ -207,11 +218,53 @@ def validate_skill(skill_path):
 
     return True, "Skill is valid!"
 
-if __name__ == "__main__":
-    if len(sys.argv) != 2:
-        print("Usage: python quick_validate.py <skill_directory>")
-        sys.exit(1)
-    
-    valid, message = validate_skill(sys.argv[1])
-    print(message)
+def main():
+    parser = argparse.ArgumentParser(
+        description="Validate the structure of a skill directory (frontmatter, naming, length caps).",
+        epilog=(
+            "Examples:\n"
+            "  python -m scripts.quick_validate ./my-skill\n"
+            "  python -m scripts.quick_validate --json ./my-skill\n"
+            "\n"
+            "Exit codes:\n"
+            "  0  skill is valid\n"
+            "  1  skill is invalid (validation failed)\n"
+            "  2  required dependency missing (e.g. PyYAML)\n"
+            "  3  skill directory does not exist"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    parser.add_argument("skill_path", help="Path to the skill directory to validate")
+    parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Emit machine-readable JSON to stdout instead of human-readable prose",
+    )
+    args = parser.parse_args()
+
+    skill_path = Path(args.skill_path)
+    if not skill_path.exists():
+        if args.json:
+            json.dump(
+                {"valid": False, "error": f"Skill directory not found: {skill_path}", "skill_path": str(skill_path)},
+                sys.stdout,
+            )
+            print()
+        else:
+            print(f"Error: Skill directory not found: {skill_path}", file=sys.stderr)
+        sys.exit(3)
+
+    valid, message = validate_skill(skill_path)
+    if args.json:
+        json.dump(
+            {"valid": valid, "error": None if valid else message, "skill_path": str(skill_path)},
+            sys.stdout,
+        )
+        print()
+    else:
+        print(message)
     sys.exit(0 if valid else 1)
+
+
+if __name__ == "__main__":
+    main()
