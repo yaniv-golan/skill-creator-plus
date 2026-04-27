@@ -73,6 +73,12 @@ def load_run_results(benchmark_dir: Path) -> dict:
         search_dir = benchmark_dir
 
     results: dict[str, list] = {}
+    # Track eval directories that contributed zero runs so we can warn loudly.
+    # Silently dropping a partially-graded eval — common when a run is resumed
+    # across sessions and grading.json wasn't written for some configs — is
+    # exactly the failure mode that produces a benchmark covering fewer evals
+    # than expected without any signal to the user.
+    empty_evals: list[str] = []
 
     for eval_idx, eval_dir in enumerate(sorted(
         d for d in search_dir.iterdir() if d.is_dir()
@@ -89,6 +95,8 @@ def load_run_results(benchmark_dir: Path) -> dict:
                 eval_id = int(eval_dir.name.split("-")[1])
             except ValueError:
                 eval_id = eval_idx
+
+        eval_runs_added = 0
 
         # Discover config directories dynamically rather than hardcoding names
         for config_dir in sorted(eval_dir.iterdir()):
@@ -170,6 +178,21 @@ def load_run_results(benchmark_dir: Path) -> dict:
             result["notes"] = notes
 
             results[config].append(result)
+            eval_runs_added += 1
+
+        if eval_runs_added == 0:
+            empty_evals.append(eval_dir.name)
+
+    if empty_evals:
+        print(
+            f"Warning: {len(empty_evals)} eval director"
+            f"{'y' if len(empty_evals) == 1 else 'ies'} contained no grading.json "
+            f"in any config subdirectory and {'was' if len(empty_evals) == 1 else 'were'} "
+            f"skipped: {', '.join(empty_evals)}. "
+            f"This benchmark covers only the evals that did have grading.json — if you "
+            f"expected those evals included, check whether the grader finished writing them.",
+            file=sys.stderr,
+        )
 
     return results
 

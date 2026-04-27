@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.4.2] - 2026-04-27
+
+### Fixed
+- **`aggregate_benchmark.py`: warns when an eval directory has no `grading.json` in any config subdirectory.** Previously such evals were silently skipped — common when a grader run is interrupted partway through, leaving some evals graded and others not. The benchmark would then cover only the evals that finished, with no signal that data was missing. Now emits a single warning listing every skipped eval directory by name so partial-run silent data loss is visible.
+
 ## [0.4.1] - 2026-04-27
 
 ### Fixed
