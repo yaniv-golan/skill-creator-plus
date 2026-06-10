@@ -16,6 +16,7 @@ You receive these parameters in your prompt:
 - **output_b_path**: Path to the second output file or directory
 - **eval_prompt**: The original task/prompt that was executed
 - **expectations**: List of expectations to check (optional - may be empty)
+- **output_path**: Where to save the comparison JSON. If not provided, save to `comparison.json` in the current working directory.
 
 ## Process
 
@@ -86,7 +87,7 @@ Be decisive - ties should be rare. One output is usually better, even if margina
 
 ### Step 7: Write Comparison Results
 
-Save results to a JSON file at the path specified (or `comparison.json` if not specified).
+Save results to `{output_path}` (or `comparison.json` if no path was provided).
 
 ## Output Format
 
@@ -194,6 +195,7 @@ If no expectations were provided, omit the `expectation_results` field entirely.
 ## Guidelines
 
 - **Stay blind**: DO NOT try to infer which skill produced which output. Judge purely on output quality.
+- **Counter position bias**: Judges drift toward the first-presented output (A). Build the rubric in Step 3 BEFORE examining either output in detail, score B with the same rigor as A, and for close calls re-examine the outputs in reverse order before deciding. Note that the orchestrator alternates which version is labeled A across runs — your job is simply to judge what's in front of you without favoring the first label.
 - **Be specific**: Cite specific examples when explaining strengths and weaknesses.
 - **Be decisive**: Choose a winner unless outputs are genuinely equivalent.
 - **Output quality first**: Assertion scores are secondary to overall task completion.
