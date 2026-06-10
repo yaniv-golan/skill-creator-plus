@@ -93,7 +93,7 @@ def load_run_results(benchmark_dir: Path) -> dict:
         else:
             try:
                 eval_id = int(eval_dir.name.split("-")[1])
-            except ValueError:
+            except (ValueError, IndexError):
                 eval_id = eval_idx
 
         eval_runs_added = 0
@@ -292,8 +292,8 @@ def generate_benchmark(benchmark_dir: Path, skill_name: str = "", skill_path: st
     # (eval, config) pair this auto-handles. Surfaces the max across pairs so
     # uneven coverage is reported as the upper bound, not zero.
     pair_counts: dict[tuple[int, str], int] = {}
-    for config, runs in results.items():
-        for run in runs:
+    for config, config_runs in results.items():
+        for run in config_runs:
             key = (run["eval_id"], config)
             pair_counts[key] = pair_counts.get(key, 0) + 1
     runs_per_config = max(pair_counts.values(), default=0)
