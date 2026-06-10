@@ -61,7 +61,7 @@ This catches issues that predefined expectations might miss.
 ### Step 5: Read User Notes
 
 If `{outputs_dir}/user_notes.md` exists:
-1. Read it and note any uncertainties or issues flagged by the executor
+1. Read it and note any uncertainties or issues flagged by the executor. If the file doesn't exist, skip this step and omit `user_notes_summary` — it's an optional artifact.
 2. Include relevant concerns in the grading output
 3. These may reveal problems even when expectations pass
 
@@ -78,7 +78,13 @@ Suggestions worth raising:
 
 Keep the bar high. The goal is to flag things the eval author would say "good catch" about, not to nitpick every assertion.
 
-### Step 7: Write Grading Results
+### Step 7: Read Executor Metrics and Timing (optional inputs)
+
+1. If `{outputs_dir}/metrics.json` exists, read it and copy it into the `execution_metrics` field of your output. If it doesn't exist, omit `execution_metrics` entirely — both files are optional artifacts and their absence is normal, not an error.
+2. If `{outputs_dir}/../timing.json` exists, copy its fields **verbatim** into the `timing` field of your output — including `total_tokens` and `duration_ms`. timing.json is the only place the executor's real token count lives; dropping `total_tokens` here means the benchmark silently falls back to a character count.
+3. Do NOT add your own grading time. `total_duration_seconds` means the executor's wall-clock duration, exactly as timing.json recorded it.
+
+### Step 8: Write Grading Results
 
 Save results to `{outputs_dir}/../grading.json` (sibling to outputs_dir).
 
@@ -97,11 +103,6 @@ Save results to `{outputs_dir}/../grading.json` (sibling to outputs_dir).
 - The output appears to meet the assertion by coincidence rather than by actually doing the work
 
 **When uncertain**: The burden of proof to pass is on the expectation.
-
-### Step 8: Read Executor Metrics and Timing
-
-1. If `{outputs_dir}/metrics.json` exists, read it and include in grading output
-2. If `{outputs_dir}/../timing.json` exists, read it and include timing data
 
 ## Output Format
 
@@ -145,9 +146,9 @@ Write a JSON file with this structure:
     "transcript_chars": 3200
   },
   "timing": {
-    "executor_duration_seconds": 165.0,
-    "grader_duration_seconds": 26.0,
-    "total_duration_seconds": 191.0
+    "total_tokens": 84852,
+    "duration_ms": 23332,
+    "total_duration_seconds": 23.3
   },
   "claims": [
     {
@@ -194,12 +195,12 @@ Write a JSON file with this structure:
   - **failed**: Count of failed expectations
   - **total**: Total expectations evaluated
   - **pass_rate**: Fraction passed (0.0 to 1.0)
-- **execution_metrics**: Copied from executor's metrics.json (if available)
+- **execution_metrics**: Copied from executor's metrics.json (if available) (omit the field entirely when metrics.json is absent)
   - **output_chars**: Total character count of output files (proxy for tokens)
   - **transcript_chars**: Character count of transcript
-- **timing**: Wall clock timing from timing.json (if available)
-  - **executor_duration_seconds**: Time spent in executor subagent
-  - **total_duration_seconds**: Total elapsed time for the run
+- **timing**: Copied verbatim from the sibling timing.json (if available)
+  - **total_tokens**: Executor token count from the task notification — REQUIRED if present in timing.json; the benchmark aggregator reads it from here
+  - **total_duration_seconds**: Executor wall-clock duration (not executor + grader)
 - **claims**: Extracted and verified claims from the output
   - **claim**: The statement being verified
   - **type**: "factual", "process", or "quality"
