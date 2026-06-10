@@ -1035,16 +1035,24 @@
         }
       }
 
+      if (EMBEDDED_DATA.is_static) {
+        // No server in static mode — nothing is persisted until Submit, when
+        // the JSON is shown for copy-paste. Don't claim "Saved".
+        document.getElementById("feedback-status").textContent =
+          "Will be collected when you Submit";
+        return;
+      }
+
       fetch("/api/feedback", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ reviews, status: "in_progress" }),
-      }).then(() => {
+      }).then((res) => {
+        if (!res.ok) throw new Error("HTTP " + res.status);
         document.getElementById("feedback-status").textContent = "Saved";
       }).catch(() => {
-        // Static mode or server unavailable — no-op on auto-save,
-        // feedback will be downloaded on final submit
-        document.getElementById("feedback-status").textContent = "Will download on submit";
+        document.getElementById("feedback-status").textContent =
+          "Not saved — will be collected when you Submit";
       });
     }
 
@@ -1062,10 +1070,11 @@
     //   "saved" message. But Claude runs in a VM and cannot access browser
     //   downloads. The user says "I'm done" and Claude has nothing to read.
     //
-    //   Fix: We still download feedback.json (so the user has a file), but
-    //   we ALSO show the raw JSON in a copyable textarea so the user can
-    //   paste it directly into the chat. The overlay now uses "static-done"
-    //   which explains both options (move the file OR copy-paste the JSON).
+    //   Fix: in static mode we do NOT download a file at all (a.click() on a
+    //   blob URL navigates/blanks the page in Cowork's embedded viewer).
+    //   Instead the overlay shows the raw JSON in a copyable textarea; the
+    //   user pastes it into the chat (or saves it into the workspace
+    //   themselves). The overlay uses "static-done" which explains this.
     function showDoneDialog() {
       // Save current textarea to feedbackMap (but don't POST yet)
       const run = EMBEDDED_DATA.runs[currentIndex];
@@ -1137,8 +1146,12 @@
     }
 
     function closeDoneDialog() {
-      // Reset status back to in_progress
-      saveCurrentFeedback();
+      // Just dismiss. Do NOT re-save here: after Submit, feedback.json holds
+      // {status: "complete"} with an entry for EVERY run (empty = reviewed,
+      // looks good). Re-saving from feedbackMap dropped the empty entries and
+      // reset status to in_progress — clicking OK silently un-submitted the
+      // review. If the user edits feedback after closing, the input handler
+      // re-saves with in_progress, which is the correct signal.
       document.getElementById("done-overlay").classList.remove("visible");
     }
 
@@ -1176,6 +1189,10 @@
       const div = document.createElement("div");
       div.textContent = text;
       return div.innerHTML;
+    }
+
+    function escapeAttr(text) {
+      return escapeHtml(text).replace(/"/g, "&quot;").replace(/'/g, "&#39;");
     }
 
     // ---- View switching ----
@@ -1365,7 +1382,7 @@
                   if (exp) {
                     const cls = exp.passed ? "benchmark-delta-positive" : "benchmark-delta-negative";
                     const icon = exp.passed ? "\u2713" : "\u2717";
-                    html += '<span class="' + cls + '" title="Run ' + run.run_number + ': ' + escapeHtml(exp.evidence || "") + '">' + icon + "</span> ";
+                    html += '<span class="' + cls + '" title="Run ' + run.run_number + ': ' + escapeAttr(exp.evidence || "") + '">' + icon + "</span> ";
                   } else {
                     html += "— ";
                   }
