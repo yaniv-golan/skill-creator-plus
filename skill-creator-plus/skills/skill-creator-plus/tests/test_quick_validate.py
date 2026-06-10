@@ -1,3 +1,4 @@
+import re
 import sys
 import tempfile
 import unittest
@@ -8,8 +9,15 @@ sys.path.insert(0, str(SCRIPT_DIR))
 from quick_validate import validate_skill  # noqa: E402
 
 
-def _write_skill(tmpdir: Path, frontmatter: str, body: str = "Body.\n") -> Path:
-    skill_dir = tmpdir / "sample-skill"
+def _write_skill(tmpdir: Path, frontmatter: str, body: str = "Body.\n",
+                 dir_name: str | None = None) -> Path:
+    if dir_name is None:
+        m = re.search(r"^name:\s*(\S+)\s*$", frontmatter, re.MULTILINE)
+        candidate = m.group(1) if m else "sample-skill"
+        # Only use the name as a directory when it's filesystem-safe;
+        # invalid-name tests still get a neutral folder.
+        dir_name = candidate if re.fullmatch(r"[A-Za-z0-9_-]+", candidate or "") else "sample-skill"
+    skill_dir = tmpdir / dir_name
     skill_dir.mkdir()
     (skill_dir / "SKILL.md").write_text(f"---\n{frontmatter}\n---\n\n{body}")
     return skill_dir
@@ -109,6 +117,36 @@ class ValidatorFieldsTest(unittest.TestCase):
         self._assert_valid(
             f'name: x\ndescription: "{desc}"\nwhen_to_use: "{wtu}"'
         )
+
+
+class NameDescriptionContentTest(unittest.TestCase):
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.tmp = Path(self._tmp.name)
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def test_rejects_empty_name(self):
+        ok, msg = validate_skill(_write_skill(self.tmp, 'name: ""\ndescription: d'))
+        self.assertFalse(ok)
+        self.assertIn("empty", msg.lower())
+
+    def test_rejects_whitespace_description(self):
+        ok, msg = validate_skill(_write_skill(self.tmp, 'name: x\ndescription: "   "'))
+        self.assertFalse(ok)
+        self.assertIn("empty", msg.lower())
+
+    def test_rejects_name_folder_mismatch(self):
+        skill_dir = _write_skill(self.tmp, "name: other-name\ndescription: d",
+                                 dir_name="sample-skill")
+        ok, msg = validate_skill(skill_dir)
+        self.assertFalse(ok)
+        self.assertIn("folder", msg.lower())
+
+    def test_accepts_name_matching_folder(self):
+        ok, msg = validate_skill(_write_skill(self.tmp, "name: my-skill\ndescription: d"))
+        self.assertTrue(ok, msg)
 
 
 if __name__ == "__main__":
