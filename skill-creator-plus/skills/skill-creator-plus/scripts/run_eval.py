@@ -11,6 +11,7 @@ import os
 import select
 import subprocess
 import sys
+import tempfile
 import time
 import uuid
 from concurrent.futures import ProcessPoolExecutor, as_completed
@@ -19,41 +20,32 @@ from pathlib import Path
 from scripts.utils import parse_skill_md
 
 
-def find_project_root() -> Path:
-    """Find the project root by walking up from cwd looking for .claude/.
-
-    Mimics how Claude Code discovers its project root, so the command file
-    we create ends up where claude -p will look for it.
-    """
-    current = Path.cwd()
-    for parent in [current, *current.parents]:
-        if (parent / ".claude").is_dir():
-            return parent
-    return current
-
-
 def run_single_query(
     query: str,
     skill_name: str,
     skill_description: str,
     timeout: int,
-    project_root: str,
     model: str | None = None,
-) -> bool:
-    """Run a single query and return whether the skill was triggered.
+) -> dict:
+    """Run a single query in an ISOLATED throwaway project root.
 
-    Creates a command file in .claude/commands/ so it appears in Claude's
-    available_skills list, then runs `claude -p` with the raw query.
-    Uses --include-partial-messages to detect triggering early from
-    stream events (content_block_start) rather than waiting for the
-    full assistant message, which only arrives after tool execution.
+    Each run gets its own temp directory containing .claude/commands/<file>,
+    so parallel workers can't see each other's (identically-described)
+    command files — with a shared project root, a session that triggered a
+    sibling worker's copy was scored as "did not trigger", systematically
+    biasing rates at high concurrency.
+
+    Returns {"triggered": bool, "error": str | None}. An error means the run
+    produced no signal (CLI missing, crash before any stream event, timeout
+    with no output) and must not be scored as a non-trigger.
     """
     unique_id = uuid.uuid4().hex[:8]
     clean_name = f"{skill_name}-skill-{unique_id}"
-    project_commands_dir = Path(project_root) / ".claude" / "commands"
-    command_file = project_commands_dir / f"{clean_name}.md"
 
-    try:
+    with tempfile.TemporaryDirectory(prefix="skill-trigger-eval-") as tmp_root:
+        project_commands_dir = Path(tmp_root) / ".claude" / "commands"
+        command_file = project_commands_dir / f"{clean_name}.md"
+
         project_commands_dir.mkdir(parents=True, exist_ok=True)
         # Use YAML block scalar to avoid breaking on quotes in description
         indented_desc = "\n  ".join(skill_description.split("\n"))
@@ -82,15 +74,19 @@ def run_single_query(
         # programmatic subprocess usage is safe.
         env = {k: v for k, v in os.environ.items() if k != "CLAUDECODE"}
 
-        process = subprocess.Popen(
-            cmd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL,
-            cwd=project_root,
-            env=env,
-        )
+        try:
+            process = subprocess.Popen(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL,
+                cwd=tmp_root,
+                env=env,
+            )
+        except FileNotFoundError:
+            return {"triggered": False, "error": "claude CLI not found on PATH"}
 
         triggered = False
+        saw_event = False
         start_time = time.time()
         buffer = ""
         # Track state for stream event detection
@@ -125,6 +121,8 @@ def run_single_query(
                     except json.JSONDecodeError:
                         continue
 
+                    saw_event = True
+
                     # Early detection via stream events
                     if event.get("type") == "stream_event":
                         se = event.get("event", {})
@@ -138,20 +136,20 @@ def run_single_query(
                                     pending_tool_name = tool_name
                                     accumulated_json = ""
                                 else:
-                                    return False
+                                    return {"triggered": False, "error": None}
 
                         elif se_type == "content_block_delta" and pending_tool_name:
                             delta = se.get("delta", {})
                             if delta.get("type") == "input_json_delta":
                                 accumulated_json += delta.get("partial_json", "")
                                 if clean_name in accumulated_json:
-                                    return True
+                                    return {"triggered": True, "error": None}
 
                         elif se_type in ("content_block_stop", "message_stop"):
                             if pending_tool_name:
-                                return clean_name in accumulated_json
+                                return {"triggered": clean_name in accumulated_json, "error": None}
                             if se_type == "message_stop":
-                                return False
+                                return {"triggered": False, "error": None}
 
                     # Fallback: full assistant message
                     elif event.get("type") == "assistant":
@@ -165,20 +163,77 @@ def run_single_query(
                                 triggered = True
                             elif tool_name == "Read" and clean_name in tool_input.get("file_path", ""):
                                 triggered = True
-                            return triggered
+                            return {"triggered": triggered, "error": None}
 
                     elif event.get("type") == "result":
-                        return triggered
+                        return {"triggered": triggered, "error": None}
         finally:
             # Clean up process on any exit path (return, exception, timeout)
             if process.poll() is None:
                 process.kill()
                 process.wait()
 
-        return triggered
-    finally:
-        if command_file.exists():
-            command_file.unlink()
+        # Fell out of the loop: process ended or timed out without a verdict.
+        if not saw_event:
+            rc = process.poll()
+            if rc not in (0, None):
+                return {"triggered": False,
+                        "error": f"claude exited with code {rc} before any output"}
+            return {"triggered": False,
+                    "error": f"timeout after {timeout}s with no output from claude"}
+        return {"triggered": triggered, "error": None}
+
+
+def score_queries(
+    eval_set: list[dict],
+    query_runs: dict[str, list[dict]],
+    trigger_threshold: float,
+) -> tuple[list[dict], dict]:
+    """Score per-query trigger results, excluding errored runs.
+
+    Errored runs (CLI missing, crash, no-output timeout) carry no signal about
+    the description, so they are excluded from the trigger-rate denominator
+    instead of being counted as "did not trigger" — the old behavior inflated
+    pass rates for should-NOT-trigger queries and deflated them for
+    should-trigger queries whenever the environment hiccuped.
+    """
+    results = []
+    errored_runs = 0
+    total_runs = 0
+    for item in eval_set:
+        runs = query_runs.get(item["query"], [])
+        ok = [r for r in runs if not r.get("error")]
+        errs = [r for r in runs if r.get("error")]
+        errored_runs += len(errs)
+        total_runs += len(runs)
+        triggers = sum(1 for r in ok if r["triggered"])
+        if ok:
+            trigger_rate = triggers / len(ok)
+            if item["should_trigger"]:
+                did_pass = trigger_rate >= trigger_threshold
+            else:
+                did_pass = trigger_rate < trigger_threshold
+        else:
+            trigger_rate = 0.0
+            did_pass = False  # no usable signal — never a fabricated pass
+        results.append({
+            "query": item["query"],
+            "should_trigger": item["should_trigger"],
+            "trigger_rate": trigger_rate,
+            "triggers": triggers,
+            "runs": len(ok),
+            "errors": len(errs),
+            "error_messages": sorted({r["error"] for r in errs}),
+            "pass": did_pass,
+        })
+    passed = sum(1 for r in results if r["pass"])
+    return results, {
+        "total": len(results),
+        "passed": passed,
+        "failed": len(results) - passed,
+        "errored_runs": errored_runs,
+        "total_runs": total_runs,
+    }
 
 
 def run_eval(
@@ -187,14 +242,11 @@ def run_eval(
     description: str,
     num_workers: int,
     timeout: int,
-    project_root: Path,
     runs_per_query: int = 1,
     trigger_threshold: float = 0.5,
     model: str | None = None,
 ) -> dict:
     """Run the full eval set and return results."""
-    results = []
-
     with ProcessPoolExecutor(max_workers=num_workers) as executor:
         future_to_info = {}
         for item in eval_set:
@@ -205,54 +257,29 @@ def run_eval(
                     skill_name,
                     description,
                     timeout,
-                    str(project_root),
                     model,
                 )
                 future_to_info[future] = (item, run_idx)
 
-        query_triggers: dict[str, list[bool]] = {}
-        query_items: dict[str, dict] = {}
+        query_runs: dict[str, list[dict]] = {}
         for future in as_completed(future_to_info):
             item, _ = future_to_info[future]
             query = item["query"]
-            query_items[query] = item
-            if query not in query_triggers:
-                query_triggers[query] = []
             try:
-                query_triggers[query].append(future.result())
+                outcome = future.result()
             except Exception as e:
-                print(f"Warning: query failed: {e}", file=sys.stderr)
-                query_triggers[query].append(False)
+                outcome = {"triggered": False, "error": f"worker crashed: {e}"}
+            if outcome.get("error"):
+                print(f"Warning: run errored for query {query[:60]!r}: {outcome['error']}",
+                      file=sys.stderr)
+            query_runs.setdefault(query, []).append(outcome)
 
-    for query, triggers in query_triggers.items():
-        item = query_items[query]
-        trigger_rate = sum(triggers) / len(triggers)
-        should_trigger = item["should_trigger"]
-        if should_trigger:
-            did_pass = trigger_rate >= trigger_threshold
-        else:
-            did_pass = trigger_rate < trigger_threshold
-        results.append({
-            "query": query,
-            "should_trigger": should_trigger,
-            "trigger_rate": trigger_rate,
-            "triggers": sum(triggers),
-            "runs": len(triggers),
-            "pass": did_pass,
-        })
-
-    passed = sum(1 for r in results if r["pass"])
-    total = len(results)
-
+    results, summary = score_queries(eval_set, query_runs, trigger_threshold)
     return {
         "skill_name": skill_name,
         "description": description,
         "results": results,
-        "summary": {
-            "total": total,
-            "passed": passed,
-            "failed": total - passed,
-        },
+        "summary": summary,
     }
 
 
@@ -270,7 +297,7 @@ def main():
             "\n"
             "Exit codes:\n"
             "  0  evaluation completed (regardless of pass rate)\n"
-            "  1  eval-set unreadable, skill not found, or `claude` CLI missing"
+            "  1  eval-set unreadable, skill not found, or every run errored"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -294,7 +321,6 @@ def main():
 
     name, original_description, content = parse_skill_md(skill_path)
     description = args.description or original_description
-    project_root = find_project_root()
 
     if args.verbose:
         print(f"Evaluating: {description}", file=sys.stderr)
@@ -305,7 +331,6 @@ def main():
         description=description,
         num_workers=args.num_workers,
         timeout=args.timeout,
-        project_root=project_root,
         runs_per_query=args.runs_per_query,
         trigger_threshold=args.trigger_threshold,
         model=args.model,
@@ -320,6 +345,18 @@ def main():
             print(f"  [{status}] rate={rate_str} expected={r['should_trigger']}: {r['query'][:70]}", file=sys.stderr)
 
     print(json.dumps(output, indent=2))
+
+    summary = output["summary"]
+    if summary["errored_runs"]:
+        print(
+            f"Warning: {summary['errored_runs']}/{summary['total_runs']} runs errored "
+            f"and were excluded from trigger rates.",
+            file=sys.stderr,
+        )
+        if summary["errored_runs"] == summary["total_runs"]:
+            print("Error: every run errored — no usable results. "
+                  "Is the `claude` CLI installed and on PATH?", file=sys.stderr)
+            sys.exit(1)
 
 
 if __name__ == "__main__":
