@@ -87,6 +87,7 @@ def run_single_query(
 
         triggered = False
         saw_event = False
+        was_killed = False
         start_time = time.time()
         buffer = ""
         # Track state for stream event detection
@@ -170,13 +171,14 @@ def run_single_query(
         finally:
             # Clean up process on any exit path (return, exception, timeout)
             if process.poll() is None:
+                was_killed = True
                 process.kill()
                 process.wait()
 
         # Fell out of the loop: process ended or timed out without a verdict.
         if not saw_event:
             rc = process.poll()
-            if rc not in (0, None):
+            if not was_killed and rc not in (0, None):
                 return {"triggered": False,
                         "error": f"claude exited with code {rc} before any output"}
             return {"triggered": False,
