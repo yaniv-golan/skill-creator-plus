@@ -17,7 +17,14 @@ import uuid
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
 
-from scripts.utils import parse_skill_md
+try:
+    from scripts.utils import parse_skill_md
+except ImportError:
+    sys.exit(
+        "Error: this script uses package imports and must be run as a module "
+        "from the skill directory:\n"
+        "  cd <skill-creator-plus skill dir> && python -m scripts.run_eval ..."
+    )
 
 
 def run_single_query(

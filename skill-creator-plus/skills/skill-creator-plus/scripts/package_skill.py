@@ -9,14 +9,22 @@ import json
 import sys
 import zipfile
 from pathlib import Path
-from scripts.quick_validate import validate_skill
+
+try:
+    from scripts.quick_validate import validate_skill
+except ImportError:
+    sys.exit(
+        "Error: this script uses package imports and must be run as a module "
+        "from the skill directory:\n"
+        "  cd <skill-creator-plus skill dir> && python -m scripts.package_skill <skill-path>"
+    )
 
 # Patterns to exclude when packaging skills.
 EXCLUDE_DIRS = {"__pycache__", "node_modules"}
 EXCLUDE_GLOBS = {"*.pyc"}
 EXCLUDE_FILES = {".DS_Store"}
 # Directories excluded only at the skill root (not when nested deeper).
-ROOT_EXCLUDE_DIRS = {"evals"}
+ROOT_EXCLUDE_DIRS = {"evals", "tests"}
 
 
 def should_exclude(rel_path: Path) -> bool:
@@ -39,6 +47,11 @@ def _plan_files(skill_path: Path) -> tuple[list[Path], list[Path]]:
     included: list[Path] = []
     skipped: list[Path] = []
     for file_path in skill_path.rglob("*"):
+        if file_path.is_symlink():
+            # Never dereference: a symlink can point outside the skill dir and
+            # silently embed foreign content in the distributed artifact.
+            skipped.append(file_path.relative_to(skill_path.parent))
+            continue
         if not file_path.is_file():
             continue
         arcname = file_path.relative_to(skill_path.parent)

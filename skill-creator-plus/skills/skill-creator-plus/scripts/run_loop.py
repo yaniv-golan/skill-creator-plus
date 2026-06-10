@@ -15,10 +15,17 @@ import time
 import webbrowser
 from pathlib import Path
 
-from scripts.generate_report import generate_html
-from scripts.improve_description import improve_description
-from scripts.run_eval import run_eval
-from scripts.utils import parse_skill_md
+try:
+    from scripts.generate_report import generate_html
+    from scripts.improve_description import improve_description
+    from scripts.run_eval import run_eval
+    from scripts.utils import parse_skill_md
+except ImportError:
+    sys.exit(
+        "Error: this script uses package imports and must be run as a module "
+        "from the skill directory:\n"
+        "  cd <skill-creator-plus skill dir> && python -m scripts.run_loop ..."
+    )
 
 
 def split_eval_set(eval_set: list[dict], holdout: float, seed: int = 42) -> tuple[list[dict], list[dict]]:
