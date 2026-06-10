@@ -41,6 +41,14 @@ def split_eval_set(eval_set: list[dict], holdout: float, seed: int = 42) -> tupl
     test_set = trigger[:n_trigger_test] + no_trigger[:n_no_trigger_test]
     train_set = trigger[n_trigger_test:] + no_trigger[n_no_trigger_test:]
 
+    if not train_set:
+        raise ValueError(
+            f"Eval set is too small for holdout={holdout}: the train split is empty "
+            f"({len(eval_set)} queries total, {len(test_set)} held out). "
+            f"Add more queries (aim for 20: ~10 should-trigger, ~10 should-not) "
+            f"or pass --holdout 0 to disable the split."
+        )
+
     return train_set, test_set
 
 
@@ -339,23 +347,27 @@ def main():
 
     log_dir = results_dir / "logs" if results_dir else None
 
-    output = run_loop(
-        eval_set=eval_set,
-        skill_path=skill_path,
-        description_override=args.description,
-        num_workers=args.num_workers,
-        timeout=args.timeout,
-        max_iterations=args.max_iterations,
-        runs_per_query=args.runs_per_query,
-        trigger_threshold=args.trigger_threshold,
-        holdout=args.holdout,
-        model=args.model,
-        verbose=args.verbose,
-        live_report_path=live_report_path,
-        log_dir=log_dir,
-        target_length=args.target_length,
-        plateau_patience=args.plateau_patience,
-    )
+    try:
+        output = run_loop(
+            eval_set=eval_set,
+            skill_path=skill_path,
+            description_override=args.description,
+            num_workers=args.num_workers,
+            timeout=args.timeout,
+            max_iterations=args.max_iterations,
+            runs_per_query=args.runs_per_query,
+            trigger_threshold=args.trigger_threshold,
+            holdout=args.holdout,
+            model=args.model,
+            verbose=args.verbose,
+            live_report_path=live_report_path,
+            log_dir=log_dir,
+            target_length=args.target_length,
+            plateau_patience=args.plateau_patience,
+        )
+    except ValueError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
 
     # Save JSON output
     json_output = json.dumps(output, indent=2)
