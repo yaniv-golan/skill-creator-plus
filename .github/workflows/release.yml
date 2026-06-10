@@ -18,12 +18,21 @@ jobs:
         id: version
         run: echo "version=${GITHUB_REF#refs/tags/v}" >> "$GITHUB_OUTPUT"
 
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
       - name: Build zip for Claude.ai upload
         run: |
+          pip install pyyaml
           mkdir -p dist
           cp -r skill-creator-plus/skills/skill-creator-plus dist/skill-creator-plus
           echo "${{ steps.version.outputs.version }}" > dist/skill-creator-plus/VERSION
-          cd dist && zip -r ../skill-creator-plus.zip skill-creator-plus/
+          # Package via the project's own packager so exclusions (tests/,
+          # __pycache__, evals/, symlinks) apply to the published artifact too.
+          cd skill-creator-plus/skills/skill-creator-plus
+          python -m scripts.package_skill "$GITHUB_WORKSPACE/dist/skill-creator-plus" "$GITHUB_WORKSPACE"
+          mv "$GITHUB_WORKSPACE/skill-creator-plus.skill" "$GITHUB_WORKSPACE/skill-creator-plus.zip"
 
       - name: Extract release notes from CHANGELOG.md
         id: changelog

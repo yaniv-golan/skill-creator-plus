@@ -31,7 +31,9 @@ if [ -f "$SKILL_MD" ] && grep -q 'metadata:' "$SKILL_MD"; then
 import re, sys
 path, ver = sys.argv[1], sys.argv[2]
 text = open(path).read()
-text = re.sub(r'(metadata:\s*\n\s*.*\n\s*version:\s*\")([^\"]+)(\")', lambda m: m.group(1)+ver+m.group(3), text)
+text, n = re.subn(r'(metadata:\s*\n\s*.*\n\s*version:\s*\")([^\"]+)(\")', lambda m: m.group(1)+ver+m.group(3), text)
+if n == 0:
+    sys.exit(f'ERROR: version pattern not found in {path} — SKILL.md frontmatter changed shape; update tools/bump-version.sh')
 open(path,'w').write(text)
 print(f'  Updated {path}')
 " "$SKILL_MD" "$VERSION"

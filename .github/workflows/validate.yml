@@ -31,6 +31,11 @@ jobs:
           python skill-creator-plus/skills/skill-creator-plus/scripts/quick_validate.py \
             skill-creator-plus/skills/skill-creator-plus
 
+      - name: Run unit tests
+        run: |
+          cd skill-creator-plus/skills/skill-creator-plus
+          python -m unittest discover -s tests -v
+
       - name: Check version consistency
         run: |
           ROOT_VERSION=$(cat VERSION | tr -d '[:space:]')
