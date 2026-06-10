@@ -61,7 +61,12 @@ def find_runs(workspace: Path) -> list[dict]:
     """Recursively find directories that contain an outputs/ subdirectory."""
     runs: list[dict] = []
     _find_runs_recursive(workspace, workspace, runs)
-    runs.sort(key=lambda r: (r.get("eval_id", float("inf")), r["id"]))
+    def _sort_key(r: dict) -> tuple:
+        eid = r.get("eval_id")
+        # int eval_ids first (in order), then runs without metadata, by id.
+        return (0, eid, r["id"]) if isinstance(eid, int) else (1, 0, r["id"])
+
+    runs.sort(key=_sort_key)
     return runs
 
 
@@ -279,9 +284,10 @@ def generate_html(
         embedded["benchmark"] = benchmark
 
     data_json = json.dumps(embedded)
-    # Escape </script> sequences inside JSON to prevent the browser from
-    # closing the <script> block early when eval outputs contain HTML.
-    safe_json = data_json.replace("</", "<\\/")
+    # Escape every "<" as < (valid JSON string escape). This neutralizes
+    # </script> AND the subtler <!-- / <script sequences that switch the HTML
+    # parser into script-data-escaped state — a "</"-only replace missed those.
+    safe_json = data_json.replace("<", "\\u003c")
 
     return template.replace("/*__EMBEDDED_DATA__*/", f"const EMBEDDED_DATA = {safe_json};")
 
