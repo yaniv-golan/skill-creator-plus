@@ -78,5 +78,55 @@ class RunsArrayTest(unittest.TestCase):
         self.assertEqual(len(benchmark["runs"]), 1)
 
 
+class TokenExtractionTest(unittest.TestCase):
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.bench = Path(self._tmp.name)
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def test_tokens_read_from_grading_timing(self):
+        # A spec-compliant grader copies total_tokens into grading.json's timing.
+        write_eval(self.bench, "eval-1",
+                   {"with_skill": make_grading(1, 0, time_s=100.0, tokens=555)})
+        result = load_run_results(self.bench)["with_skill"][0]
+        self.assertEqual(result["tokens"], 555)
+
+    def test_tokens_fall_through_to_timing_json_even_when_time_present(self):
+        # grading.json has timing (nonzero time) but no total_tokens; the
+        # sibling timing.json must still supply tokens.
+        write_eval(self.bench, "eval-1",
+                   {"with_skill": make_grading(1, 0, time_s=100.0)},
+                   timing_json={"with_skill": {"total_duration_seconds": 100.0,
+                                               "total_tokens": 777}})
+        result = load_run_results(self.bench)["with_skill"][0]
+        self.assertEqual(result["tokens"], 777)
+
+    def test_no_chars_as_tokens_fallback(self):
+        # output_chars must never masquerade as a token count.
+        write_eval(self.bench, "eval-1",
+                   {"with_skill": make_grading(1, 0, output_chars=5000)})
+        result = load_run_results(self.bench)["with_skill"][0]
+        self.assertEqual(result["tokens"], 0)
+
+
+class DeltaFormatTest(unittest.TestCase):
+    def test_pass_rate_delta_is_percentage_points(self):
+        from aggregate_benchmark import aggregate_results
+        results = {
+            "with_skill": [{"eval_id": 1, "run_number": 1, "pass_rate": 0.8,
+                            "passed": 4, "failed": 1, "total": 5,
+                            "time_seconds": 10.0, "tokens": 0,
+                            "expectations": [], "notes": []}],
+            "without_skill": [{"eval_id": 1, "run_number": 1, "pass_rate": 0.4,
+                               "passed": 2, "failed": 3, "total": 5,
+                               "time_seconds": 10.0, "tokens": 0,
+                               "expectations": [], "notes": []}],
+        }
+        summary = aggregate_results(results)
+        self.assertEqual(summary["delta"]["pass_rate"], "+40%")
+
+
 if __name__ == "__main__":
     unittest.main()

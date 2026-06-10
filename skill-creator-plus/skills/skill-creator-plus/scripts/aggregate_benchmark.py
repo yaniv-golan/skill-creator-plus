@@ -142,24 +142,31 @@ def load_run_results(benchmark_dir: Path) -> dict:
                 "total": summary.get("total", 0),
             }
 
-            # Extract timing — check grading.json first, then sibling timing.json
+            # Extract timing — grading.json's timing first, then sibling timing.json.
+            # Tokens are checked in BOTH places independently of time_seconds: the
+            # old code only opened timing.json when time_seconds was zero, so any
+            # grader that copied timing into grading.json silently lost the real
+            # token count (timing.json is the only source the executor writes).
             timing = grading.get("timing", {})
             result["time_seconds"] = timing.get("total_duration_seconds", 0.0)
+            result["tokens"] = timing.get("total_tokens", 0)
             timing_file = config_dir / "timing.json"
-            if result["time_seconds"] == 0.0 and timing_file.exists():
+            if timing_file.exists() and (result["time_seconds"] == 0.0 or not result["tokens"]):
                 try:
                     with open(timing_file) as tf:
                         timing_data = json.load(tf)
-                    result["time_seconds"] = timing_data.get("total_duration_seconds", 0.0)
-                    result["tokens"] = timing_data.get("total_tokens", 0)
+                    if result["time_seconds"] == 0.0:
+                        result["time_seconds"] = timing_data.get("total_duration_seconds", 0.0)
+                    if not result["tokens"]:
+                        result["tokens"] = timing_data.get("total_tokens", 0)
                 except json.JSONDecodeError:
                     pass
 
-            # Extract metrics if available
+            # Extract metrics if available. Note: output_chars is deliberately NOT
+            # used as a token fallback — characters and tokens are different units
+            # and mixing them silently corrupts the Tokens row of the benchmark.
             metrics = grading.get("execution_metrics", {})
             result["tool_calls"] = metrics.get("total_tool_calls", 0)
-            if not result.get("tokens"):
-                result["tokens"] = metrics.get("output_chars", 0)
             result["errors"] = metrics.get("errors_encountered", 0)
 
             # Extract expectations — viewer requires fields: text, passed, evidence
@@ -240,7 +247,7 @@ def aggregate_results(results: dict) -> dict:
     delta_tokens = primary.get("tokens", {}).get("mean", 0) - baseline.get("tokens", {}).get("mean", 0)
 
     run_summary["delta"] = {
-        "pass_rate": f"{delta_pass_rate:+.2f}",
+        "pass_rate": f"{delta_pass_rate * 100:+.0f}%",
         "time_seconds": f"{delta_time:+.1f}",
         "tokens": f"{delta_tokens:+.0f}"
     }
