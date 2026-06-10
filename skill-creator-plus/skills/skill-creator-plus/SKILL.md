@@ -1,10 +1,10 @@
 ---
 name: skill-creator-plus
 description: Create, test, evaluate, and iteratively improve Claude skills. Use when users say "create a skill", "make a skill for", "write a SKILL.md", "turn this into a skill", "run evals", "test my skill", "benchmark my skill", "optimize my skill description", "improve triggering", "blind comparison", "A/B test my skill", or want to package a skill for distribution. Also triggers on "skill-creator", editing an existing skill, or reviewing skill quality.
+license: MIT
 metadata:
   author: Yaniv Golan
   version: "0.4.2"
-  license: MIT
 ---
 
 # Skill Creator
@@ -221,13 +221,13 @@ Save test cases to `evals/evals.json`. Don't write assertions yet — just the p
 }
 ```
 
-See `references/schemas.md` for the full schema (including the `assertions` field, which you'll add later).
+See `references/schemas.md` for the full schema (including the `assertions` field, which you'll add later — note: in the *output* file grading.json the graded entries are called `expectations`; the schemas reference documents both).
 
 ## Running and evaluating test cases
 
 This section is one continuous sequence — don't stop partway through. Do NOT use `/skill-test` or any other testing skill.
 
-Put results in `<skill-name>-workspace/` as a sibling to the skill directory. Within the workspace, organize results by iteration (`iteration-1/`, `iteration-2/`, etc.) and within that, each test case gets a directory (`eval-0/`, `eval-1/`, etc.). Don't create all of this upfront — just create directories as you go.
+Put results in `<skill-name>-workspace/` as a sibling to the skill directory. Within the workspace, organize results by iteration (`iteration-1/`, `iteration-2/`, etc.) and within that, each test case gets a directory named for what it tests (e.g. `pdf-extraction/`, `multi-page-form/` — Step 1 explains the naming). Don't create all of this upfront — just create directories as you go.
 
 ### Step 1: Spawn all runs (with-skill AND baseline) in the same turn
 
@@ -242,10 +242,12 @@ Execute this task:
 - Input files: <eval files if any, or "none">
 - Save outputs to: <workspace>/iteration-<N>/eval-<ID>/with_skill/outputs/
 - Outputs to save: <what the user cares about — e.g., "the .docx file", "the final CSV">
+- Also write outputs/user_notes.md: anything you were unsure about, workarounds you used, or things a human should review (write "none" if nothing)
+- Also write outputs/metrics.json: {"total_tool_calls": <n>, "errors_encountered": <n>} — your best count of tool calls made and errors hit
 ```
 
 **Baseline run** (same prompt, but the baseline depends on context):
-- **Creating a new skill**: no skill at all. Same prompt, no skill path, save to `without_skill/outputs/`.
+- **Creating a new skill**: no skill at all. Same prompt, no skill path, save to `without_skill/outputs/`, with the same user_notes.md and metrics.json instructions.
 - **Improving an existing skill**: the old version. Before editing, snapshot the skill (`cp -r <skill-path> <workspace>/skill-snapshot/`), then point the baseline subagent at the snapshot. Save to `old_skill/outputs/`.
 
 Write an `eval_metadata.json` for each test case (assertions can be empty for now). Give each eval a descriptive name based on what it's testing — not just "eval-0". Use this name for the directory too. If this iteration uses new or modified eval prompts, create these files for each new eval directory — don't assume they carry over from previous iterations.
@@ -291,10 +293,9 @@ Once all runs are done:
    ```bash
    python -m scripts.aggregate_benchmark <workspace>/iteration-N --skill-name <name>
    ```
-   This produces `benchmark.json` and `benchmark.md` with pass_rate, time, and tokens for each configuration, with mean ± stddev and the delta. If generating benchmark.json manually, see `references/schemas.md` for the exact schema the viewer expects.
-Put each with_skill version before its baseline counterpart.
+   This produces `benchmark.json` and `benchmark.md` with pass_rate, time, and tokens for each configuration, with mean ± stddev and the delta. If generating benchmark.json manually, see `references/schemas.md` for the exact schema the viewer expects, and order each with_skill run before its baseline counterpart in the `runs` array.
 
-3. **Do an analyst pass** — read the benchmark data and surface patterns the aggregate stats might hide. See `agents/analyzer.md` (the "Analyzing Benchmark Results" section) for what to look for — things like assertions that always pass regardless of skill (non-discriminating), high-variance evals (possibly flaky), and time/token tradeoffs.
+3. **Do an analyst pass** — read the benchmark data and surface patterns the aggregate stats might hide. See `agents/analyzer.md` (the "Analyzing Benchmark Results" section) for what to look for — things like assertions that always pass regardless of skill (non-discriminating), high-variance evals (possibly flaky), and time/token tradeoffs. Save the notes to `<workspace>/iteration-N/notes.json`, then merge them into the benchmark: `python -m scripts.aggregate_benchmark <workspace>/iteration-N --notes <workspace>/iteration-N/notes.json` — otherwise the viewer's "Analysis Notes" section stays empty.
 
 4. **Launch the viewer** with both qualitative outputs and quantitative data:
    ```bash
@@ -307,7 +308,7 @@ Put each with_skill version before its baseline counterpart.
    ```
    For iteration 2+, also pass `--previous-workspace <workspace>/iteration-<N-1>`.
 
-   **Cowork / headless environments:** If `webbrowser.open()` is not available or the environment has no display, use `--static <output_path>` to write a standalone HTML file instead of starting a server. When the user clicks "Submit All Reviews", the viewer will download `feedback.json` **and** display the raw JSON in a copyable textarea. The user can either move the downloaded file into the workspace or paste the JSON directly into the chat. **Important: In static mode, you cannot read feedback.json from disk** — see "Cowork-Specific Instructions" below for how to handle the feedback loop.
+   **Cowork / headless environments:** If `webbrowser.open()` is not available or the environment has no display, use `--static <output_path>` to write a standalone HTML file instead of starting a server. When the user clicks "Submit All Reviews", the viewer displays the raw JSON in a copyable textarea (no file is downloaded — blob downloads blank the page in embedded viewers). The user pastes the JSON directly into the chat, or saves it themselves into the workspace as `feedback.json`. **Important: In static mode, you cannot read feedback.json from disk** — see "Cowork-Specific Instructions" below for how to handle the feedback loop.
 
 Note: please use generate_review.py to create the viewer; there's no need to write custom HTML.
 
@@ -391,7 +392,7 @@ Remember: Anthropic's own experience is that most of their best skills **began a
 
 ## Advanced: Blind comparison
 
-For situations where you want a more rigorous comparison between two versions of a skill (e.g., the user asks "is the new version actually better?"), there's a blind comparison system. Read `agents/comparator.md` and `agents/analyzer.md` for the details. The basic idea is: give two outputs to an independent agent without telling it which is which, and let it judge quality. Then analyze why the winner won.
+For situations where you want a more rigorous comparison between two versions of a skill (e.g., the user asks "is the new version actually better?"), there's a blind comparison system. Read `agents/comparator.md` and `agents/analyzer.md` for the details. The basic idea is: give two outputs to an independent agent without telling it which is which, and let it judge quality. Then analyze why the winner won. When you run more than one comparison round, alternate which version is labeled A and which is B between rounds, and record the mapping (e.g. `comparison_mapping.json` next to each comparator output) so results can be unblinded later — judges drift toward the first-presented output, and counterbalancing cancels that bias.
 
 This is optional, requires subagents, and most users won't need it. The human review loop is usually sufficient.
 
@@ -431,8 +432,8 @@ Present the eval set to the user for review using the HTML template:
 1. Read the template from `assets/eval_review.html`
 2. Replace the placeholders:
    - `__EVAL_DATA_PLACEHOLDER__` → the JSON array of eval items (no quotes around it — it's a JS variable assignment). After serializing, replace `</` with `<\/` in the JSON string to prevent `</script>` in data from breaking the HTML parser.
-   - `__SKILL_NAME_PLACEHOLDER__` → the skill's name
-   - `__SKILL_DESCRIPTION_PLACEHOLDER__` → the skill's current description
+   - `__SKILL_NAME_PLACEHOLDER__` → the skill's name, HTML-escaped (`&` → `&amp;`, `<` → `&lt;`, `>` → `&gt;`)
+   - `__SKILL_DESCRIPTION_PLACEHOLDER__` → the skill's current description, HTML-escaped the same way (these land in HTML, not JS — unescaped `<` breaks the page)
 3. Write to a temp file (e.g., `/tmp/eval_review_<skill-name>.html`) and open it: `open /tmp/eval_review_<skill-name>.html`
 4. The user can edit queries, toggle should-trigger, add/remove entries, then click "Export Eval Set"
 5. The file downloads to `~/Downloads/eval_set.json` — check the Downloads folder for the most recent version in case there are multiple (e.g., `eval_set (1).json`)
@@ -443,10 +444,10 @@ This step matters — bad eval queries lead to bad descriptions.
 
 Tell the user: "This will take some time — I'll run the optimization loop in the background and check on it periodically."
 
-Save the eval set to the workspace, then run in the background:
+Save the eval set to the workspace, then run in the background. The command must run from the skill-creator-plus skill directory (the one containing `scripts/`) — `-m scripts.run_loop` resolves the package from the cwd and fails with `ModuleNotFoundError` anywhere else:
 
 ```bash
-python -m scripts.run_loop \
+cd <skill-creator-plus-skill-path> && python -m scripts.run_loop \
   --eval-set <path-to-trigger-eval.json> \
   --skill-path <path-to-skill> \
   --model <model-id-powering-this-session> \
@@ -498,15 +499,15 @@ Before packaging, run through the quick checklist from `references/official-guid
 
 You can run `python -m scripts.quick_validate <path-to-skill>` to check some of these automatically.
 
-### Package and Present (only if `present_files` tool is available)
+### Package the Skill
 
-Check whether you have access to the `present_files` tool. If you don't, skip this step. If you do, package the skill and present the .skill file to the user:
+Package the final skill into a distributable `.skill` file (run from the skill-creator-plus skill directory):
 
 ```bash
 python -m scripts.package_skill <path/to/skill-folder>
 ```
 
-After packaging, direct the user to the resulting `.skill` file path so they can install it.
+Tell the user the path of the resulting `.skill` file so they can install or share it. If the `present_files` tool happens to be available (Claude.ai), additionally present the `.skill` file directly — but packaging itself works everywhere Python does, so never skip it just because that tool is missing.
 
 ---
 
@@ -542,10 +543,10 @@ If you're in Cowork, the main things to know are:
 - You have subagents, so the main workflow (spawn test cases in parallel, run baselines, grade, etc.) all works. (However, if you run into severe problems with timeouts, it's OK to run the test prompts in series rather than parallel.)
 - You don't have a browser or display, so when generating the eval viewer, use `--static <output_path>` to write a standalone HTML file instead of starting a server. Then proffer a link that the user can click to open the HTML in their browser.
 - Claude tends to skip the eval viewer in Cowork and jump straight to analyzing results itself. This defeats the purpose — the human needs to see the outputs and give feedback before you revise anything. Always run `generate_review.py` first (not your own custom HTML), then wait for the human to review. The eval viewer exists so the human can form their own opinion before you start making changes.
-- **Feedback loop workaround (IMPORTANT):** In static mode there is no server, so the viewer cannot POST feedback to disk. When the user clicks "Submit All Reviews", the viewer downloads `feedback.json` to their browser **and** shows the raw JSON in a copyable textarea. You (Claude) cannot read browser downloads, so the feedback loop requires one of these:
-  1. The user **pastes the JSON** directly into the chat — you parse it inline.
-  2. The user **moves `feedback.json`** into the workspace folder you're using — you then read it with the Read tool.
-  When you tell the user "come back and tell me you're done reviewing", also say: *"The viewer will show your feedback as JSON — please paste it here or drop the downloaded feedback.json into [workspace path]."* Don't assume the file will appear on its own.
+- **Feedback loop workaround (IMPORTANT):** In static mode there is no server, so the viewer cannot POST feedback to disk. When the user clicks "Submit All Reviews", the viewer shows the raw JSON in a copyable textarea. You (Claude) cannot read browser downloads, so the feedback loop requires one of these:
+  1. The user **pastes the JSON** directly into the chat — you parse it inline. (Primary path; the viewer does not download any file.)
+  2. The user **saves the JSON themselves** as `feedback.json` in the workspace folder you're using — you then read it with the Read tool.
+  When you tell the user "come back and tell me you're done reviewing", also say: *"The viewer will show your feedback as JSON — please copy it and paste it here."* Don't assume a file will appear on its own.
 - Packaging works — `package_skill.py` just needs Python and a filesystem.
 - Description optimization (`run_loop.py` / `run_eval.py`) should work in Cowork just fine since it uses `claude -p` via subprocess, not a browser, but please save it until you've fully finished making the skill and the user agrees it's in good shape.
 - **Updating an existing skill**: The user might be asking you to update an existing skill, not create a new one. Follow the update guidance in the claude.ai section above.
