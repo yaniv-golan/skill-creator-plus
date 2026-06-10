@@ -17,7 +17,7 @@ Defines the evals for a skill. Located at `evals/evals.json` within the skill di
       "prompt": "User's example prompt",
       "expected_output": "Description of expected result",
       "files": ["evals/files/sample1.pdf"],
-      "expectations": [
+      "assertions": [
         "The output includes X",
         "The skill used script Y"
       ]
@@ -32,7 +32,26 @@ Defines the evals for a skill. Located at `evals/evals.json` within the skill di
 - `evals[].prompt`: The task to execute
 - `evals[].expected_output`: Human-readable description of success
 - `evals[].files`: Optional list of input file paths (relative to skill root)
-- `evals[].expectations`: List of verifiable statements
+- `evals[].assertions`: List of verifiable statements about the expected output. (In the grader's *output* file grading.json, the graded entries are called `expectations` — that's the one name the aggregator and viewer parse; don't rename it.)
+
+---
+
+## eval_metadata.json (per eval directory)
+
+Written into each eval's directory during a run; the viewer reads `prompt` and `eval_id` from it.
+
+```json
+{
+  "eval_id": 0,
+  "eval_name": "descriptive-name-here",
+  "prompt": "The user's task prompt",
+  "assertions": []
+}
+```
+
+- `eval_id`: Integer id; the aggregator falls back to parsing `eval-N` directory names when this file is missing
+- `eval_name`: Short descriptive name (used as the directory name and shown in the benchmark per-eval breakdown)
+- `assertions`: Same strings as `evals[].assertions` in evals.json
 
 ---
 
@@ -120,9 +139,9 @@ Output from the grader agent. Located at `<run-dir>/grading.json`.
     "transcript_chars": 3200
   },
   "timing": {
-    "executor_duration_seconds": 165.0,
-    "grader_duration_seconds": 26.0,
-    "total_duration_seconds": 191.0
+    "total_tokens": 84852,
+    "duration_ms": 23332,
+    "total_duration_seconds": 23.3
   },
   "claims": [
     {
@@ -153,7 +172,7 @@ Output from the grader agent. Located at `<run-dir>/grading.json`.
 - `expectations[]`: Graded expectations with evidence
 - `summary`: Aggregate pass/fail counts
 - `execution_metrics`: Tool usage and output size (from executor's metrics.json)
-- `timing`: Wall clock timing (from timing.json)
+- `timing`: Copied verbatim from the sibling timing.json (see grader.md); `total_tokens` is how real token counts reach the benchmark
 - `claims`: Extracted and verified claims from the output
 - `user_notes_summary`: Issues flagged by the executor
 - `eval_feedback`: (optional) Improvement suggestions for the evals, only present when the grader identifies issues worth raising
@@ -204,13 +223,7 @@ Wall clock timing for a run. Located at `<run-dir>/timing.json`.
 {
   "total_tokens": 84852,
   "duration_ms": 23332,
-  "total_duration_seconds": 23.3,
-  "executor_start": "2026-01-15T10:30:00Z",
-  "executor_end": "2026-01-15T10:32:45Z",
-  "executor_duration_seconds": 165.0,
-  "grader_start": "2026-01-15T10:32:46Z",
-  "grader_end": "2026-01-15T10:33:12Z",
-  "grader_duration_seconds": 26.0
+  "total_duration_seconds": 23.3
 }
 ```
 
@@ -270,7 +283,7 @@ Output from Benchmark mode. Located at `benchmarks/<timestamp>/benchmark.json`.
       "tokens": {"mean": 2100, "stddev": 300, "min": 1800, "max": 2500}
     },
     "delta": {
-      "pass_rate": "+0.50",
+      "pass_rate": "+20%",
       "time_seconds": "+13.0",
       "tokens": "+1700"
     }
@@ -294,12 +307,12 @@ Output from Benchmark mode. Located at `benchmarks/<timestamp>/benchmark.json`.
 - `runs[]`: Individual run results
   - `eval_id`: Numeric eval identifier
   - `eval_name`: Human-readable eval name (used as section header in the viewer)
-  - `configuration`: Must be `"with_skill"` or `"without_skill"` (the viewer uses this exact string for grouping and color coding)
+  - `configuration`: One of `"with_skill"`/`"without_skill"` (create mode) or `"new_skill"`/`"old_skill"` (improve mode — SKILL.md's improve flow saves baselines to `old_skill/outputs/`). The viewer and aggregator accept exactly these four strings; the viewer treats `without_skill`/`old_skill` as the baseline for color coding.
   - `run_number`: Integer run number (1, 2, 3...)
   - `result`: Nested object with `pass_rate`, `passed`, `total`, `time_seconds`, `tokens`, `errors`
 - `run_summary`: Statistical aggregates per configuration
   - `with_skill` / `without_skill`: Each contains `pass_rate`, `time_seconds`, `tokens` objects with `mean` and `stddev` fields
-  - `delta`: Difference strings like `"+0.50"`, `"+13.0"`, `"+1700"`
+  - `delta`: Difference strings; `delta.pass_rate` is a percentage-point difference formatted like `+20%`; other fields like `"+13.0"`, `"+1700"` use raw units
 - `notes`: Freeform observations from the analyzer
 
 **Important:** The viewer reads these field names exactly. Using `config` instead of `configuration`, or putting `pass_rate` at the top level of a run instead of nested under `result`, will cause the viewer to show empty/zero values. Always reference this schema when generating benchmark.json manually.
