@@ -1,3 +1,5 @@
+import contextlib
+import io
 import json
 import sys
 import tempfile
@@ -126,6 +128,59 @@ class DeltaFormatTest(unittest.TestCase):
         }
         summary = aggregate_results(results)
         self.assertEqual(summary["delta"]["pass_rate"], "+40%")
+
+
+class PartialGradingWarningTest(unittest.TestCase):
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.bench = Path(self._tmp.name)
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def test_warns_when_one_config_missing_grading(self):
+        write_eval(self.bench, "eval-1", {
+            "with_skill": make_grading(1, 0),
+            "without_skill": make_grading(1, 0),
+        })
+        # eval-2 only has with_skill graded — sibling gap of the 0.4.2 fix.
+        write_eval(self.bench, "eval-2", {"with_skill": make_grading(1, 0)})
+        stderr = io.StringIO()
+        with contextlib.redirect_stderr(stderr):
+            load_run_results(self.bench)
+        self.assertIn("eval-2", stderr.getvalue())
+        self.assertIn("partially graded", stderr.getvalue())
+        self.assertIn("without_skill", stderr.getvalue())
+
+    def test_no_warning_when_fully_graded(self):
+        write_eval(self.bench, "eval-1", {
+            "with_skill": make_grading(1, 0),
+            "without_skill": make_grading(1, 0),
+        })
+        stderr = io.StringIO()
+        with contextlib.redirect_stderr(stderr):
+            load_run_results(self.bench)
+        self.assertNotIn("partially graded", stderr.getvalue())
+
+
+class NotesMergeTest(unittest.TestCase):
+    def test_notes_flag_merges_into_benchmark(self):
+        import subprocess as sp
+        with tempfile.TemporaryDirectory() as tmp:
+            bench = Path(tmp) / "bench"
+            write_eval(bench, "eval-1", {"with_skill": make_grading(1, 0)})
+            notes_path = Path(tmp) / "notes.json"
+            notes_path.write_text(json.dumps(["High variance on eval 1"]))
+            skill_dir = Path(__file__).resolve().parent.parent
+            proc = sp.run(
+                [sys.executable, "-m", "scripts.aggregate_benchmark", str(bench),
+                 "--notes", str(notes_path)],
+                cwd=skill_dir, capture_output=True, text=True,
+            )
+            self.assertEqual(proc.returncode, 0, proc.stderr)
+            benchmark = json.loads((bench / "benchmark.json").read_text())
+            self.assertEqual(benchmark["notes"], ["High variance on eval 1"])
+            self.assertIn("High variance on eval 1", (bench / "benchmark.md").read_text())
 
 
 if __name__ == "__main__":

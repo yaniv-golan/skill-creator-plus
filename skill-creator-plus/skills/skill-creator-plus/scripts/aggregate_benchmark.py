@@ -8,6 +8,7 @@ Reads grading.json files from run directories and produces:
 
 Usage:
     python aggregate_benchmark.py <benchmark_dir>
+    python aggregate_benchmark.py <benchmark_dir> --notes notes.json  # merge analyst notes
 
 Example:
     python aggregate_benchmark.py benchmarks/2026-01-15T10-30-00/
@@ -79,6 +80,7 @@ def load_run_results(benchmark_dir: Path) -> dict:
     # exactly the failure mode that produces a benchmark covering fewer evals
     # than expected without any signal to the user.
     empty_evals: list[str] = []
+    eval_configs: dict[str, set[str]] = {}
 
     for eval_idx, eval_dir in enumerate(sorted(
         d for d in search_dir.iterdir() if d.is_dir()
@@ -186,6 +188,7 @@ def load_run_results(benchmark_dir: Path) -> dict:
 
             results[config].append(result)
             eval_runs_added += 1
+            eval_configs.setdefault(eval_dir.name, set()).add(config)
 
         if eval_runs_added == 0:
             empty_evals.append(eval_dir.name)
@@ -200,6 +203,20 @@ def load_run_results(benchmark_dir: Path) -> dict:
             f"expected those evals included, check whether the grader finished writing them.",
             file=sys.stderr,
         )
+
+    # Warn on partially-graded evals: an eval that has grading.json for some
+    # configs but not all of them gets silently aggregated with unequal run
+    # sets, skewing the delta. (Sibling gap of the 0.4.2 empty-eval warning.)
+    all_configs = set(results.keys())
+    for eval_name in sorted(eval_configs):
+        missing = all_configs - eval_configs[eval_name]
+        if missing:
+            print(
+                f"Warning: {eval_name} is partially graded — no grading.json for: "
+                f"{', '.join(sorted(missing))}. Its runs are still aggregated, but "
+                f"the configurations now cover unequal eval sets, which skews the delta.",
+                file=sys.stderr,
+            )
 
     return results
 
@@ -387,6 +404,7 @@ def main():
             "Examples:\n"
             "  python -m scripts.aggregate_benchmark <workspace>/iteration-1\n"
             "  python -m scripts.aggregate_benchmark <workspace>/iteration-2 --skill-name my-skill\n"
+            "  python -m scripts.aggregate_benchmark <workspace>/iteration-2 --notes notes.json  # merge analyst notes\n"
             "\n"
             "Output: writes benchmark.json and benchmark.md to the benchmark directory\n"
             "(or to --output if given). Overwrites existing files.\n"
@@ -417,6 +435,11 @@ def main():
         type=Path,
         help="Output path for benchmark.json (default: <benchmark_dir>/benchmark.json)"
     )
+    parser.add_argument(
+        "--notes",
+        type=Path,
+        help="Path to a JSON array of analyst note strings to merge into benchmark.json's notes field",
+    )
 
     args = parser.parse_args()
 
@@ -426,6 +449,16 @@ def main():
 
     # Generate benchmark
     benchmark = generate_benchmark(args.benchmark_dir, args.skill_name, args.skill_path)
+
+    if args.notes:
+        try:
+            notes = json.loads(args.notes.read_text())
+            if not isinstance(notes, list):
+                raise ValueError("notes file must contain a JSON array of strings")
+            benchmark["notes"] = notes
+        except (OSError, ValueError, json.JSONDecodeError) as e:
+            print(f"Error: could not read --notes file {args.notes}: {e}", file=sys.stderr)
+            sys.exit(1)
 
     # Determine output paths
     output_json = args.output or (args.benchmark_dir / "benchmark.json")
