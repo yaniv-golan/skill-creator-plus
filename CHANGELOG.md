@@ -2,6 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.0] - 2026-06-11
+
+### Fixed
+- **`aggregate_benchmark.py`: benchmark.json `runs` array was corrupted by loop-variable shadowing** (regression introduced alongside the 0.4.1 `runs_per_configuration` fix) — the viewer's Benchmark tab silently showed empty data. Also: IndexError on stray non-`eval-N` directories, token counts no longer fall back to character counts, tokens are read from grading.json timing AND timing.json, pass-rate delta is now percentage points, and partially-graded evals produce a loud warning.
+- **`run_eval.py`: parallel workers no longer share `.claude/commands/`** — each run gets an isolated temp project root, eliminating cross-contaminated trigger detection that biased optimization. Subprocess failures and no-output timeouts are now reported as errors and excluded from trigger rates instead of being scored as "did not trigger"; if every run errors the CLI exits 1.
+- **`run_loop.py --holdout 0` no longer crashes** writing the live report; tiny eval sets that would produce an empty train split now fail fast with guidance.
+- **Eval viewer**: clicking OK after Submit no longer overwrites the completed feedback.json; auto-save status is honest in static mode; run sorting no longer crashes on mixed eval_id presence; embedded JSON escapes all `<` (covers `<!--`/`<script`, not just `</script>`); grader evidence is attribute-escaped.
+- **`quick_validate.py`** rejects empty/whitespace name and description, and enforces name-matches-folder.
+- **`package_skill.py`** excludes `tests/` from artifacts, skips symlinks instead of dereferencing them, and prints a friendly error when run as a plain script. The release workflow now builds through it, so exclusions apply to published zips.
+- **Agent contracts**: grader copies timing.json verbatim (incl. `total_tokens` — real token counts now reach benchmarks); comparator declares its output path and counterbalances position bias; analyzer notes are merged into benchmark.json via the new `--notes` flag.
+- **Docs**: packaging is unconditional (no longer gated on the Claude.ai-only `present_files` tool), static-mode feedback documentation matches viewer behavior, schemas.md documents all four configuration strings and eval_metadata.json, run_loop cwd requirement stated, license is a top-level frontmatter field, SKILL.md is back under 500 lines (environment + description-optimization details moved to references/).
+
+### Added
+- `aggregate_benchmark.py --notes <file>` merges analyst notes into benchmark.json.
+- `tests/`: coverage for aggregate_benchmark, generate_report, run_eval scoring, run_loop split, package_skill planning, generate_review — and CI now runs the suite.
+- `docs/DEVELOPMENT.md`: tracked developer reference (was only in the gitignored CLAUDE.md).
+
 ## [0.4.2] - 2026-04-27
 
 ### Fixed
