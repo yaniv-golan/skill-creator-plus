@@ -1,5 +1,7 @@
 Full procedure for optimizing a skill's `description` frontmatter field for triggering accuracy.
 
+## Description Optimization
+
 ### Step 1: Generate trigger eval queries
 
 Create 20 eval queries — a mix of should-trigger and should-not-trigger. Save as JSON:
