@@ -4,7 +4,7 @@ description: Create, test, evaluate, and iteratively improve Claude skills. Use 
 license: MIT
 metadata:
   author: Yaniv Golan
-  version: "0.5.0"
+  version: "0.6.0"
 ---
 
 # Skill Creator
@@ -205,7 +205,7 @@ Per the official guide, effective testing covers three areas:
 2. **Functional tests** — Does the skill produce correct outputs? (valid outputs, API calls succeed, error handling works, edge cases covered)
 3. **Performance comparison** — Does the skill actually improve results vs. baseline? (fewer tool calls, fewer user corrections, lower token usage)
 
-Save test cases to `evals/evals.json`. Don't write assertions yet — just the prompts. You'll draft assertions in the next step while the runs are in progress.
+Save test cases to `evals.json` in a **committed sibling** of the skill directory — `<skill-name>-evals/evals.json` — never inside the skill directory itself. The definitions are the durable regression suite (commit them; run in CI if the skill has a repo); an eval file *inside* the skill dir would ship its own answer key to every install. See [Where evals live](references/schemas.md#where-evals-live) for the full layout. Don't write assertions yet — just the prompts. You'll draft assertions in the next step while the runs are in progress.
 
 ```json
 {
@@ -263,11 +263,11 @@ Write an `eval_metadata.json` for each test case (assertions can be empty for no
 
 ### Step 2: While runs are in progress, draft assertions
 
-Don't just wait for the runs to finish — you can use this time productively. Draft quantitative assertions for each test case and explain them to the user. If assertions already exist in `evals/evals.json`, review them and explain what they check.
+Don't just wait for the runs to finish — you can use this time productively. Draft quantitative assertions for each test case and explain them to the user. If assertions already exist in `evals.json`, review them and explain what they check.
 
 Good assertions are objectively verifiable and have descriptive names — they should read clearly in the benchmark viewer so someone glancing at the results immediately understands what each one checks. Subjective skills (writing style, design quality) are better evaluated qualitatively — don't force assertions onto things that need human judgment.
 
-Update the `eval_metadata.json` files and `evals/evals.json` with the assertions once drafted. Also explain to the user what they'll see in the viewer — both the qualitative outputs and the quantitative benchmark.
+Update the `eval_metadata.json` files and `<skill-name>-evals/evals.json` with the assertions once drafted. Also explain to the user what they'll see in the viewer — both the qualitative outputs and the quantitative benchmark.
 
 ### Step 3: As runs complete, capture timing data
 

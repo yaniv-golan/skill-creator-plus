@@ -12,3 +12,5 @@ eval-results*/
 CLAUDE.md
 .claude/
 .mcpb-cache/
+docs/internal/
+docs/superpowers/plans/

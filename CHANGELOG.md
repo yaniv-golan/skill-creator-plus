@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.6.0] - 2026-07-08
+
+### Changed
+- **Eval definitions now live outside the skill directory.** SKILL.md and `references/schemas.md` previously told authors to save `evals/evals.json` *inside* the skill directory (inherited verbatim from the upstream Anthropic skill-creator, whose `schemas.md` still says "within the skill directory"). Plugin/marketplace installs copy the whole skill directory into every client, so an eval file inside it shipped the answer key (prompts + `expected_output` + assertions) to runtime and added dead weight to every install. New convention, split by lifecycle: eval **definitions** → `<skill-name>-evals/` committed sibling (regression suite; CI-run if the skill has a repo); eval **results** → `<skill-name>-workspace/` gitignored sibling (ephemeral); the skill directory → pure runtime content only. `package_skill.py`'s root `evals/`/`tests/` exclusion is retained as belt-and-suspenders. See `references/schemas.md` → "Where evals live".
+
 ## [0.5.0] - 2026-06-11
 
 ### Fixed

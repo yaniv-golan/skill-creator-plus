@@ -6,7 +6,21 @@ This document defines the JSON schemas used by skill-creator.
 
 ## evals.json
 
-Defines the evals for a skill. Located at `evals/evals.json` within the skill directory.
+Defines the evals for a skill — the durable regression suite (prompts + `expected_output` + assertions).
+
+### Where evals live
+
+Three locations, split by lifecycle — **none of them inside the skill directory**:
+
+| Artifact | Location | Tracked? | Why |
+|---|---|---|---|
+| Eval **definitions** — `evals.json` + input `files/` | `<skill-name>-evals/` sibling | **Committed**, CI-run | It's your regression suite; you'd never gitignore your tests. |
+| Eval **results** — outputs, transcripts, `benchmark.json`, timing | `<skill-name>-workspace/` sibling | **Gitignored** | Ephemeral, regenerated every run; committing bloats the repo and goes stale. |
+| The **skill** — `SKILL.md`, `scripts/`, `references/`, `assets/` | `<skill-name>/` | Committed + shipped | Pure runtime content only. |
+
+Keeping `evals.json` out of the skill directory is the point, not a nicety: it holds the prompts *and* their expected answers. Plugin/marketplace installs copy the whole skill directory into every client (`~/.claude/plugins/cache/…`), so an eval file inside it ships the answer key to runtime — where the skill's own agent can read it — and adds dead weight to every install. **Location, not gitignore, is what prevents this**: once the definitions sit in a sibling, they're safe to commit, and committing is what gives you a reproducible, CI-runnable quality suite across versions.
+
+**Quick/solo skills with no repo:** skip the ceremony — keep `evals.json` in the `<skill-name>-workspace/` sibling and don't stand up CI you won't use. The one hard rule is simply: never inside the skill directory.
 
 ```json
 {
@@ -16,7 +30,7 @@ Defines the evals for a skill. Located at `evals/evals.json` within the skill di
       "id": 1,
       "prompt": "User's example prompt",
       "expected_output": "Description of expected result",
-      "files": ["evals/files/sample1.pdf"],
+      "files": ["files/sample1.pdf"],
       "assertions": [
         "The output includes X",
         "The skill used script Y"
@@ -31,7 +45,7 @@ Defines the evals for a skill. Located at `evals/evals.json` within the skill di
 - `evals[].id`: Unique integer identifier
 - `evals[].prompt`: The task to execute
 - `evals[].expected_output`: Human-readable description of success
-- `evals[].files`: Optional list of input file paths (relative to skill root)
+- `evals[].files`: Optional list of input file paths (relative to the `<skill-name>-evals/` directory, not the skill)
 - `evals[].assertions`: List of verifiable statements about the expected output. (In the grader's *output* file grading.json, the graded entries are called `expectations` — that's the one name the aggregator and viewer parse; don't rename it.)
 
 ---
