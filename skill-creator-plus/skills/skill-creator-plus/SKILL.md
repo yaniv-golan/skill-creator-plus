@@ -4,7 +4,7 @@ description: Create, test, evaluate, and iteratively improve Claude skills. Use 
 license: MIT
 metadata:
   author: Yaniv Golan
-  version: "0.6.0"
+  version: "0.7.0"
 ---
 
 # Skill Creator

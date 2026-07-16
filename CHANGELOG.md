@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [0.7.0] - 2026-07-16
 
 ### Fixed
 - **`quick_validate.py` / `package_skill.py` no longer require PyYAML at runtime.** They imported PyYAML, which Cowork's container image lacks and its default-deny egress can't `pip install` — so both crashed (or the agent fell back to hand-validation) when the skill ran under Cowork. Replaced with a stdlib-only `scripts/frontmatter.py` parser covering the frontmatter YAML subset (scalars, nested mappings, block/flow sequences, block scalars) and rejecting exotic constructs (anchors/aliases/tags/merge/multi-doc) with a clear error. Behavior is identical across runtimes because there's a single parser; a differential test (`tests/test_frontmatter.py`) keeps it aligned with `yaml.safe_load`. PyYAML is now a test-only dependency. quick_validate exit code `2` is retired to "reserved".
