@@ -7,6 +7,9 @@
 python skill-creator-plus/skills/skill-creator-plus/scripts/quick_validate.py skill-creator-plus/skills/skill-creator-plus
 # JSON output for tooling: add --json. Exit codes: 0 valid, 1 invalid, 2 PyYAML missing, 3 path not found.
 
+# Cross-runtime portability lint (stdlib-only; --target claude-code|claude-ai|cowork|all; --strict to gate)
+cd skill-creator-plus/skills/skill-creator-plus && python -m scripts.check_portability . --target all
+
 # Syntax-check all scripts
 for f in skill-creator-plus/skills/skill-creator-plus/scripts/*.py; do python -c "import py_compile; py_compile.compile('$f', doraise=True)"; done
 
@@ -25,7 +28,43 @@ cd skill-creator-plus/skills/skill-creator-plus && python -m unittest discover -
 
 # Merge analyst notes into a benchmark result
 python -m scripts.aggregate_benchmark <dir> --notes notes.json  # merge analyst notes
+
+# cowork-harness static checks on the shipped skill (token-free, no Docker; needs cowork-harness >= 1.1.0)
+cowork-harness lint-skill   --strict skill-creator-plus/skills/skill-creator-plus
+cowork-harness analyze-skill --strict skill-creator-plus/skills/skill-creator-plus
+cowork-harness lint harness/scenarios/
 ```
+
+## cowork-harness dogfood suite (`harness/`)
+
+`harness/` regression-tests this repo's own skill under Claude Cowork's runtime contract. It is
+maintainer CI, not part of the user-facing skill workflow. Full instructions: `harness/README.md`.
+
+- **CI** (`.github/workflows/harness.yml`) runs the token-free static lane on every PR/push:
+  `lint-skill --strict`, `analyze-skill --strict`, scenario `lint`, and (once cassettes exist) a
+  guarded `verify-cassettes` + `replay`.
+- **Recording cassettes** and the live `container`-fidelity `run` need Docker + a staged Claude
+  Desktop agent binary + a token — a maintainer step, not CI. Run `cowork-harness doctor --tier
+  container` first.
+- **Install caveat:** `npx cowork-harness@<ver>` can silently serve a stale cached CLI. Verify
+  `cowork-harness --version` reports **1.1.x** (the artifact write-back detector landed in 1.1.0);
+  the CI job pins `cowork-harness@1.1.0` in an isolated prefix and asserts the version.
+
+### Cassette privacy policy (public repo — BLOCKING)
+
+Recorded cassettes capture real run transcripts and must be privacy-scanned before they are
+committed to this public repo. **No cassette is committed without a green
+`cowork-harness verify-cassettes harness/cassettes/<file>.cassette.json --allow-domain 'claude\.com'`**
+(PII + secret scan + staleness). The CI `replay` lane runs `verify-cassettes` too, but the blocking
+gate is at commit time — a leaked token or PII in a committed cassette is an irreversible disclosure.
+
+The **only** sanctioned allowlist entry is `claude.com` — it is Claude Code's own init metadata
+(`websiteUrl: https://claude.com/claude-code`), appears in every cassette, and is benign. Any
+**other** verify-cassettes finding must be investigated and the cassette re-recorded or scrubbed —
+never allowlisted away to force a commit.
+
+Design decisions and scope (why this suite is deliberately narrow, why the nightly live lane is
+deferred, why the emitter was cut): `docs/internal/cowork-harness-integration-plan.md`.
 
 ## Architecture
 
