@@ -1,0 +1,12 @@
+# cowork-harness session for dogfooding skill-creator-plus under Claude Cowork's runtime.
+# Mounts this repo's own plugin so scenarios can exercise the skill the way Cowork runs it.
+# See harness/README.md for how to record cassettes and run the suite.
+
+model: claude-opus-4-8
+permission_parity: cowork          # allow unscripted tool calls (Cowork-like)
+
+plugins:
+  # The plugin root is repo-root skill-creator-plus/ (holds .claude-plugin/plugin.json).
+  # Paths resolve relative to THIS file (harness/sessions/).
+  local_plugins: ["../../skill-creator-plus"]
+  enabled: ["skill-creator-plus@local"]

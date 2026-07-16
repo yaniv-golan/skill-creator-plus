@@ -1,0 +1,37 @@
+name: create-skill
+# Flagship dogfood: skill-creator-plus triggers on a "create a skill" request and runs under
+# Cowork's real sandbox without leaking host paths or blowing a cost budget.
+#
+# LIVE-ONLY — intentionally NOT recorded to a committed cassette. A full skill-creation run
+# produces a binary `.skill` artifact (an un-scannable zip) and surfaces the skill's own
+# instructional text (agentskills.io / Claude.ai domains); committing that to a public repo would
+# mean shipping an un-scannable blob and broadening the verify-cassettes allowlist beyond the single
+# sanctioned `claude.com` entry. It's also non-deterministic (LLM-authored gates). So run it live
+# (or in the deferred nightly lane), not on the token-free replay lane. Verified locally: records +
+# replays ✓, host-path guard ✓. See harness/README.md § "Dogfood findings".
+#
+# Why on_unanswered: llm (not scripted answers): the skill's Capture-Intent gates are
+# LLM-authored and REWORDED every run (observed: "large or messy CSVs" -> "larger or messier
+# CSVs", option labels and even the sub-question count change run-to-run). Exact scripted
+# `choose:` labels therefore hard-fail on the next run. The gate *choices* are immaterial to the
+# assertions below (which only require the skill to run and produce a SKILL.md), so per the harness
+# guidance we let an LLM decider answer them. The recorded cassette is flagged NON-DETERMINISTIC
+# but replays byte-deterministically — fine for the replay regression lane.
+session: ../sessions/skill.yaml
+fidelity: container            # required for transcript_no_host_path (fails by design on protocol/hostloop)
+on_unanswered: llm
+timeout_ms: 1200000
+
+prompt: |
+  Create a skill that converts CSV files to markdown tables.
+
+assert:
+  # Structural / boundary keys — robust to phrasing drift.
+  - result: success                          # agent didn't error (NOT "task complete" — see content assert below)
+  - skill_triggered: "skill-creator-plus"    # the skill actually ran (content-class; replay-checkable)
+  - transcript_no_host_path: true            # no /Users, /opt/cowork, /home, /root leaked (live-only; container)
+  # Budget guards — the create loop fans out subagents / tools (~22 tools, ~130s observed).
+  - max_cost_usd: 10.0
+  - max_tokens: 2000000
+  # Content signal that real work happened (never rely on result:success alone).
+  - transcript_matches: "SKILL\\.md"

@@ -1,0 +1,15 @@
+name: no-trigger
+# Negative control: an unrelated prompt must NOT invoke skill-creator-plus.
+# Catches description over-triggering / collision. `no_skill_triggered` is content-class
+# (survives replay); it is never a vacuous pass (evidence-unavailable if the Skill tool is
+# unobservable, not a silent green).
+session: ../sessions/skill.yaml
+fidelity: container
+on_unanswered: fail
+
+prompt: |
+  What's the capital of France?
+
+assert:
+  - result: success
+  - no_skill_triggered: "skill-creator-plus"

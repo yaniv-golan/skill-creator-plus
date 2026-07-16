@@ -1,0 +1,55 @@
+# Token-free, Docker-free static lane for cowork-harness: lint + static analysis
+# of the skill and harness scenarios, plus cassette verify/replay once cassettes
+# exist. The live `run` (container fidelity) lane is a separate, deferred,
+# self-hosted-runner concern documented in harness/README.md.
+name: Cowork Harness (static)
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  harness-static:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install cowork-harness (pinned)
+        run: |
+          npm i --prefix "$RUNNER_TEMP/ch" cowork-harness@1.1.0
+          echo "$RUNNER_TEMP/ch/node_modules/.bin" >> "$GITHUB_PATH"
+
+      - name: Verify cowork-harness version
+        run: |
+          V=$(cowork-harness --version | tail -1)
+          echo "cowork-harness $V"
+          case "$V" in 1.1.*) ;; *) echo "expected 1.1.x, got $V"; exit 1;; esac
+
+      - name: Lint skill (strict)
+        run: |
+          cowork-harness lint-skill --strict skill-creator-plus/skills/skill-creator-plus
+
+      - name: Analyze skill (strict)
+        run: |
+          cowork-harness analyze-skill --strict skill-creator-plus/skills/skill-creator-plus
+
+      - name: Lint harness scenarios
+        run: |
+          cowork-harness lint harness/scenarios/
+
+      - name: Verify + replay cassettes (if any)
+        run: |
+          if ls harness/cassettes/*.cassette.json >/dev/null 2>&1; then
+            # claude.com is Claude Code's own init metadata (websiteUrl), present in every
+            # cassette and benign — the one sanctioned domain allowlist entry.
+            cowork-harness verify-cassettes harness/cassettes --allow-domain 'claude\.com'
+            cowork-harness replay harness/cassettes
+          else
+            echo "No cassettes committed yet — skipping verify-cassettes/replay (token-free lane still ran the static checks above)."
+          fi
