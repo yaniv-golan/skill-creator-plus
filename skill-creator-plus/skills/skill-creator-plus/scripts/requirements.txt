@@ -1,1 +1,5 @@
+# TEST/DEV ONLY — not a runtime dependency.
+# The skill's scripts are stdlib-only (frontmatter.py replaced the PyYAML runtime dependency so
+# quick_validate.py / package_skill.py work in network-isolated sandboxes like Cowork). PyYAML is
+# kept here solely as ground truth for the frontmatter differential test (tests/test_frontmatter.py).
 pyyaml

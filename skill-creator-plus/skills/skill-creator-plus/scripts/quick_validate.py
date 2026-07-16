@@ -10,15 +10,12 @@ import re
 import sys
 from pathlib import Path
 
+# Stdlib-only frontmatter parser (no PyYAML) — see scripts/frontmatter.py for why. Dual-mode
+# import so this works run as a script, as `python -m scripts.quick_validate`, and under tests.
 try:
-    import yaml
+    from scripts.frontmatter import parse as parse_frontmatter, FrontmatterError
 except ImportError:
-    print(
-        "Error: PyYAML is required for quick_validate.py.\n"
-        "Install with: pip install pyyaml  (or: pip install -r scripts/requirements.txt)",
-        file=sys.stderr,
-    )
-    sys.exit(2)
+    from frontmatter import parse as parse_frontmatter, FrontmatterError
 
 def validate_skill(skill_path):
     """Basic validation of a skill"""
@@ -41,12 +38,12 @@ def validate_skill(skill_path):
 
     frontmatter_text = match.group(1)
 
-    # Parse YAML frontmatter
+    # Parse frontmatter (stdlib-only; no PyYAML runtime dependency)
     try:
-        frontmatter = yaml.safe_load(frontmatter_text)
+        frontmatter = parse_frontmatter(frontmatter_text)
         if not isinstance(frontmatter, dict):
             return False, "Frontmatter must be a YAML dictionary"
-    except yaml.YAMLError as e:
+    except FrontmatterError as e:
         return False, f"Invalid YAML in frontmatter: {e}"
 
     # Portable spec fields: name, description, license, compatibility, metadata, allowed-tools
@@ -238,7 +235,7 @@ def main():
             "Exit codes:\n"
             "  0  skill is valid\n"
             "  1  skill is invalid (validation failed)\n"
-            "  2  required dependency missing (e.g. PyYAML)\n"
+            "  2  reserved (formerly: required dependency missing; now stdlib-only)\n"
             "  3  skill directory does not exist"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,

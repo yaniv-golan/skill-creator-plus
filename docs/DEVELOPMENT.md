@@ -5,7 +5,7 @@
 ```bash
 # Validate skill structure
 python skill-creator-plus/skills/skill-creator-plus/scripts/quick_validate.py skill-creator-plus/skills/skill-creator-plus
-# JSON output for tooling: add --json. Exit codes: 0 valid, 1 invalid, 2 PyYAML missing, 3 path not found.
+# JSON output for tooling: add --json. Exit codes: 0 valid, 1 invalid, 2 reserved (stdlib-only now), 3 path not found.
 
 # Cross-runtime portability lint (stdlib-only; --target claude-code|claude-ai|cowork|all; --strict to gate)
 cd skill-creator-plus/skills/skill-creator-plus && python -m scripts.check_portability . --target all
@@ -13,7 +13,8 @@ cd skill-creator-plus/skills/skill-creator-plus && python -m scripts.check_porta
 # Syntax-check all scripts
 for f in skill-creator-plus/skills/skill-creator-plus/scripts/*.py; do python -c "import py_compile; py_compile.compile('$f', doraise=True)"; done
 
-# Install the validator's one runtime dep (PyYAML)
+# Scripts are stdlib-only at runtime. PyYAML is a TEST-only dep (ground truth for the frontmatter
+# differential test); install it to run the test suite:
 pip install -r skill-creator-plus/skills/skill-creator-plus/scripts/requirements.txt
 
 # Bump version (propagates to plugin.json + SKILL.md frontmatter)
