@@ -16,17 +16,20 @@ harness/
   scenarios/
     no-trigger.yaml          # negative control: an unrelated prompt must NOT trigger the skill
     create-skill.yaml        # flagship: "create a skill" triggers + runs clean (LIVE-ONLY, see below)
-  cassettes/
-    no-trigger.cassette.json # committed replay fixture (recorded, verified, privacy-scanned)
+  cassettes/                 # (no committed cassettes — see below; recorded on-demand / locally)
 ```
 
-**Which scenarios get committed cassettes:**
-- `no-trigger` — **committed**. Clean, cheap, deterministic; drives the token-free replay CI lane.
-- `create-skill` — **live-only, no committed cassette**. A full skill-creation run bakes a binary
-  `.skill` artifact (un-scannable) into the cassette and is non-deterministic (LLM-authored gates);
-  committing it to a public repo would ship an un-scannable blob and force the verify-cassettes
-  allowlist past the single sanctioned `claude.com` entry. Run it live or in the deferred nightly
-  lane. It records + replays cleanly locally — it's just not a good *committed* fixture.
+**No cassettes are committed — the CI gate is the static lane, not replay.**
+A cassette records the skill's *own* behavior, so its staleness hash is tied to the skill's source.
+skill-creator-plus is edited constantly, so a committed cassette goes stale on nearly every PR — and
+re-recording needs Docker + a staged Claude Desktop agent + a token, a wall external contributors
+can't clear. So the committed CI gate (`.github/workflows/harness.yml`) is the **token-free static
+lane** (`lint-skill`, `analyze-skill`, scenario `lint`), which is robust to skill edits. Cassettes are
+recorded **on demand / locally** (and in the deferred nightly live lane) — the recipe below still
+applies; the resulting cassettes just aren't committed.
+- `no-trigger` — cheap negative control; records + replays cleanly.
+- `create-skill` — non-deterministic (LLM-authored gates) and bakes an un-scannable `.skill` artifact
+  into the cassette; live-only by nature.
 
 ## Prerequisites
 

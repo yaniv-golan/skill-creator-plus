@@ -51,5 +51,5 @@ jobs:
             cowork-harness verify-cassettes harness/cassettes --allow-domain 'claude\.com'
             cowork-harness replay harness/cassettes
           else
-            echo "No cassettes committed yet — skipping verify-cassettes/replay (token-free lane still ran the static checks above)."
+            echo "No committed cassettes by design (self-cassettes of an actively-developed skill go stale every edit; see harness/README.md). The static checks above are the CI gate; cassettes are recorded on-demand / in the nightly lane."
           fi
