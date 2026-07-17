@@ -16,8 +16,12 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Install dependencies
-        run: pip install pyyaml
+      # TEST-ONLY. The skill's scripts are stdlib-only; PyYAML is installed solely so the
+      # frontmatter differential test (tests/test_frontmatter.py) can run its ground-truth
+      # comparison against yaml.safe_load. Without it that test SKIPS silently, which would
+      # quietly retire our only check that frontmatter.py still matches PyYAML's semantics.
+      - name: Install test-only dependencies
+        run: pip install -r skill-creator-plus/skills/skill-creator-plus/scripts/requirements.txt
 
       - name: Syntax check bundled scripts
         run: |

@@ -24,7 +24,6 @@ jobs:
 
       - name: Build zip for Claude.ai upload
         run: |
-          pip install pyyaml
           mkdir -p dist
           cp -r skill-creator-plus/skills/skill-creator-plus dist/skill-creator-plus
           echo "${{ steps.version.outputs.version }}" > dist/skill-creator-plus/VERSION
