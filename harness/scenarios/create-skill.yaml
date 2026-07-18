@@ -35,3 +35,11 @@ assert:
   - max_tokens: 2000000
   # Content signal that real work happened (never rely on result:success alone).
   - transcript_matches: "SKILL\\.md"
+  # Runtime guard for the 0.7.0 stdlib-only fix (LIVE/verify-run ONLY; skipped-loud on replay).
+  # A bundled script that re-introduces a third-party import (e.g. `import yaml`) throws
+  # ModuleNotFoundError under Cowork's base image — no pip, egress denied. check_portability /
+  # analyze-skill catch this statically; this catches a regression at *runtime*, which is the whole
+  # reason the dogfood exists. Requires cowork-harness >= 1.2.0. Note: evaluated per captured tool
+  # result under a 10 KB/result cap; a no-match against a truncated result reports could-not-verify,
+  # not a silent pass. Regex targets actual Python error signatures, not prose mentioning them.
+  - tool_result_not_matches: "ModuleNotFoundError|No module named '(yaml|[a-z0-9_]+)'|Traceback \\(most recent call last\\)"
