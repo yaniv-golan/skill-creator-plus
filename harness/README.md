@@ -27,9 +27,6 @@ can't clear. So the committed CI gate (`.github/workflows/harness.yml`) is the *
 lane** (`lint-skill`, `analyze-skill`, scenario `lint`), which is robust to skill edits. Cassettes are
 recorded **on demand / locally** (and in the deferred nightly live lane) — the recipe below still
 applies; the resulting cassettes just aren't committed.
-> The blocker is **staleness**, not privacy. cowork-harness 1.2.0 fixed the benign `claude.com`
-> handshake false-positive, so that is no longer a reason to keep a cassette out — but a self-cassette
-> still goes stale on every skill edit, so the no-commit decision stands.
 - `no-trigger` — cheap negative control; records + replays cleanly.
 - `create-skill` — non-deterministic (LLM-authored gates) and bakes an un-scannable `.skill` artifact
   into the cassette; live-only by nature.
@@ -63,9 +60,8 @@ cowork-harness lint harness/scenarios/
 # once cassettes are recorded:
 cowork-harness verify-cassettes harness/cassettes   # PII + staleness (BLOCKING before commit)
 cowork-harness replay harness/cassettes              # deterministic, token-free
-# Run with NO allowlist flags. cowork-harness >=1.2.0 no longer flags claude.com (Claude Code's
-# own MCP-handshake init metadata) as PII, so there is no sanctioned allowlist entry — any finding
-# is real and must be investigated/scrubbed before committing (public repo), never allowlisted away.
+# Run with NO allowlist flags — there are no sanctioned allowlist entries. Any finding is real and
+# must be investigated/scrubbed before committing (public repo), never allowlisted away to force it.
 ```
 
 ### Live (maintainer only — needs Docker + staged agent + token)
@@ -100,34 +96,27 @@ cowork-harness verify-cassettes harness/cassettes/create-skill.cassette.json
 
 Then commit the cassette; the CI `replay` lane picks it up automatically.
 
-## Dogfood findings (first live run, 2026-07-16, cowork-harness 1.1.0)
+## What a live run checks
 
-Recording the flagship run under `container` fidelity surfaced real Cowork-runtime behavior:
+Running the flagship scenario under `container` fidelity exercises real Cowork-runtime behavior that
+Claude Code and output-only evals can't see:
 
-- **✓ Triggers and runs clean.** skill-creator-plus activated on "create a skill…", ran ~22 tools in
-  ~130s, produced a `SKILL.md` + packaged skill, host-path guard ✓, no egress issues.
-- **⚠ Bundled Python scripts don't run in the base image.** `quick_validate.py` / `package_skill.py`
-  need PyYAML, which the `cowork-agent-base` image lacks — and Cowork's default-deny egress blocks
-  `pip install`. The skill degraded gracefully (validated by hand, zipped the `.skill` manually), but
-  its *automated* validate/package steps effectively no-op under Cowork. Worth a follow-up: vendor
-  PyYAML (like cowork-harness vendors it under `scripts/_vendor/`), or make the scripts degrade with a
-  clear message instead of a traceback. This is exactly the class of runtime bug the dogfood exists to
-  catch — invisible in Claude Code (PyYAML present) and to quality evals (output looked fine).
-- **Gates are stochastic.** The Capture-Intent questions and their option labels are LLM-authored and
-  reworded every run, so scripted exact-label `answers:` hard-fail on the next run — hence
-  `on_unanswered: llm` for `create-skill`.
-
-**Follow-ups since:** the PyYAML finding was fixed in **0.7.0** (`scripts/frontmatter.py` — stdlib-only
-parser; scripts no longer import PyYAML at runtime) and is now guarded at runtime by a
-`tool_result_not_matches` assertion in `create-skill.yaml`. Re-verified against **cowork-harness 1.2.0**
-(2026-07-18): `lint-skill`/`analyze-skill`/scenario `lint` all clean; `verify-cassettes` clean with **no**
-allowlist flag (the `claude.com` handshake false-positive is fixed upstream in 1.2.0).
+- **Triggers and runs clean** — the skill activates on "create a skill…", produces a `SKILL.md` +
+  packaged skill, with no host-path leak (`transcript_no_host_path`) and no egress surprises.
+- **Bundled scripts run under the base image** — `create-skill.yaml`'s `tool_result_not_matches`
+  guard fails the run if a script throws `ModuleNotFoundError`, because Cowork's base image lacks
+  third-party packages and its default-deny egress blocks `pip install`. This class of bug is
+  invisible in Claude Code (where the package is present) and to output-only evals — catching it is
+  why this suite exists. (The scripts are stdlib-only for exactly this reason; see `check_portability`.)
+- **Gates are stochastic** — the Capture-Intent questions and their option labels are LLM-authored
+  and reworded every run, so scripted exact-label `answers:` hard-fail; hence `on_unanswered: llm`
+  for `create-skill`.
 
 ## Notes / landmines
 
 - `create-skill.yaml` uses `fidelity: container` — required for `transcript_no_host_path` (it fails
   by design on `protocol`/`hostloop`). Any scenario using `no_scratchpad_leak` / `present_files_called`
-  must also be `container` (v1.1.0 `lint` errors on those keys off-container).
+  must also be `container` (`lint` errors on those keys off-container).
 - Assert on artifacts/content, never `result: success` alone — success means "agent didn't error",
   not "task complete".
 - On the token-free `replay` lane, live-only keys (`transcript_no_host_path`, `egress_*`) are skipped
