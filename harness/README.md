@@ -27,6 +27,9 @@ can't clear. So the committed CI gate (`.github/workflows/harness.yml`) is the *
 lane** (`lint-skill`, `analyze-skill`, scenario `lint`), which is robust to skill edits. Cassettes are
 recorded **on demand / locally** (and in the deferred nightly live lane) — the recipe below still
 applies; the resulting cassettes just aren't committed.
+> The blocker is **staleness**, not privacy. cowork-harness 1.2.0 fixed the benign `claude.com`
+> handshake false-positive, so that is no longer a reason to keep a cassette out — but a self-cassette
+> still goes stale on every skill edit, so the no-commit decision stands.
 - `no-trigger` — cheap negative control; records + replays cleanly.
 - `create-skill` — non-deterministic (LLM-authored gates) and bakes an un-scannable `.skill` artifact
   into the cassette; live-only by nature.
@@ -36,8 +39,8 @@ applies; the resulting cassettes just aren't committed.
 `cowork-harness` is a separate npm CLI (the Claude plugin ships only the skill, not the built CLI):
 
 ```bash
-npm i -g "cowork-harness@>=1.1.0"
-cowork-harness --version          # MUST report 1.1.x — `npx` can silently serve a stale cache
+npm i -g "cowork-harness@>=1.2.0"
+cowork-harness --version          # MUST report 1.2.x — `npx` can silently serve a stale cache
 ```
 
 - **Static checks + `lint` + `replay`**: token-free, no Docker, no staged agent, no token.
@@ -58,11 +61,11 @@ cowork-harness analyze-skill --strict skill-creator-plus/skills/skill-creator-pl
 cowork-harness lint harness/scenarios/
 
 # once cassettes are recorded:
-cowork-harness verify-cassettes harness/cassettes --allow-domain 'claude\.com'  # PII + staleness (BLOCKING before commit)
+cowork-harness verify-cassettes harness/cassettes   # PII + staleness (BLOCKING before commit)
 cowork-harness replay harness/cassettes              # deterministic, token-free
-# claude.com is Claude Code's own init metadata (websiteUrl) — present in every cassette,
-# benign, and the ONLY sanctioned domain allowlist entry. Any OTHER finding must be
-# investigated, not allowlisted, before committing (public repo).
+# Run with NO allowlist flags. cowork-harness >=1.2.0 no longer flags claude.com (Claude Code's
+# own MCP-handshake init metadata) as PII, so there is no sanctioned allowlist entry — any finding
+# is real and must be investigated/scrubbed before committing (public repo), never allowlisted away.
 ```
 
 ### Live (maintainer only — needs Docker + staged agent + token)
@@ -91,8 +94,8 @@ cowork-harness verify-run <run-dir> harness/scenarios/create-skill.yaml
 # 4. Commit the skill tree (real Cowork ships the committed tree), then record the locking cassette
 cowork-harness record harness/scenarios/create-skill.yaml --out harness/cassettes/create-skill.cassette.json
 
-# 5. Privacy + staleness gate BEFORE committing the cassette (public repo — blocking)
-cowork-harness verify-cassettes harness/cassettes/create-skill.cassette.json --allow-domain 'claude\.com'
+# 5. Privacy + staleness gate BEFORE committing the cassette (public repo — blocking; no allowlist flags)
+cowork-harness verify-cassettes harness/cassettes/create-skill.cassette.json
 ```
 
 Then commit the cassette; the CI `replay` lane picks it up automatically.
@@ -113,6 +116,12 @@ Recording the flagship run under `container` fidelity surfaced real Cowork-runti
 - **Gates are stochastic.** The Capture-Intent questions and their option labels are LLM-authored and
   reworded every run, so scripted exact-label `answers:` hard-fail on the next run — hence
   `on_unanswered: llm` for `create-skill`.
+
+**Follow-ups since:** the PyYAML finding was fixed in **0.7.0** (`scripts/frontmatter.py` — stdlib-only
+parser; scripts no longer import PyYAML at runtime) and is now guarded at runtime by a
+`tool_result_not_matches` assertion in `create-skill.yaml`. Re-verified against **cowork-harness 1.2.0**
+(2026-07-18): `lint-skill`/`analyze-skill`/scenario `lint` all clean; `verify-cassettes` clean with **no**
+allowlist flag (the `claude.com` handshake false-positive is fixed upstream in 1.2.0).
 
 ## Notes / landmines
 

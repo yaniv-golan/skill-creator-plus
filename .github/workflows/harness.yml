@@ -22,14 +22,14 @@ jobs:
 
       - name: Install cowork-harness (pinned)
         run: |
-          npm i --prefix "$RUNNER_TEMP/ch" cowork-harness@1.1.0
+          npm i --prefix "$RUNNER_TEMP/ch" cowork-harness@1.2.0
           echo "$RUNNER_TEMP/ch/node_modules/.bin" >> "$GITHUB_PATH"
 
       - name: Verify cowork-harness version
         run: |
           V=$(cowork-harness --version | tail -1)
           echo "cowork-harness $V"
-          case "$V" in 1.1.*) ;; *) echo "expected 1.1.x, got $V"; exit 1;; esac
+          case "$V" in 1.2.*) ;; *) echo "expected 1.2.x, got $V"; exit 1;; esac
 
       - name: Lint skill (strict)
         run: |
@@ -46,9 +46,9 @@ jobs:
       - name: Verify + replay cassettes (if any)
         run: |
           if ls harness/cassettes/*.cassette.json >/dev/null 2>&1; then
-            # claude.com is Claude Code's own init metadata (websiteUrl), present in every
-            # cassette and benign — the one sanctioned domain allowlist entry.
-            cowork-harness verify-cassettes harness/cassettes --allow-domain 'claude\.com'
+            # No allowlist flags — cowork-harness >=1.2.0 no longer emits the benign claude.com
+            # MCP-handshake false positive that once required --allow-domain. Any finding is real.
+            cowork-harness verify-cassettes harness/cassettes
             cowork-harness replay harness/cassettes
           else
             echo "No committed cassettes by design (self-cassettes of an actively-developed skill go stale every edit; see harness/README.md). The static checks above are the CI gate; cassettes are recorded on-demand / in the nightly lane."
