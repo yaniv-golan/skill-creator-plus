@@ -25,8 +25,8 @@ Usage:
 """
 # portability-allow: file-delivery-tool
 # ^ This module necessarily contains the very tool names the `file-delivery-tool-hardcoded` rule
-# looks for, and `_iter_scripts()` scans `scripts/**/*.py` including this file. See D5 in
-# docs/internal/file-delivery-tool-portability-plan.md.
+# looks for, and `_iter_scripts()` scans `scripts/**/*.py` including this file. See
+# references/environments.md for the constraint this rule enforces.
 
 import argparse
 import ast
@@ -235,7 +235,8 @@ def check_runtime_constructs(skill_path):
             f"capability instead (\"if a tool for surfacing files to the user is available\") and "
             f"never make the deliverable itself conditional on it — write the file out "
             f"unconditionally. If a file must name these tools, mark it "
-            f"`portability-allow: file-delivery-tool`. At {loc}.",
+            f"`portability-allow: file-delivery-tool` (file-scoped — disables this rule for the "
+            f"entire file). At {loc}.",
             loc,
         ))
     return findings

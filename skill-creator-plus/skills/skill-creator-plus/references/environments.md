@@ -66,6 +66,7 @@ If you're in Cowork, the main things to know are:
   contract in any shipped Cowork artifact, so treat the specific tool names as observation, not spec.
   What Claude.ai chat serves is unknown — which is exactly why the guidance is to write the file out
   and describe the capability, rather than enumerate tools per runtime.)*
+
 - Description optimization (`run_loop.py` / `run_eval.py`) should work in Cowork just fine since it uses `claude -p` via subprocess, not a browser, but please save it until you've fully finished making the skill and the user agrees it's in good shape.
 - **Updating an existing skill**: The user might be asking you to update an existing skill, not create a new one. Follow the update guidance in the claude.ai section above.
 

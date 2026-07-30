@@ -265,11 +265,24 @@ class SelfLintTests(unittest.TestCase):
         `validate.yml` runs this suite, so a regression here is a red CI, not an advisory.
         """
         skill_root = Path(__file__).resolve().parent.parent
-        self.assertTrue((skill_root / "SKILL.md").exists(), "skill root misresolved")
+        skill_md = skill_root / "SKILL.md"
+        self.assertTrue(skill_md.exists(), "skill root misresolved")
         findings, err = lint_portability(skill_root)
         self.assertIsNone(err)
         offenders = [f for f in findings if f["rule"] == "file-delivery-tool-hardcoded"]
         self.assertEqual(offenders, [], f"skill-creator-plus hardcodes a delivery tool: {offenders}")
+        # A zero-findings result could be gamed by slapping the suppression marker on
+        # SKILL.md instead of actually avoiding the hardcoded tool name — that would
+        # silence the rule file-wide (including for a genuine future regression) while
+        # still leaving SKILL.md having named a delivery tool. SKILL.md must name no
+        # delivery tool at all, so it must never carry the marker.
+        self.assertNotIn(
+            "portability-allow: file-delivery-tool",
+            skill_md.read_text(encoding="utf-8"),
+            "SKILL.md must not carry the `portability-allow: file-delivery-tool` marker — "
+            "SKILL.md is expected to name no file-delivery tool, so suppressing the rule "
+            "there would hide a real regression instead of proving one doesn't exist.",
+        )
 
 
 if __name__ == "__main__":
