@@ -426,7 +426,7 @@ Before packaging, run through the quick checklist from `references/official-guid
 
 You can run `python -m scripts.quick_validate <path-to-skill>` to check some of these automatically.
 
-Also run `python -m scripts.check_portability <path-to-skill> --target <claude-code|claude-ai|cowork|all>` — a stdlib-only cross-runtime linter (no dependencies, runs in any environment). It flags constructs that break on the skill's target runtime: an over-cap `description`, subagent use (absent on Claude.ai), `claude` CLI use (absent on Claude.ai), browser/server assumptions (no display in Cowork/Claude.ai), and third-party Python imports in bundled scripts (Cowork's sandbox lacks them and can't `pip install`). Pass `--target` matching where the skill will run; `--strict` to gate.
+Also run `python -m scripts.check_portability <path-to-skill> --target <claude-code|claude-ai|cowork|all>` — a stdlib-only cross-runtime linter (no dependencies, runs in any environment). It flags constructs that break on the skill's target runtime: an over-cap `description`, subagent use (absent on Claude.ai), `claude` CLI use (absent on Claude.ai), browser/server assumptions (no display in Cowork/Claude.ai), third-party Python imports in bundled scripts (Cowork's sandbox lacks them and can't `pip install`), and a hardcoded file-delivery tool name (no single one is served on every surface). Pass `--target` matching where the skill will run; `--strict` to gate.
 
 If `cowork-harness` is installed, also run its two token-free static checks — `cowork-harness lint-skill --strict <skill-dir>` and `cowork-harness analyze-skill --strict <skill-dir>`. They're cheap and safe on any skill, and catch runtime bugs the checklist can't (host-path leaks, interactive-artifact write-backs lost under Cowork); their findings matter most for **Cowork-targeted** skills. Optional — skip silently if the tool isn't installed. See `references/environments.md` § *Testing Cowork-targeted skills with cowork-harness*.
 
@@ -438,7 +438,7 @@ Package the final skill into a distributable `.skill` file (run from the skill-c
 python -m scripts.package_skill <path/to/skill-folder>
 ```
 
-Tell the user the path of the resulting `.skill` file so they can install or share it. If the `present_files` tool happens to be available (Claude.ai), additionally present the `.skill` file directly — but packaging itself works everywhere Python does, so never skip it just because that tool is missing.
+Write the `.skill` file where the user will look for it — the workspace, or its outputs directory if it has one — and tell them the path so they can install or share it. That path is the delivery channel that works on every surface. If this session additionally exposes a tool for surfacing files to the user, use it as a bonus; use whichever such tool you actually have, and never name a specific one in a skill you author (surfaces differ, and a named tool can be absent or broken — Cowork alone has two delivery tools, one per product lane; see `references/environments.md` → *Delivering files to the user*). Packaging itself works everywhere Python does, so never skip it or make the deliverable conditional on a presentation tool.
 
 ---
 

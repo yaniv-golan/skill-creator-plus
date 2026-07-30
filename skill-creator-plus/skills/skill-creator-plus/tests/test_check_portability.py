@@ -258,5 +258,19 @@ class FileDeliveryToolTests(unittest.TestCase):
             self.assertNotIn("file-delivery-tool-hardcoded", _rules(findings))
 
 
+class SelfLintTests(unittest.TestCase):
+    def test_this_skill_names_no_file_delivery_tool(self):
+        """D6: pins the SKILL.md / environments.md wording against regression.
+
+        `validate.yml` runs this suite, so a regression here is a red CI, not an advisory.
+        """
+        skill_root = Path(__file__).resolve().parent.parent
+        self.assertTrue((skill_root / "SKILL.md").exists(), "skill root misresolved")
+        findings, err = lint_portability(skill_root)
+        self.assertIsNone(err)
+        offenders = [f for f in findings if f["rule"] == "file-delivery-tool-hardcoded"]
+        self.assertEqual(offenders, [], f"skill-creator-plus hardcodes a delivery tool: {offenders}")
+
+
 if __name__ == "__main__":
     unittest.main()
