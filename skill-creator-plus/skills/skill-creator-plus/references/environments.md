@@ -35,6 +35,37 @@ If you're in Cowork, the main things to know are:
   2. The user **saves the JSON themselves** as `feedback.json` in the workspace folder you're using — you then read it with the Read tool.
   When you tell the user "come back and tell me you're done reviewing", also say: *"The viewer will show your feedback as JSON — please copy it and paste it here."* Don't assume a file will appear on its own.
 - Packaging works — `package_skill.py` just needs Python and a filesystem.
+
+<!-- portability-allow: file-delivery-tool -->
+
+- **Delivering files to the user — write to the outputs directory; never name a delivery tool.**
+  The portable delivery channel is **the file itself plus its path**: write the deliverable into the
+  workspace's outputs directory and tell the user where it is. That is how Anthropic's own
+  `create-cowork-plugin` skill ships a `.plugin` — it zips, copies into `outputs/`, and notes that
+  the file "will appear in the chat as a rich preview" — with no tool call and no availability gate.
+  Do that, and treat any tool-based presentation as a bonus on top.
+
+  **Why not name the tool:** Cowork has **two** file-delivery tools, one per product lane, and an
+  agent only ever sees the one for the surface it is running on. The desktop-local lane is served
+  `mcp__cowork__present_files` (an MCP tool, so it cannot exist on the remote lane — local MCP
+  servers don't run in remote sessions); remote cloud-container Cowork instead uses the native
+  `SendUserFile` (`files: string[]`, a required `status`, optional `caption`/`display`), which is
+  also a broadly native Claude Code tool but is **absent from the Cowork-local lane**. Whichever one
+  a skill hardcodes, it works on one lane and fails on the other. So in a skill you author: describe
+  the capability ("if a tool for surfacing files to the user is available, present the file"), never
+  name a specific one, and never make the deliverable itself conditional on it — a delivery tool can
+  also simply be *broken* (`present_files` returned "not accessible on the user's computer" for every
+  file on Cowork Windows in mid-2026, blocking installs outright).
+  `check_portability.py` enforces this as `file-delivery-tool-hardcoded`; a file that genuinely must
+  name these tools (like this one) declares it with a `portability-allow: file-delivery-tool`
+  comment.
+  *(Provenance: first observed while building `cowork-harness`, then corroborated against public bug
+  reports from each lane — `anthropics/claude-code` #50041 (Cowork-local, `mcp__cowork__present_files`
+  by exact name) and #76344 (remote Cowork, `SendUserFile` + `device_commit_files`) — plus the Cowork
+  architecture overview for the two-lane split and the local-MCP mechanism. It is not stated as a
+  contract in any shipped Cowork artifact, so treat the specific tool names as observation, not spec.
+  What Claude.ai chat serves is unknown — which is exactly why the guidance is to write the file out
+  and describe the capability, rather than enumerate tools per runtime.)*
 - Description optimization (`run_loop.py` / `run_eval.py`) should work in Cowork just fine since it uses `claude -p` via subprocess, not a browser, but please save it until you've fully finished making the skill and the user agrees it's in good shape.
 - **Updating an existing skill**: The user might be asking you to update an existing skill, not create a new one. Follow the update guidance in the claude.ai section above.
 
