@@ -435,8 +435,10 @@ If `cowork-harness` is installed, also run its two token-free static checks — 
 Package the final skill into a distributable `.skill` file (run from the skill-creator-plus skill directory):
 
 ```bash
-python -m scripts.package_skill <path/to/skill-folder>
+python -m scripts.package_skill <path/to/skill-folder> [output-dir]
 ```
+
+`output-dir` is optional and defaults to the skill folder's parent — pass the workspace or outputs directory explicitly when you want the artifact elsewhere.
 
 Write the `.skill` file where the user will look for it — the workspace, or its outputs directory if it has one — and tell them the path so they can install or share it. That path is the delivery channel that works on every surface. If this session additionally exposes a tool for surfacing files to the user, use it as a bonus; use whichever such tool you actually have, and never name a specific one in a skill you author (surfaces differ, and a named tool can be absent or broken — Cowork alone has two delivery tools, one per product lane; see `references/environments.md` → *Delivering files to the user*). Packaging itself works everywhere Python does, so never skip it or make the deliverable conditional on a presentation tool.
 
