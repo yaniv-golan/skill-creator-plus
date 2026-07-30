@@ -154,5 +154,109 @@ class TargetFilterAndStructureTests(unittest.TestCase):
             self.assertIsNotNone(err)
 
 
+class FileDeliveryToolTests(unittest.TestCase):
+    def test_present_files_flagged_for_all_three_targets(self):
+        with tempfile.TemporaryDirectory() as td:
+            skill = _skill(Path(td), "name: x\ndescription: d",
+                           body="Use the present_files tool to show the report.\n")
+            findings, _ = lint_portability(skill)
+            self.assertIn("file-delivery-tool-hardcoded", _rules(findings))
+            f = next(f for f in findings if f["rule"] == "file-delivery-tool-hardcoded")
+            self.assertEqual(f["severity"], "warning")
+            self.assertEqual(f["targets"], ["claude-ai", "claude-code", "cowork"])
+            # Leading clause, not substring — every message names both tools in its explanation.
+            self.assertTrue(f["message"].startswith(
+                "names the file-delivery tool `present_files`"), f["message"][:80])
+
+    def test_mcp_prefixed_present_files_flagged(self):
+        with tempfile.TemporaryDirectory() as td:
+            skill = _skill(Path(td), "name: x\ndescription: d",
+                           body="Call mcp__cowork__present_files with the path.\n")
+            findings, _ = lint_portability(skill)
+            self.assertIn("file-delivery-tool-hardcoded", _rules(findings))
+
+    def test_senduserfile_excludes_claude_code_target(self):
+        with tempfile.TemporaryDirectory() as td:
+            skill = _skill(Path(td), "name: x\ndescription: d",
+                           body="Deliver it with SendUserFile.\n")
+            findings, _ = lint_portability(skill)
+            f = next(f for f in findings if f["rule"] == "file-delivery-tool-hardcoded")
+            self.assertEqual(f["targets"], ["claude-ai", "cowork"])
+
+    def test_both_names_emit_two_findings_with_own_targets(self):
+        """D3: per-name findings — a merged finding would union targets wrongly."""
+        with tempfile.TemporaryDirectory() as td:
+            body = "Use present_files here.\nElsewhere use SendUserFile.\n"
+            skill = _skill(Path(td), "name: x\ndescription: d", body=body)
+            findings, _ = lint_portability(skill)
+            hits = [f for f in findings if f["rule"] == "file-delivery-tool-hardcoded"]
+            self.assertEqual(len(hits), 2)
+            # Every message explains BOTH lanes by design, so only the leading clause is
+            # tool-specific — do not discriminate on a substring anywhere in the message.
+            # Emission order is fixed by _DELIVERY_TOOL_RES, so index is a stable key.
+            self.assertTrue(hits[0]["message"].startswith(
+                "names the file-delivery tool `present_files`"), hits[0]["message"][:80])
+            self.assertEqual(hits[0]["targets"], ["claude-ai", "claude-code", "cowork"])
+            self.assertTrue(hits[1]["message"].startswith(
+                "names the file-delivery tool `SendUserFile`"), hits[1]["message"][:80])
+            self.assertEqual(hits[1]["targets"], ["claude-ai", "cowork"])
+
+    def test_if_available_does_not_suppress(self):
+        """D5: guarding one name still strands the lane serving the other."""
+        with tempfile.TemporaryDirectory() as td:
+            skill = _skill(Path(td), "name: x\ndescription: d",
+                           body="If present_files is available, use it.\n")
+            findings, _ = lint_portability(skill)
+            self.assertIn("file-delivery-tool-hardcoded", _rules(findings))
+
+    def test_lane_aware_prose_alone_does_not_suppress(self):
+        """D5: natural per-lane prose is NOT a suppressor — only the marker is."""
+        with tempfile.TemporaryDirectory() as td:
+            body = ("The desktop-local sandbox is served present_files; remote "
+                    "cloud-container Cowork gets SendUserFile.\n")
+            skill = _skill(Path(td), "name: x\ndescription: d", body=body)
+            findings, _ = lint_portability(skill)
+            self.assertIn("file-delivery-tool-hardcoded", _rules(findings))
+
+    def test_marker_suppresses_whole_md_file(self):
+        with tempfile.TemporaryDirectory() as td:
+            body = ("<!-- portability-allow: file-delivery-tool -->\n"
+                    "Desktop-local Cowork serves present_files; remote serves SendUserFile.\n")
+            skill = _skill(Path(td), "name: x\ndescription: d", body=body)
+            findings, _ = lint_portability(skill)
+            self.assertNotIn("file-delivery-tool-hardcoded", _rules(findings))
+
+    def test_marker_suppresses_whole_script(self):
+        with tempfile.TemporaryDirectory() as td:
+            skill = _skill(Path(td), "name: x\ndescription: d")
+            (skill / "scripts").mkdir()
+            (skill / "scripts" / "deliver.py").write_text(
+                "# portability-allow: file-delivery-tool\nTOOL = 'present_files'\n")
+            findings, _ = lint_portability(skill)
+            self.assertNotIn("file-delivery-tool-hardcoded", _rules(findings))
+
+    def test_unmarked_script_is_scanned(self):
+        with tempfile.TemporaryDirectory() as td:
+            skill = _skill(Path(td), "name: x\ndescription: d")
+            (skill / "scripts").mkdir()
+            (skill / "scripts" / "deliver.py").write_text('TOOL = "present_files"\n')
+            findings, _ = lint_portability(skill)
+            self.assertIn("file-delivery-tool-hardcoded", _rules(findings))
+
+    def test_clean_capability_language_not_flagged(self):
+        with tempfile.TemporaryDirectory() as td:
+            skill = _skill(Path(td), "name: x\ndescription: d",
+                           body="If a file-delivery tool is available, surface the file.\n")
+            findings, _ = lint_portability(skill)
+            self.assertNotIn("file-delivery-tool-hardcoded", _rules(findings))
+
+    def test_near_miss_names_not_flagged(self):
+        with tempfile.TemporaryDirectory() as td:
+            body = "We represent_files and use present_filesystem and present_files_v2.\n"
+            skill = _skill(Path(td), "name: x\ndescription: d", body=body)
+            findings, _ = lint_portability(skill)
+            self.assertNotIn("file-delivery-tool-hardcoded", _rules(findings))
+
+
 if __name__ == "__main__":
     unittest.main()

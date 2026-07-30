@@ -6,7 +6,9 @@ skill-creator-plus can author skills for three runtimes — Claude Code, Claude.
 Cowork — whose capabilities differ. A construct that works in Claude Code can silently break
 elsewhere: Claude.ai has no subagents and no `claude` CLI; Cowork has no browser/display and a
 default-deny egress sandbox whose base image lacks third-party Python packages (and can't
-pip-install them). `quick_validate.py` checks *structure*; this checks *runtime portability*.
+pip-install them), and file-delivery tools differ per surface (Cowork alone has two, one per
+product lane, and an agent sees only its own). `quick_validate.py` checks *structure*; this
+checks *runtime portability*.
 
 It is deliberately STDLIB-ONLY (no PyYAML) — it has to run inside the very sandboxes it lints,
 so it must not depend on anything those sandboxes might lack. Frontmatter is parsed with a small
@@ -21,6 +23,10 @@ Usage:
   python -m scripts.check_portability <skill-dir> [--target claude-code|claude-ai|cowork|all]
                                       [--json] [--strict]
 """
+# portability-allow: file-delivery-tool
+# ^ This module necessarily contains the very tool names the `file-delivery-tool-hardcoded` rule
+# looks for, and `_iter_scripts()` scans `scripts/**/*.py` including this file. See D5 in
+# docs/internal/file-delivery-tool-portability-plan.md.
 
 import argparse
 import ast
@@ -132,6 +138,21 @@ _SUBAGENT_GUARD_RE = re.compile(r"if available|if you have|otherwise inline|when
 _CLAUDE_CLI_RE = re.compile(r"\bclaude\s+-p\b|\bclaude\s+setup-token\b|subprocess.*\bclaude\b")
 _BROWSER_RE = re.compile(r"\bwebbrowser\b|http\.server|HTTPServer|BaseHTTPRequestHandler|localhost:\d+|127\.0\.0\.1:\d+")
 
+# File-delivery tools are per-surface: no single name is served everywhere. Naming one in skill
+# text strands every surface that serves a different one (see references/environments.md).
+# `targets` = surfaces where the name is NOT verified present, so a skill hardcoding it cannot be
+# assumed to work there. SendUserFile IS native to Claude Code, so `claude-code` is excluded for it.
+# Fixed iteration order → deterministic finding order regardless of scan order.
+_DELIVERY_TOOL_RES = (
+    ("present_files", re.compile(r"\b(?:mcp__[A-Za-z0-9_]+__)?present_files\b"),
+     ("claude-ai", "claude-code", "cowork")),
+    ("SendUserFile", re.compile(r"\bSendUserFile\b"), ("claude-ai", "cowork")),
+)
+# Explicit, greppable, file-scoped opt-out — for the two kinds of file that must name these tools:
+# this linter's own source, and the doc that teaches the constraint. A phrase-list guard cannot work
+# here (it would have to match the linter's own implementation); see D5.
+_DELIVERY_ALLOW_RE = re.compile(r"portability-allow:\s*file-delivery-tool")
+
 
 def _iter_text_files(skill_path):
     for rel in ("SKILL.md",):
@@ -157,6 +178,7 @@ def check_runtime_constructs(skill_path):
     md_hits_subagent = []
     cli_hits = []
     browser_hits = []
+    delivery_hits = {}  # tool name -> first "file:line"
     # scan instruction text (SKILL.md + references/agents) and scripts
     for p in list(_iter_text_files(skill_path)) + list(_iter_scripts(skill_path)):
         try:
@@ -164,6 +186,7 @@ def check_runtime_constructs(skill_path):
         except OSError:
             continue
         rel = p.relative_to(skill_path)
+        delivery_exempt = bool(_DELIVERY_ALLOW_RE.search(text))
         for n, line in enumerate(text.split("\n"), 1):
             if _SUBAGENT_RE.search(line) and not _SUBAGENT_GUARD_RE.search(line):
                 md_hits_subagent.append(f"{rel}:{n}")
@@ -171,6 +194,10 @@ def check_runtime_constructs(skill_path):
                 cli_hits.append(f"{rel}:{n}")
             if _BROWSER_RE.search(line):
                 browser_hits.append(f"{rel}:{n}")
+            if not delivery_exempt:
+                for tool, rx, _tgts in _DELIVERY_TOOL_RES:
+                    if tool not in delivery_hits and rx.search(line):
+                        delivery_hits[tool] = f"{rel}:{n}"
 
     if md_hits_subagent:
         findings.append(_finding(
@@ -193,6 +220,23 @@ def check_runtime_constructs(skill_path):
             f"assumes a browser/local HTTP server at {len(browser_hits)} site(s) — Cowork and "
             f"Claude.ai have no display. Provide a static / no-server fallback. First: {browser_hits[0]}",
             browser_hits[0],
+        ))
+    for tool, _rx, tgts in _DELIVERY_TOOL_RES:
+        loc = delivery_hits.get(tool)
+        if not loc:
+            continue
+        findings.append(_finding(
+            "file-delivery-tool-hardcoded", SEVERITY_WARNING, tgts,
+            f"names the file-delivery tool `{tool}` in skill text — no single delivery tool is "
+            f"served on every surface. Cowork has two, one per product lane: the desktop-local "
+            f"sandbox serves `present_files`, remote cloud-container Cowork serves `SendUserFile` "
+            f"(also native to Claude Code), and an agent only sees the one for its surface. A skill "
+            f"that hardcodes either works on one lane and fails on the other. Describe the "
+            f"capability instead (\"if a tool for surfacing files to the user is available\") and "
+            f"never make the deliverable itself conditional on it — write the file out "
+            f"unconditionally. If a file must name these tools, mark it "
+            f"`portability-allow: file-delivery-tool`. At {loc}.",
+            loc,
         ))
     return findings
 
