@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [0.8.0] - 2026-08-01
 
 ### Added
 - **Delivery guidance for skills that produce a file for their user** — a new *Delivering Files the Skill Produces* section in `SKILL.md` (plus a checklist item), expanded in `references/environments.md` → *Delivering files to the user*. Two ordered steps, phrased by outcome and naming no tool: **(1)** write the deliverable to a stated path, unconditionally, and never to cwd — in Cowork, cwd is a scratchpad the user can't see; **(2)** then scan your available tools for one whose description says it sends or presents files to the user, and **call it if one exists** — stating the path is not a substitute. Only if none exists, state the path. This matters because Cowork's two lanes deliver differently: on the local lane the write plus a stated path completes delivery, but on remote cloud-container Cowork the session runs in a sandbox destroyed when the session ends, so a file that is written and never presented is **silently lost**. The guidance is unconditional on the author's own environment — the risk lives in the runtime the *authored* skill will run under. `present_files` and `SendUserFile` appear only as a recognition aid for reading a transcript, never as text to copy into an authored skill; `device_commit_files` is never named at all. Sources are limited to publicly checkable ones: `anthropics/claude-code` issues #50041, #76344, #36438, and Anthropic's Cowork architecture overview.
