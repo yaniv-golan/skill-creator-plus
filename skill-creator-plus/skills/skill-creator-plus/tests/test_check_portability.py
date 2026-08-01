@@ -257,6 +257,51 @@ class FileDeliveryToolTests(unittest.TestCase):
             self.assertEqual(f["severity"], "warning")
             self.assertEqual(f["targets"], list(TARGETS_SORTED))
 
+    def test_named_tools_only_if_available_with_fallback_stays_clean(self):
+        """Merge-gate review table row 1: naming both tools + 'only if' + a stated fallback.
+
+        No production verb (package/write/save/...) governs the skip/omit clause — it's the
+        *presentation* call that's conditional, not producing the file — and the sentence states
+        a fallback ("otherwise state the path") besides. Must NOT fire.
+        """
+        with tempfile.TemporaryDirectory() as td:
+            body = (
+                "Present it with present_files or SendUserFile only if such a tool is "
+                "available; otherwise state the path.\n"
+            )
+            skill = _skill(Path(td), "name: x\ndescription: d", body=body)
+            findings, _ = lint_portability(skill)
+            self.assertNotIn("delivery-conditional-deliverable", _rules(findings))
+
+    def test_deployed_skill_creator_wording_stays_clean(self):
+        """Merge-gate review table row 2: real, deployed skill-creator wording.
+
+        "...present_files, or SendUserFile in Cowork remote. If you have neither, skip this
+        step." — the skip/omit phrase ("skip this step") governs *presenting* the file, not
+        producing it; no production verb appears in that clause. Must NOT fire.
+        """
+        with tempfile.TemporaryDirectory() as td:
+            body = (
+                "On Cowork, present the file with `present_files`, or `SendUserFile` in Cowork "
+                "remote. If you have neither, skip this step.\n"
+            )
+            skill = _skill(Path(td), "name: x\ndescription: d", body=body)
+            findings, _ = lint_portability(skill)
+            self.assertNotIn("delivery-conditional-deliverable", _rules(findings))
+
+    def test_wrapped_upstream_bug_still_flagged_regardless_of_line_breaks(self):
+        """Clause-scoping (not line-scoping) means re-wrapping the upstream bug text across
+        different physical lines must not change the verdict."""
+        with tempfile.TemporaryDirectory() as td:
+            body = (
+                "Package the deliverable and present it, but only if the\n"
+                "`present_files` tool is available in this session. If it isn't,\n"
+                "skip this step entirely and do nothing.\n"
+            )
+            skill = _skill(Path(td), "name: x\ndescription: d", body=body)
+            findings, _ = lint_portability(skill)
+            self.assertIn("delivery-conditional-deliverable", _rules(findings))
+
     def test_marker_suppresses_both_rules_in_md(self):
         with tempfile.TemporaryDirectory() as td:
             body = ("<!-- portability-allow: file-delivery-tool -->\n"
@@ -304,20 +349,77 @@ class FileDeliveryToolTests(unittest.TestCase):
             self.assertNotIn("delivery-conditional-deliverable", _rules(findings))
 
 
+class DeliveryAllowMarkerContextTests(unittest.TestCase):
+    """Covers the fix for the marker's self-exemption bug: `_DELIVERY_ALLOW_RE` used to match the
+    marker phrase anywhere in a file's text, including inside prose merely *describing* it (e.g. a
+    doc explaining the escape hatch) — which silently disabled both delivery rules for that file
+    without an actual marker being present. The marker must now appear in comment context (a
+    leading `#` comment line, or an HTML `<!-- -->` comment).
+    """
+
+    def test_prose_mention_of_marker_does_not_suppress(self):
+        with tempfile.TemporaryDirectory() as td:
+            body = (
+                "A file that genuinely must deviate from this pattern suppresses either rule "
+                "with a file-scoped `portability-allow: file-delivery-tool` comment.\n"
+                "Use present_files to show the report.\n"
+            )
+            skill = _skill(Path(td), "name: x\ndescription: d", body=body)
+            findings, _ = lint_portability(skill)
+            self.assertIn(
+                "delivery-tool-single-lane", _rules(findings),
+                "prose merely describing the marker must not suppress the rule it describes",
+            )
+
+    def test_hash_comment_marker_suppresses(self):
+        with tempfile.TemporaryDirectory() as td:
+            body = (
+                "# portability-allow: file-delivery-tool\n"
+                "Use present_files to show the report.\n"
+            )
+            skill = _skill(Path(td), "name: x\ndescription: d", body=body)
+            findings, _ = lint_portability(skill)
+            self.assertNotIn("delivery-tool-single-lane", _rules(findings))
+
+    def test_html_comment_marker_suppresses(self):
+        with tempfile.TemporaryDirectory() as td:
+            body = (
+                "<!-- portability-allow: file-delivery-tool -->\n"
+                "Use present_files to show the report.\n"
+            )
+            skill = _skill(Path(td), "name: x\ndescription: d", body=body)
+            findings, _ = lint_portability(skill)
+            self.assertNotIn("delivery-tool-single-lane", _rules(findings))
+
+    def test_marker_mentioned_mid_sentence_without_comment_syntax_does_not_suppress(self):
+        with tempfile.TemporaryDirectory() as td:
+            body = (
+                "See the portability-allow: file-delivery-tool marker for the escape hatch.\n"
+                "Use present_files to show the report.\n"
+            )
+            skill = _skill(Path(td), "name: x\ndescription: d", body=body)
+            findings, _ = lint_portability(skill)
+            self.assertIn("delivery-tool-single-lane", _rules(findings))
+
+
 class SelfLintTests(unittest.TestCase):
     def test_this_skill_trips_neither_delivery_rule(self):
         """Pins the SKILL.md / environments.md wording against regression.
 
         `validate.yml` runs this suite, so a regression here is a red CI, not an advisory.
 
-        At the time this test was written, SKILL.md still carries the OLD delivery-tool
-        guidance (a separate docs task updates it) and names NEITHER `present_files` nor
-        `SendUserFile` — naming zero tools is not naming exactly one, so
-        `delivery-tool-single-lane` correctly does not fire on it. The only two files in this
-        skill that name either tool (`references/environments.md`, which documents the
-        constraint, and `scripts/check_portability.py`, which implements it) both carry the
-        file-scoped `portability-allow: file-delivery-tool` marker, so neither new rule should
-        fire anywhere in the skill.
+        SKILL.md teaches the corrected, lane-aware delivery guidance (see "Delivering Files the
+        Skill Produces" and the packaging step) but names NEITHER `present_files` nor
+        `SendUserFile` — it phrases delivery by outcome, not by tool name — so
+        `delivery-tool-single-lane` correctly does not fire on it. Of the two files in this skill
+        that do name either tool, `scripts/check_portability.py` carries the file-scoped
+        `portability-allow: file-delivery-tool` marker (it scans its own source and its finding
+        messages unavoidably pair tool names with skip/omit-adjacent phrasing); but
+        `references/environments.md`, which documents the constraint, carries no marker at all —
+        its prose never combines a tool name with a skip/omit phrase *and* a production verb in
+        the same clause, so it stays clean on its own merits. (Prior to the marker-context fix,
+        environments.md relied on a prose *mention* of the marker's name to blanket-suppress
+        both rules — that was itself the bug fixed here; see `DeliveryAllowMarkerContextTests`.)
         """
         skill_root = Path(__file__).resolve().parent.parent
         skill_md = skill_root / "SKILL.md"

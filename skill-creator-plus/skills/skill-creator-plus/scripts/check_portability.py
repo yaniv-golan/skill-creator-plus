@@ -8,9 +8,10 @@ elsewhere: Claude.ai has no subagents and no `claude` CLI; Cowork has no browser
 default-deny egress sandbox whose base image lacks third-party Python packages (and can't
 pip-install them), and file-delivery tools differ per surface (Cowork alone has two, one per
 product lane, and an agent sees only its own — naming only one in skill text strands the lane
-served by the other; the correct pattern names both, capability-conditionally, and never gates
-producing the artifact itself on either being available). `quick_validate.py` checks *structure*;
-this checks *runtime portability*.
+served by the other; the correct pattern phrases delivery by outcome and names no tool — naming
+both, capability-conditionally, is also acceptable — and never gates producing the artifact itself
+on either being available). `quick_validate.py` checks *structure*; this checks *runtime
+portability*.
 
 It is deliberately STDLIB-ONLY (no PyYAML) — it has to run inside the very sandboxes it lints,
 so it must not depend on anything those sandboxes might lack. Frontmatter is parsed with a small
@@ -144,27 +145,54 @@ _BROWSER_RE = re.compile(r"\bwebbrowser\b|http\.server|HTTPServer|BaseHTTPReques
 # File-delivery tools are per-surface: no single name is served everywhere — Cowork alone has two,
 # one per product lane (desktop-local sandbox serves `present_files`, remote cloud-container Cowork
 # serves `SendUserFile`, also native to Claude Code), and an agent only sees the one for its surface.
-# Naming only one in skill text strands the lane served by the other; naming BOTH, capability-
-# conditionally, is the correct pattern (see references/environments.md). Both rules below therefore
-# carry the full `TARGETS` — a single-lane skill can misbehave on any of the three runtimes depending
-# on which Cowork lane (or product) it lands on.
+# Naming only one in skill text strands the lane served by the other; the correct pattern phrases
+# delivery by outcome and names no tool (naming BOTH, capability-conditionally, is also acceptable
+# and stays clean — see references/environments.md). Both rules below therefore carry the full
+# `TARGETS` — a single-lane skill can misbehave on any of the three runtimes depending on which
+# Cowork lane (or product) it lands on.
 # Fixed iteration order → deterministic finding order regardless of scan order.
 _DELIVERY_TOOL_RES = (
     ("present_files", re.compile(r"\b(?:mcp__[A-Za-z0-9_]+__)?present_files\b")),
     ("SendUserFile", re.compile(r"\bSendUserFile\b")),
 )
-# The distinguisher for `delivery-conditional-deliverable` is *skipping/omitting the artifact*,
-# not conditionality as such — "if a tool is available, use it; otherwise state the path" is the
-# correct, target-state pattern and must NOT match this. Only fires alongside a named tool on the
-# same line (see `_DELIVERY_TOOL_RES` in the caller).
+# The distinguisher for `delivery-conditional-deliverable` is *skipping/omitting the artifact's
+# production*, not conditionality as such — "if a tool is available, use it; otherwise state the
+# path" is the correct, target-state pattern and must NOT match this, even when it happens to use
+# "only if" or "if you don't have" to phrase the tool-availability check. What separates a real bug
+# (gating packaging/writing itself) from a correct capability-conditional presentation is:
+#   (a) a production verb — package/zip/write/save/generate/create/build — in the same clause as
+#       the skip/omit phrase (a skip/omit phrase with no production verb nearby is talking about
+#       *presenting*, not *producing*, the file); and
+#   (b) no stated fallback (e.g. "otherwise state the path") — a fallback means the deliverable is
+#       never actually skipped, only the presentation tool call is.
+# Matched per-clause (sentence-scoped), not per physical line, so wrapping the same instruction
+# across lines cannot change the verdict — see `_iter_clauses()`.
 _DELIVERY_SKIP_OMIT_RE = re.compile(
     r"\bskip (?:this|it|that)\b|\bonly if\b|\bif you don't have\b|\bomit(?:s|ted|ting)?\b",
+    re.IGNORECASE,
+)
+_DELIVERY_PRODUCTION_VERB_RE = re.compile(
+    r"\b(?:packag(?:e|es|ed|ing)|zip(?:s|ped|ping)?|writ(?:e|es|ing|ten|e)|"
+    r"sav(?:e|es|ed|ing)|generat(?:e|es|ed|ing)|creat(?:e|es|ed|ing)|"
+    r"build(?:s|ing)?|built)\b",
+    re.IGNORECASE,
+)
+_DELIVERY_FALLBACK_RE = re.compile(
+    r"\botherwise state\b|\bstate the path\b|\btell(?:s|ing)? the user where\b",
     re.IGNORECASE,
 )
 # Explicit, greppable, file-scoped opt-out — for the two kinds of file that must name these tools:
 # this linter's own source, and the doc that teaches the constraint. A phrase-list guard cannot work
 # here (it would have to match the linter's own implementation); see D5.
-_DELIVERY_ALLOW_RE = re.compile(r"portability-allow:\s*file-delivery-tool")
+#
+# Requires comment context (a leading `#` comment line, or an HTML `<!-- -->` comment) so that mere
+# *prose describing* the marker (e.g. a doc explaining "suppress this with a `portability-allow:
+# file-delivery-tool` comment") cannot silently disable the rule it's describing — only an actual
+# marker directive can.
+_DELIVERY_ALLOW_RE = re.compile(
+    r"(?m)^[ \t]*#[ \t]*portability-allow:\s*file-delivery-tool\b"
+    r"|<!--\s*portability-allow:\s*file-delivery-tool\s*-->"
+)
 
 
 def _iter_text_files(skill_path):
@@ -184,6 +212,27 @@ def _iter_scripts(skill_path):
     if d.is_dir():
         for p in sorted(d.rglob("*.py")):
             yield p
+
+
+def _iter_clauses(text):
+    """Split text into loose clause/sentence windows, each tagged with its 1-based start line.
+
+    A boundary is sentence-ending punctuation followed by whitespace, or a blank line
+    (paragraph break). Wrapped physical lines with no sentence-ending punctuation at the wrap
+    point stay joined into a single clause — this is what makes `delivery-conditional-deliverable`
+    immune to line-wrapping: the same instruction reads as the same clause regardless of where an
+    author happened to break the line.
+    """
+    boundary_re = re.compile(r"(?<=[.!?])\s+|\n[ \t]*\n")
+    pos = 0
+    for m in boundary_re.finditer(text):
+        clause = text[pos:m.start()]
+        if clause.strip():
+            yield clause, text.count("\n", 0, pos) + 1
+        pos = m.end()
+    tail = text[pos:]
+    if tail.strip():
+        yield tail, text.count("\n", 0, pos) + 1
 
 
 def check_runtime_constructs(skill_path):
@@ -212,7 +261,6 @@ def check_runtime_constructs(skill_path):
             continue
         rel = p.relative_to(skill_path)
         delivery_exempt = bool(_DELIVERY_ALLOW_RE.search(text))
-        conditional_loc = None  # first "file:line" IN THIS FILE with a tool + skip/omit phrase
         for n, line in enumerate(text.split("\n"), 1):
             if _SUBAGENT_RE.search(line) and not _SUBAGENT_GUARD_RE.search(line):
                 md_hits_subagent.append(f"{rel}:{n}")
@@ -226,21 +274,41 @@ def check_runtime_constructs(skill_path):
             for tool in line_tools:
                 if tool not in skill_tool_first_loc:
                     skill_tool_first_loc[tool] = f"{rel}:{n}"
-            # `delivery-conditional-deliverable`, unlike single-lane, genuinely is a property of
-            # the individual instruction — stays per-line/per-file.
-            if line_tools and conditional_loc is None and _DELIVERY_SKIP_OMIT_RE.search(line):
-                conditional_loc = f"{rel}:{n}"
 
-        if not delivery_exempt and conditional_loc:
+        # `delivery-conditional-deliverable`, unlike single-lane, genuinely is a property of the
+        # individual instruction — stays per-file/per-clause (not skill-wide like single-lane).
+        # Clause-scoped (see `_iter_clauses`) rather than line-scoped so wrapping the same
+        # instruction across physical lines can't change the verdict, and gated on a production
+        # verb + absence of a fallback so a correct capability-conditional *presentation* sentence
+        # (which legitimately uses "only if"/"if you don't have" about the tool, not the artifact)
+        # doesn't get flagged as if it gated the artifact's *production*.
+        conditional_loc = None
+        if not delivery_exempt:
+            for clause, line_no in _iter_clauses(text):
+                if not any(rx.search(clause) for _tool, rx in _DELIVERY_TOOL_RES):
+                    continue
+                if not _DELIVERY_SKIP_OMIT_RE.search(clause):
+                    continue
+                if not _DELIVERY_PRODUCTION_VERB_RE.search(clause):
+                    continue
+                if _DELIVERY_FALLBACK_RE.search(clause):
+                    continue
+                conditional_loc = f"{rel}:{line_no}"
+                break
+
+        if conditional_loc:
             conditional_findings.append(_finding(
                 "delivery-conditional-deliverable", SEVERITY_WARNING, TARGETS,
                 f"gates the artifact itself (packaging/writing it) on a delivery tool's "
-                f"availability, using a skip/omit phrase alongside the tool name — e.g. the real "
-                f"upstream bug (anthropics/claude-code#36438): \"only if `present_files` tool is "
-                f"available\" / \"If you don't, skip this step.\" The tool call is what's "
-                f"conditional; producing the deliverable never is — write/package it "
-                f"unconditionally, then present it with whichever tool is available (or state the "
-                f"path if none is). If a file must use skip/omit phrasing alongside a tool name, "
+                f"availability, using a skip/omit phrase alongside a production verb and the tool "
+                f"name in the same clause — e.g. the real upstream bug (anthropics/claude-code"
+                f"#36438): \"only if `present_files` tool is available\" / \"If you don't, skip "
+                f"this step.\" The tool call is what's conditional; producing the deliverable "
+                f"never is — write/package it unconditionally, then present it with whichever "
+                f"tool is available (or state the path if none is). A sentence that merely makes "
+                f"*presenting* the file conditional (e.g. \"...only if such a tool is available; "
+                f"otherwise state the path\") is the correct pattern and does not trip this. If a "
+                f"file must use skip/omit phrasing alongside a production verb and a tool name, "
                 f"mark it `portability-allow: file-delivery-tool` (file-scoped). At "
                 f"{conditional_loc}.",
                 conditional_loc,
@@ -259,11 +327,11 @@ def check_runtime_constructs(skill_path):
             f"local sandbox serves `present_files`, remote cloud-container Cowork serves "
             f"`SendUserFile`, also native to Claude Code), and an agent only sees the one for its "
             f"surface. Naming only `{named_tool}` strands the lane served by `{missing_tool}`. "
-            f"Name both, capability-conditionally (\"if a tool for surfacing files to the user is "
-            f"available (`present_files`, or `SendUserFile` on remote surfaces), present the file "
-            f"with it; if neither exists, state the path\"). If a file must name only one, mark "
-            f"it `portability-allow: file-delivery-tool` (file-scoped — disables both delivery-"
-            f"tool rules for that file). At {loc}.",
+            f"Phrase delivery by outcome, naming no tool (\"if a tool for surfacing files to the "
+            f"user is available, present the file with it; if none exists, state the path\") — "
+            f"naming both tools, capability-conditionally, is also acceptable and stays clean. If "
+            f"a file must name only one, mark it `portability-allow: file-delivery-tool` "
+            f"(file-scoped — disables both delivery-tool rules for that file). At {loc}.",
             loc,
         ))
 

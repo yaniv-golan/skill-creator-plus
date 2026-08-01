@@ -194,6 +194,10 @@ This is a starting point, not the final answer. The strongest signal for what to
 
 **When you do bundle a script, design it for agent consumption** — non-interactive, `--help`-documented, structured output (JSON/CSV), helpful errors, meaningful exit codes, idempotent by default. A script that works fine for a human can be unusable for an agent. See [official-guide-patterns.md](references/official-guide-patterns.md) ("Designing Scripts for Agent Use") for the full conventions.
 
+### Delivering Files the Skill Produces
+
+This applies no matter which environment you're authoring in — the risk lives in the runtime the *authored skill* will run under, not yours. If the skill you are authoring produces a file for its user, its final step must **write the file to a stated path and then present it** with whatever file-surfacing tool that runtime exposes. A path alone is not delivery on every surface — on ephemeral/remote sessions an unpresented file is silently lost. See `references/environments.md` → *Delivering files to the user*.
+
 ### Test Cases
 
 **Pro Tip from the official guide: Iterate on a single task before expanding.** The most effective skill creators iterate on a single challenging task until Claude succeeds, then extract the winning approach into a skill. This leverages in-context learning and provides faster signal than broad testing. Once you have a working foundation, expand to multiple test cases for coverage.
@@ -419,6 +423,7 @@ Before packaging, run through the quick checklist from `references/official-guid
 - [ ] No "claude" or "anthropic" in the skill name
 - [ ] Instructions are clear and actionable (not vague)
 - [ ] Error handling included for likely failure modes
+- [ ] If the skill produces a file for its user, the final step writes it to a stated path and then presents it (a path alone isn't delivery on every surface)
 - [ ] Examples provided where helpful
 - [ ] References clearly linked from SKILL.md
 - [ ] SKILL.md stays under ~500 lines (detailed content in references/)
@@ -426,7 +431,7 @@ Before packaging, run through the quick checklist from `references/official-guid
 
 You can run `python -m scripts.quick_validate <path-to-skill>` to check some of these automatically.
 
-Also run `python -m scripts.check_portability <path-to-skill> --target <claude-code|claude-ai|cowork|all>` — a stdlib-only cross-runtime linter (no dependencies, runs in any environment). It flags constructs that break on the skill's target runtime: an over-cap `description`, subagent use (absent on Claude.ai), `claude` CLI use (absent on Claude.ai), browser/server assumptions (no display in Cowork/Claude.ai), third-party Python imports in bundled scripts (Cowork's sandbox lacks them and can't `pip install`), a delivery tool named for only one Cowork lane (`delivery-tool-single-lane` — naming both, capability-conditionally, is the correct pattern), and the deliverable itself gated on a delivery tool's availability (`delivery-conditional-deliverable`). Pass `--target` matching where the skill will run; `--strict` to gate.
+Also run `python -m scripts.check_portability <path-to-skill> --target <claude-code|claude-ai|cowork|all>` — a stdlib-only cross-runtime linter (no dependencies, runs in any environment). It flags constructs that break on the skill's target runtime: an over-cap `description`, subagent use (absent on Claude.ai), `claude` CLI use (absent on Claude.ai), browser/server assumptions (no display in Cowork/Claude.ai), third-party Python imports in bundled scripts (Cowork's sandbox lacks them and can't `pip install`), a delivery tool named for only one Cowork lane (`delivery-tool-single-lane` — phrase delivery by outcome, naming no tool; naming both, capability-conditionally, is also acceptable and stays clean), and the deliverable itself gated on a delivery tool's availability (`delivery-conditional-deliverable`). Pass `--target` matching where the skill will run; `--strict` to gate.
 
 If `cowork-harness` is installed, also run its two token-free static checks — `cowork-harness lint-skill --strict <skill-dir>` and `cowork-harness analyze-skill --strict <skill-dir>`. They're cheap and safe on any skill, and catch runtime bugs the checklist can't (host-path leaks, interactive-artifact write-backs lost under Cowork); their findings matter most for **Cowork-targeted** skills. Optional — skip silently if the tool isn't installed. See `references/environments.md` § *Testing Cowork-targeted skills with cowork-harness*.
 
@@ -440,7 +445,7 @@ python -m scripts.package_skill <path/to/skill-folder> [output-dir]
 
 `output-dir` is optional and defaults to the skill folder's parent — pass the workspace or outputs directory explicitly when you want the artifact elsewhere.
 
-Write the `.skill` file to a stated path — the workspace, or its outputs directory if it has one — never to cwd (in Cowork, cwd is a scratchpad the user can't see). On the local lane, writing the file and stating that path already completes delivery. Then present it, capability-conditionally: if this session exposes a tool for surfacing files to the user, use it to present the file; if none exists, the path you already stated is the presentation. On the remote lane, this presentation step **is** the delivery — the write alone never reaches the user there, because nothing in that lane's session persists or surfaces the outputs directory once the session ends. See `references/environments.md` → *Delivering files to the user* for which tool exists on which surface, and why. Packaging itself works everywhere Python does, so never skip it or make the deliverable itself conditional on a presentation tool.
+Write the `.skill` file to a stated path — the workspace, or its outputs directory if it has one — never to cwd. Then present it: scan your available tools for one whose description says it sends or presents files to the user, and call it — the file is not delivered until you do, and stating the path is not a substitute. Only if no such tool exists, the path you already stated is the presentation. See `references/environments.md` → *Delivering files to the user* for why this two-step rule exists and which tool serves which surface. Packaging itself works everywhere Python does — never make it conditional on a presentation tool.
 
 ---
 
