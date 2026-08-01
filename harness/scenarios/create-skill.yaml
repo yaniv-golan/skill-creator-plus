@@ -43,3 +43,9 @@ assert:
   # result under a 10 KB/result cap; a no-match against a truncated result reports could-not-verify,
   # not a silent pass. Regex targets actual Python error signatures, not prose mentioning them.
   - tool_result_not_matches: "ModuleNotFoundError|No module named '(yaml|[a-z0-9_]+)'|Traceback \\(most recent call last\\)"
+  # Runtime F3 guard (delivery contract). The skill's own rule is that a written path is not
+  # delivery where a surfacing tool exists — "if one exists you MUST call it". This lane serves
+  # `present_files`, so a correct run calls it. Content-class, evidence-backed
+  # (RunResult.presentedFiles); asserts the harness-side delivery record, and names no tool in the
+  # skill itself. Container/hostloop only.
+  - present_files_called: true
