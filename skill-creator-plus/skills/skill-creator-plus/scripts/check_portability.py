@@ -7,8 +7,10 @@ Cowork — whose capabilities differ. A construct that works in Claude Code can 
 elsewhere: Claude.ai has no subagents and no `claude` CLI; Cowork has no browser/display and a
 default-deny egress sandbox whose base image lacks third-party Python packages (and can't
 pip-install them), and file-delivery tools differ per surface (Cowork alone has two, one per
-product lane, and an agent sees only its own). `quick_validate.py` checks *structure*; this
-checks *runtime portability*.
+product lane, and an agent sees only its own — naming only one in skill text strands the lane
+served by the other; the correct pattern names both, capability-conditionally, and never gates
+producing the artifact itself on either being available). `quick_validate.py` checks *structure*;
+this checks *runtime portability*.
 
 It is deliberately STDLIB-ONLY (no PyYAML) — it has to run inside the very sandboxes it lints,
 so it must not depend on anything those sandboxes might lack. Frontmatter is parsed with a small
@@ -24,9 +26,10 @@ Usage:
                                       [--json] [--strict]
 """
 # portability-allow: file-delivery-tool
-# ^ This module necessarily contains the very tool names the `file-delivery-tool-hardcoded` rule
-# looks for, and `_iter_scripts()` scans `scripts/**/*.py` including this file. See
-# references/environments.md for the constraint this rule enforces.
+# ^ This module necessarily contains the very tool names the `delivery-tool-single-lane` /
+# `delivery-conditional-deliverable` rules look for, and `_iter_scripts()` scans
+# `scripts/**/*.py` including this file. See references/environments.md for the constraint
+# these rules enforce.
 
 import argparse
 import ast
@@ -138,15 +141,25 @@ _SUBAGENT_GUARD_RE = re.compile(r"if available|if you have|otherwise inline|when
 _CLAUDE_CLI_RE = re.compile(r"\bclaude\s+-p\b|\bclaude\s+setup-token\b|subprocess.*\bclaude\b")
 _BROWSER_RE = re.compile(r"\bwebbrowser\b|http\.server|HTTPServer|BaseHTTPRequestHandler|localhost:\d+|127\.0\.0\.1:\d+")
 
-# File-delivery tools are per-surface: no single name is served everywhere. Naming one in skill
-# text strands every surface that serves a different one (see references/environments.md).
-# `targets` = surfaces where the name is NOT verified present, so a skill hardcoding it cannot be
-# assumed to work there. SendUserFile IS native to Claude Code, so `claude-code` is excluded for it.
+# File-delivery tools are per-surface: no single name is served everywhere — Cowork alone has two,
+# one per product lane (desktop-local sandbox serves `present_files`, remote cloud-container Cowork
+# serves `SendUserFile`, also native to Claude Code), and an agent only sees the one for its surface.
+# Naming only one in skill text strands the lane served by the other; naming BOTH, capability-
+# conditionally, is the correct pattern (see references/environments.md). Both rules below therefore
+# carry the full `TARGETS` — a single-lane skill can misbehave on any of the three runtimes depending
+# on which Cowork lane (or product) it lands on.
 # Fixed iteration order → deterministic finding order regardless of scan order.
 _DELIVERY_TOOL_RES = (
-    ("present_files", re.compile(r"\b(?:mcp__[A-Za-z0-9_]+__)?present_files\b"),
-     ("claude-ai", "claude-code", "cowork")),
-    ("SendUserFile", re.compile(r"\bSendUserFile\b"), ("claude-ai", "cowork")),
+    ("present_files", re.compile(r"\b(?:mcp__[A-Za-z0-9_]+__)?present_files\b")),
+    ("SendUserFile", re.compile(r"\bSendUserFile\b")),
+)
+# The distinguisher for `delivery-conditional-deliverable` is *skipping/omitting the artifact*,
+# not conditionality as such — "if a tool is available, use it; otherwise state the path" is the
+# correct, target-state pattern and must NOT match this. Only fires alongside a named tool on the
+# same line (see `_DELIVERY_TOOL_RES` in the caller).
+_DELIVERY_SKIP_OMIT_RE = re.compile(
+    r"\bskip (?:this|it|that)\b|\bonly if\b|\bif you don't have\b|\bomit(?:s|ted|ting)?\b",
+    re.IGNORECASE,
 )
 # Explicit, greppable, file-scoped opt-out — for the two kinds of file that must name these tools:
 # this linter's own source, and the doc that teaches the constraint. A phrase-list guard cannot work
@@ -178,7 +191,19 @@ def check_runtime_constructs(skill_path):
     md_hits_subagent = []
     cli_hits = []
     browser_hits = []
-    delivery_hits = {}  # tool name -> first "file:line"
+    conditional_findings = []
+    # `delivery-tool-single-lane` is decided SKILL-WIDE, not per file: the defect it flags —
+    # "this skill strands a lane" — is a property of the skill, not of an individual file. A
+    # skill that documents `present_files` in one reference doc and `SendUserFile` in another is
+    # a legitimate structure and must not be flagged; per-file scoping would false-positive on
+    # exactly that split (two findings, one per file, each seeing only one tool) even though the
+    # skill as a whole names both. The accepted trade-off is the mirror-image false negative: a
+    # skill could name the second tool somewhere unrelated to its delivery instructions and still
+    # pass. That's the right side to err on here — a missed finding is cheap, but firing on a
+    # skill that correctly documents both lanes (just split across files) is exactly the kind of
+    # "fires on the correct answer" failure this rule replaced `file-delivery-tool-hardcoded` to
+    # fix.
+    skill_tool_first_loc = {}  # tool name -> first "file:line" ANYWHERE IN THE SKILL
     # scan instruction text (SKILL.md + references/agents) and scripts
     for p in list(_iter_text_files(skill_path)) + list(_iter_scripts(skill_path)):
         try:
@@ -187,6 +212,7 @@ def check_runtime_constructs(skill_path):
             continue
         rel = p.relative_to(skill_path)
         delivery_exempt = bool(_DELIVERY_ALLOW_RE.search(text))
+        conditional_loc = None  # first "file:line" IN THIS FILE with a tool + skip/omit phrase
         for n, line in enumerate(text.split("\n"), 1):
             if _SUBAGENT_RE.search(line) and not _SUBAGENT_GUARD_RE.search(line):
                 md_hits_subagent.append(f"{rel}:{n}")
@@ -194,10 +220,52 @@ def check_runtime_constructs(skill_path):
                 cli_hits.append(f"{rel}:{n}")
             if _BROWSER_RE.search(line):
                 browser_hits.append(f"{rel}:{n}")
-            if not delivery_exempt:
-                for tool, rx, _tgts in _DELIVERY_TOOL_RES:
-                    if tool not in delivery_hits and rx.search(line):
-                        delivery_hits[tool] = f"{rel}:{n}"
+            if delivery_exempt:
+                continue
+            line_tools = [tool for tool, rx in _DELIVERY_TOOL_RES if rx.search(line)]
+            for tool in line_tools:
+                if tool not in skill_tool_first_loc:
+                    skill_tool_first_loc[tool] = f"{rel}:{n}"
+            # `delivery-conditional-deliverable`, unlike single-lane, genuinely is a property of
+            # the individual instruction — stays per-line/per-file.
+            if line_tools and conditional_loc is None and _DELIVERY_SKIP_OMIT_RE.search(line):
+                conditional_loc = f"{rel}:{n}"
+
+        if not delivery_exempt and conditional_loc:
+            conditional_findings.append(_finding(
+                "delivery-conditional-deliverable", SEVERITY_WARNING, TARGETS,
+                f"gates the artifact itself (packaging/writing it) on a delivery tool's "
+                f"availability, using a skip/omit phrase alongside the tool name — e.g. the real "
+                f"upstream bug (anthropics/claude-code#36438): \"only if `present_files` tool is "
+                f"available\" / \"If you don't, skip this step.\" The tool call is what's "
+                f"conditional; producing the deliverable never is — write/package it "
+                f"unconditionally, then present it with whichever tool is available (or state the "
+                f"path if none is). If a file must use skip/omit phrasing alongside a tool name, "
+                f"mark it `portability-allow: file-delivery-tool` (file-scoped). At "
+                f"{conditional_loc}.",
+                conditional_loc,
+            ))
+
+    single_lane_findings = []
+    named = [tool for tool, _rx in _DELIVERY_TOOL_RES if tool in skill_tool_first_loc]
+    if len(named) == 1:
+        named_tool = named[0]
+        missing_tool = next(tool for tool, _rx in _DELIVERY_TOOL_RES if tool != named_tool)
+        loc = skill_tool_first_loc[named_tool]
+        single_lane_findings.append(_finding(
+            "delivery-tool-single-lane", SEVERITY_WARNING, TARGETS,
+            f"names the file-delivery tool `{named_tool}` but not `{missing_tool}` anywhere in "
+            f"the skill — Cowork alone has two delivery tools, one per product lane (desktop-"
+            f"local sandbox serves `present_files`, remote cloud-container Cowork serves "
+            f"`SendUserFile`, also native to Claude Code), and an agent only sees the one for its "
+            f"surface. Naming only `{named_tool}` strands the lane served by `{missing_tool}`. "
+            f"Name both, capability-conditionally (\"if a tool for surfacing files to the user is "
+            f"available (`present_files`, or `SendUserFile` on remote surfaces), present the file "
+            f"with it; if neither exists, state the path\"). If a file must name only one, mark "
+            f"it `portability-allow: file-delivery-tool` (file-scoped — disables both delivery-"
+            f"tool rules for that file). At {loc}.",
+            loc,
+        ))
 
     if md_hits_subagent:
         findings.append(_finding(
@@ -221,24 +289,8 @@ def check_runtime_constructs(skill_path):
             f"Claude.ai have no display. Provide a static / no-server fallback. First: {browser_hits[0]}",
             browser_hits[0],
         ))
-    for tool, _rx, tgts in _DELIVERY_TOOL_RES:
-        loc = delivery_hits.get(tool)
-        if not loc:
-            continue
-        findings.append(_finding(
-            "file-delivery-tool-hardcoded", SEVERITY_WARNING, tgts,
-            f"names the file-delivery tool `{tool}` in skill text — no single delivery tool is "
-            f"served on every surface. Cowork has two, one per product lane: the desktop-local "
-            f"sandbox serves `present_files`, remote cloud-container Cowork serves `SendUserFile` "
-            f"(also native to Claude Code), and an agent only sees the one for its surface. A skill "
-            f"that hardcodes either works on one lane and fails on the other. Describe the "
-            f"capability instead (\"if a tool for surfacing files to the user is available\") and "
-            f"never make the deliverable itself conditional on it — write the file out "
-            f"unconditionally. If a file must name these tools, mark it "
-            f"`portability-allow: file-delivery-tool` (file-scoped — disables this rule for the "
-            f"entire file). At {loc}.",
-            loc,
-        ))
+    findings += single_lane_findings
+    findings += conditional_findings
     return findings
 
 

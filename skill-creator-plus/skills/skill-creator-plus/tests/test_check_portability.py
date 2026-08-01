@@ -11,7 +11,10 @@ from check_portability import (  # noqa: E402
     check_thirdparty_imports,
     _filter_by_target,
     DESC_HARD_CAP,
+    TARGETS,
 )
+
+TARGETS_SORTED = sorted(TARGETS)
 
 
 def _skill(tmp: Path, frontmatter: str, body: str = "Body.\n") -> Path:
@@ -155,85 +158,125 @@ class TargetFilterAndStructureTests(unittest.TestCase):
 
 
 class FileDeliveryToolTests(unittest.TestCase):
-    def test_present_files_flagged_for_all_three_targets(self):
+    """Covers the two rules that replaced `file-delivery-tool-hardcoded`.
+
+    The old rule warned on naming EITHER tool at all — that premise was invalidated by
+    binary-verified Cowork baselines: on remote cloud-container Cowork, writing a file and
+    stating the path delivers nothing (the filesystem is discarded and nothing watches the
+    outputs directory), so the tool call IS the delivery, and naming BOTH tools capability-
+    conditionally is the correct, target-state pattern. `delivery-tool-single-lane` inverts the
+    old rule's premise: naming both is clean; naming only one strands the lane served by the
+    other. `delivery-conditional-deliverable` narrowly targets the real upstream bug (gating the
+    artifact's own packaging on tool availability), not conditionality in general.
+    """
+
+    def test_present_files_only_flags_single_lane(self):
         with tempfile.TemporaryDirectory() as td:
             skill = _skill(Path(td), "name: x\ndescription: d",
                            body="Use the present_files tool to show the report.\n")
             findings, _ = lint_portability(skill)
-            self.assertIn("file-delivery-tool-hardcoded", _rules(findings))
-            f = next(f for f in findings if f["rule"] == "file-delivery-tool-hardcoded")
+            self.assertIn("delivery-tool-single-lane", _rules(findings))
+            f = next(f for f in findings if f["rule"] == "delivery-tool-single-lane")
             self.assertEqual(f["severity"], "warning")
-            self.assertEqual(f["targets"], ["claude-ai", "claude-code", "cowork"])
-            # Leading clause, not substring — every message names both tools in its explanation.
-            self.assertTrue(f["message"].startswith(
-                "names the file-delivery tool `present_files`"), f["message"][:80])
+            self.assertEqual(f["targets"], list(TARGETS_SORTED))
+            self.assertIn("present_files", f["message"])
+            self.assertIn("SendUserFile", f["message"])
+            self.assertNotIn("delivery-conditional-deliverable", _rules(findings))
 
-    def test_mcp_prefixed_present_files_flagged(self):
+    def test_mcp_prefixed_present_files_only_flags_single_lane(self):
         with tempfile.TemporaryDirectory() as td:
             skill = _skill(Path(td), "name: x\ndescription: d",
                            body="Call mcp__cowork__present_files with the path.\n")
             findings, _ = lint_portability(skill)
-            self.assertIn("file-delivery-tool-hardcoded", _rules(findings))
+            self.assertIn("delivery-tool-single-lane", _rules(findings))
 
-    def test_senduserfile_excludes_claude_code_target(self):
+    def test_senduserfile_only_flags_single_lane(self):
         with tempfile.TemporaryDirectory() as td:
             skill = _skill(Path(td), "name: x\ndescription: d",
                            body="Deliver it with SendUserFile.\n")
             findings, _ = lint_portability(skill)
-            f = next(f for f in findings if f["rule"] == "file-delivery-tool-hardcoded")
-            self.assertEqual(f["targets"], ["claude-ai", "cowork"])
+            f = next(f for f in findings if f["rule"] == "delivery-tool-single-lane")
+            self.assertEqual(f["targets"], list(TARGETS_SORTED))
+            self.assertIn("SendUserFile", f["message"])
+            self.assertIn("present_files", f["message"])
 
-    def test_both_names_emit_two_findings_with_own_targets(self):
-        """D3: per-name findings — a merged finding would union targets wrongly."""
+    def test_naming_both_suppresses_single_lane(self):
+        """Key inversion vs the old rule: naming both tools is the correct pattern, not a bug."""
         with tempfile.TemporaryDirectory() as td:
             body = "Use present_files here.\nElsewhere use SendUserFile.\n"
             skill = _skill(Path(td), "name: x\ndescription: d", body=body)
             findings, _ = lint_portability(skill)
-            hits = [f for f in findings if f["rule"] == "file-delivery-tool-hardcoded"]
-            self.assertEqual(len(hits), 2)
-            # Every message explains BOTH lanes by design, so only the leading clause is
-            # tool-specific — do not discriminate on a substring anywhere in the message.
-            # Emission order is fixed by _DELIVERY_TOOL_RES, so index is a stable key.
-            self.assertTrue(hits[0]["message"].startswith(
-                "names the file-delivery tool `present_files`"), hits[0]["message"][:80])
-            self.assertEqual(hits[0]["targets"], ["claude-ai", "claude-code", "cowork"])
-            self.assertTrue(hits[1]["message"].startswith(
-                "names the file-delivery tool `SendUserFile`"), hits[1]["message"][:80])
-            self.assertEqual(hits[1]["targets"], ["claude-ai", "cowork"])
+            self.assertNotIn("delivery-tool-single-lane", _rules(findings))
+            self.assertNotIn("delivery-conditional-deliverable", _rules(findings))
 
-    def test_if_available_does_not_suppress(self):
-        """D5: guarding one name still strands the lane serving the other."""
+    def test_both_tools_named_across_separate_files_suppresses_single_lane(self):
+        """Determination is skill-wide, not per file.
+
+        A skill that documents `present_files` in one reference doc and `SendUserFile` in
+        another is a legitimate structure — it names both lanes, just not on the same line or
+        in the same file. Per-file scoping would false-positive here (one finding per file,
+        each seeing only one tool); skill-wide scoping correctly sees both and stays silent.
+        """
         with tempfile.TemporaryDirectory() as td:
             skill = _skill(Path(td), "name: x\ndescription: d",
-                           body="If present_files is available, use it.\n")
+                           body="Use present_files to show the report.\n")
+            (skill / "references").mkdir()
+            (skill / "references" / "remote.md").write_text(
+                "On the remote lane, use SendUserFile instead.\n")
             findings, _ = lint_portability(skill)
-            self.assertIn("file-delivery-tool-hardcoded", _rules(findings))
+            self.assertEqual(
+                [f for f in findings if f["rule"] == "delivery-tool-single-lane"], [],
+                "naming both tools across two separate files must not trip single-lane",
+            )
 
-    def test_lane_aware_prose_alone_does_not_suppress(self):
-        """D5: natural per-lane prose is NOT a suppressor — only the marker is."""
+    def test_correct_capability_conditional_sentence_is_completely_clean(self):
+        """D1': the target-state pattern from the docs task — must trip neither new rule."""
         with tempfile.TemporaryDirectory() as td:
-            body = ("The desktop-local sandbox is served present_files; remote "
-                    "cloud-container Cowork gets SendUserFile.\n")
+            body = (
+                "If a tool for surfacing files to the user is available (`present_files`, or "
+                "`SendUserFile` on remote surfaces), present the final file(s) with it; if "
+                "neither exists, state the path.\n"
+            )
             skill = _skill(Path(td), "name: x\ndescription: d", body=body)
             findings, _ = lint_portability(skill)
-            self.assertIn("file-delivery-tool-hardcoded", _rules(findings))
+            self.assertNotIn("delivery-tool-single-lane", _rules(findings))
+            self.assertNotIn("delivery-conditional-deliverable", _rules(findings))
 
-    def test_marker_suppresses_whole_md_file(self):
+    def test_upstream_bug_pattern_flags_conditional_deliverable(self):
+        """The real bug (anthropics/claude-code#36438): packaging itself gated on the tool."""
+        with tempfile.TemporaryDirectory() as td:
+            body = (
+                "### Package and Present (only if `present_files` tool is available)\n"
+                "Check whether you have access to the `present_files` tool. If you don't, "
+                "skip this step.\n"
+            )
+            skill = _skill(Path(td), "name: x\ndescription: d", body=body)
+            findings, _ = lint_portability(skill)
+            self.assertIn("delivery-conditional-deliverable", _rules(findings))
+            f = next(f for f in findings if f["rule"] == "delivery-conditional-deliverable")
+            self.assertEqual(f["severity"], "warning")
+            self.assertEqual(f["targets"], list(TARGETS_SORTED))
+
+    def test_marker_suppresses_both_rules_in_md(self):
         with tempfile.TemporaryDirectory() as td:
             body = ("<!-- portability-allow: file-delivery-tool -->\n"
-                    "Desktop-local Cowork serves present_files; remote serves SendUserFile.\n")
+                    "Only if `present_files` is available should you package and present it; "
+                    "if you don't have it, skip this step.\n")
             skill = _skill(Path(td), "name: x\ndescription: d", body=body)
             findings, _ = lint_portability(skill)
-            self.assertNotIn("file-delivery-tool-hardcoded", _rules(findings))
+            self.assertNotIn("delivery-tool-single-lane", _rules(findings))
+            self.assertNotIn("delivery-conditional-deliverable", _rules(findings))
 
-    def test_marker_suppresses_whole_script(self):
+    def test_marker_suppresses_both_rules_in_script(self):
         with tempfile.TemporaryDirectory() as td:
             skill = _skill(Path(td), "name: x\ndescription: d")
             (skill / "scripts").mkdir()
             (skill / "scripts" / "deliver.py").write_text(
-                "# portability-allow: file-delivery-tool\nTOOL = 'present_files'\n")
+                "# portability-allow: file-delivery-tool\n"
+                "TOOL = 'present_files'  # only if available, otherwise skip it\n")
             findings, _ = lint_portability(skill)
-            self.assertNotIn("file-delivery-tool-hardcoded", _rules(findings))
+            self.assertNotIn("delivery-tool-single-lane", _rules(findings))
+            self.assertNotIn("delivery-conditional-deliverable", _rules(findings))
 
     def test_unmarked_script_is_scanned(self):
         with tempfile.TemporaryDirectory() as td:
@@ -241,39 +284,52 @@ class FileDeliveryToolTests(unittest.TestCase):
             (skill / "scripts").mkdir()
             (skill / "scripts" / "deliver.py").write_text('TOOL = "present_files"\n')
             findings, _ = lint_portability(skill)
-            self.assertIn("file-delivery-tool-hardcoded", _rules(findings))
-
-    def test_clean_capability_language_not_flagged(self):
-        with tempfile.TemporaryDirectory() as td:
-            skill = _skill(Path(td), "name: x\ndescription: d",
-                           body="If a file-delivery tool is available, surface the file.\n")
-            findings, _ = lint_portability(skill)
-            self.assertNotIn("file-delivery-tool-hardcoded", _rules(findings))
+            self.assertIn("delivery-tool-single-lane", _rules(findings))
 
     def test_near_miss_names_not_flagged(self):
         with tempfile.TemporaryDirectory() as td:
             body = "We represent_files and use present_filesystem and present_files_v2.\n"
             skill = _skill(Path(td), "name: x\ndescription: d", body=body)
             findings, _ = lint_portability(skill)
-            self.assertNotIn("file-delivery-tool-hardcoded", _rules(findings))
+            self.assertNotIn("delivery-tool-single-lane", _rules(findings))
+            self.assertNotIn("delivery-conditional-deliverable", _rules(findings))
+
+    def test_clean_capability_language_without_naming_either_tool_not_flagged(self):
+        """Naming zero tools is not naming exactly one — must not trip single-lane."""
+        with tempfile.TemporaryDirectory() as td:
+            skill = _skill(Path(td), "name: x\ndescription: d",
+                           body="If a file-delivery tool is available, surface the file.\n")
+            findings, _ = lint_portability(skill)
+            self.assertNotIn("delivery-tool-single-lane", _rules(findings))
+            self.assertNotIn("delivery-conditional-deliverable", _rules(findings))
 
 
 class SelfLintTests(unittest.TestCase):
-    def test_this_skill_names_no_file_delivery_tool(self):
-        """D6: pins the SKILL.md / environments.md wording against regression.
+    def test_this_skill_trips_neither_delivery_rule(self):
+        """Pins the SKILL.md / environments.md wording against regression.
 
         `validate.yml` runs this suite, so a regression here is a red CI, not an advisory.
+
+        At the time this test was written, SKILL.md still carries the OLD delivery-tool
+        guidance (a separate docs task updates it) and names NEITHER `present_files` nor
+        `SendUserFile` — naming zero tools is not naming exactly one, so
+        `delivery-tool-single-lane` correctly does not fire on it. The only two files in this
+        skill that name either tool (`references/environments.md`, which documents the
+        constraint, and `scripts/check_portability.py`, which implements it) both carry the
+        file-scoped `portability-allow: file-delivery-tool` marker, so neither new rule should
+        fire anywhere in the skill.
         """
         skill_root = Path(__file__).resolve().parent.parent
         skill_md = skill_root / "SKILL.md"
         self.assertTrue(skill_md.exists(), "skill root misresolved")
         findings, err = lint_portability(skill_root)
         self.assertIsNone(err)
-        offenders = [f for f in findings if f["rule"] == "file-delivery-tool-hardcoded"]
-        self.assertEqual(offenders, [], f"skill-creator-plus hardcodes a delivery tool: {offenders}")
+        offenders = [f for f in findings
+                     if f["rule"] in ("delivery-tool-single-lane", "delivery-conditional-deliverable")]
+        self.assertEqual(offenders, [], f"skill-creator-plus trips a delivery rule: {offenders}")
         # A zero-findings result could be gamed by slapping the suppression marker on
-        # SKILL.md instead of actually avoiding the hardcoded tool name — that would
-        # silence the rule file-wide (including for a genuine future regression) while
+        # SKILL.md instead of actually avoiding a single-lane tool mention — that would
+        # silence both rules file-wide (including for a genuine future regression) while
         # still leaving SKILL.md having named a delivery tool. SKILL.md must name no
         # delivery tool at all, so it must never carry the marker.
         self.assertNotIn(
