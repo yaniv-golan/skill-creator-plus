@@ -34,6 +34,9 @@ python -m scripts.aggregate_benchmark <dir> --notes notes.json  # merge analyst 
 cowork-harness lint-skill   --strict skill-creator-plus/skills/skill-creator-plus
 cowork-harness analyze-skill --strict skill-creator-plus/skills/skill-creator-plus
 cowork-harness lint harness/scenarios/
+# `lint` only WARNS on an unknown key, so a scenario that lints clean can still be unloadable;
+# this runs the real loader (no token, no Docker, writes nothing) to prove the suite actually loads.
+cowork-harness record harness/scenarios/ --dry-run --quiet
 ```
 
 ## cowork-harness dogfood suite (`harness/`)
@@ -42,8 +45,9 @@ cowork-harness lint harness/scenarios/
 maintainer CI, not part of the user-facing skill workflow. Full instructions: `harness/README.md`.
 
 - **CI** (`.github/workflows/harness.yml`) runs the token-free static lane on every PR/push:
-  `lint-skill --strict`, `analyze-skill --strict`, scenario `lint`, and (once cassettes exist) a
-  guarded `verify-cassettes` + `replay`.
+  `lint-skill --strict`, `analyze-skill --strict`, scenario `lint`, a `record --dry-run --quiet`
+  load-check (catches an unloadable scenario that `lint` only warned on), and (once cassettes exist)
+  a guarded `verify-cassettes` + `replay`.
 - **Recording cassettes** and the live `container`-fidelity `run` need Docker + a staged Claude
   Desktop agent binary + a token — a maintainer step, not CI. Run `cowork-harness doctor --tier
   container` first.
