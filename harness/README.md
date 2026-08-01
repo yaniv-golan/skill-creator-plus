@@ -25,7 +25,8 @@ A cassette records the skill's *own* behavior, so its staleness hash is tied to 
 skill-creator-plus is edited constantly, so a committed cassette goes stale on nearly every PR — and
 re-recording needs Docker + a staged Claude Desktop agent + a token, a wall external contributors
 can't clear. So the committed CI gate (`.github/workflows/harness.yml`) is the **token-free static
-lane** (`lint-skill`, `analyze-skill`, scenario `lint`), which is robust to skill edits. Cassettes are
+lane** (`lint-skill`, `analyze-skill`, scenario `lint`, `record --dry-run --quiet`), which is robust
+to skill edits. Cassettes are
 recorded **on demand / locally** (and in the deferred nightly live lane) — the recipe below still
 applies; the resulting cassettes just aren't committed.
 - `no-trigger` — cheap negative control; records + replays cleanly.
@@ -61,6 +62,9 @@ cowork-harness analyze-skill --strict skill-creator-plus/skills/skill-creator-pl
 # scenario lint (catches silent false-greens: wrong-lane assertions, mixed-class items)
 cowork-harness lint harness/scenarios/
 
+# real-loader load-check (lint only WARNS on an unknown key; this proves the suite actually loads)
+cowork-harness record harness/scenarios/ --dry-run --quiet
+
 # once cassettes are recorded:
 cowork-harness verify-cassettes harness/cassettes   # PII + staleness (BLOCKING before commit)
 cowork-harness replay harness/cassettes              # deterministic, token-free
@@ -78,15 +82,18 @@ cowork-harness run harness/scenarios/remote-delivery.yaml  # remote-lane deliver
 
 ## Recording cassettes (the one maintainer step this suite still needs)
 
-The scenarios are **lint-clean but not yet recorded**. `create-skill.yaml` has **placeholder
-`answers:`** — the Capture Intent interview asks gates whose exact option labels are model-decided,
-so finalize them from one live run rather than guessing:
+The scenarios are **lint-clean but not yet recorded**. `create-skill.yaml` has **no `answers:`
+block at all** — the Capture Intent interview asks gates whose exact option labels are
+model-decided and reworded every run, so it uses `on_unanswered: llm` instead of scripted labels
+(see "What a live run checks" below). Run it live once to see the real gates before recording the
+locking cassette:
 
 ```bash
 # 1. Run once, keep the run dir
 cowork-harness run harness/scenarios/create-skill.yaml --keep       # prints the run dir on stderr
 
-# 2. Read the real gates + offered labels (token-free) and paste them into `answers:`
+# 2. Read the real gates + offered labels (token-free) — informational; not pasted into an
+# `answers:` block, since the scenario deliberately has none (see above)
 cowork-harness trace <run-dir> --view questions
 
 # 3. Re-check assertions/answers against that run without re-paying (~1s)
@@ -145,8 +152,9 @@ cowork-harness run harness/scenarios/remote-delivery.yaml
 ## Notes / landmines
 
 - `create-skill.yaml` uses `fidelity: container` — required for `transcript_no_host_path` (it fails
-  by design on `protocol`/`hostloop`). Any scenario using `no_scratchpad_leak` / `present_files_called`
-  must also be `container` (`lint` errors on those keys off-container).
+  by design on `protocol`/`hostloop`). A scenario using `no_scratchpad_leak` must also be `container`
+  (`lint` errors on that key off-container); `present_files_called` is valid at `container` **or**
+  `hostloop` (the harness serves `present_files` at both).
 - Assert on artifacts/content, never `result: success` alone — success means "agent didn't error",
   not "task complete".
 - On the token-free `replay` lane, live-only keys (`transcript_no_host_path`, `egress_*`) are skipped

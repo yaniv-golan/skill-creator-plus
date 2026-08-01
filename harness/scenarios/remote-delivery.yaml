@@ -1,6 +1,6 @@
 name: remote-delivery
-# Runtime guard for the remote-lane delivery contract (see
-# docs/internal/file-delivery-tool-portability-plan.md, Revision 4 / finding F3).
+# Runtime guard for the remote-lane delivery contract (finding F3 — the skill's own rule that a
+# written path is not delivery where a surfacing tool exists).
 #
 # WHY THIS EXISTS: on Cowork's remote lane, location delivers nothing — the session runs in a
 # sandbox reclaimed at session end, and `present_files` is not served there. A skill that writes
@@ -31,15 +31,30 @@ prompt: |
 assert:
   - result: success
   - skill_triggered: "skill-creator-plus"
-  # The delivery attempt itself, graded by MEANING not spelling. A literal regex is wrong here:
-  # our own guidance deliberately tells the agent to name no tool, and on this lane no delivery
-  # tool is served — so the CORRECT run emits no tool name at all, and a name-matching regex
-  # would be red-on-correct. `semantic_matches` is live-only, which this scenario already is.
+  # WHY `semantic_matches` and not a transcript regex: the harness's judged document is assistant
+  # text + the final message + any files the agent authored (`transcript.push` only fires on
+  # `assistant_text` events) — the judge CANNOT see tool calls at all, on any lane. On top of that,
+  # `lane: remote` serves no delivery tool: not `present_files` (rejected by design on this lane)
+  # and not `SendUserFile` (deliberately not emulated — fidelity to the lane, not a gap; see
+  # fidelity-gaps.md). So a rubric claim of the shape "used a tool / announced no tool exists" is
+  # either unobservable (tool use) or narration our skill never asks the agent to produce
+  # (an explicit "no such tool exists" statement) — it would red a correct run and grade identically
+  # on a broken one. The gradeable signal on this lane is *where the file ended up and whether that
+  # location was communicated*, not whether a tool was invoked.
+  # NOT YET OBSERVED ON A LIVE RUN — this encodes what the delivery rule requires, not a verified
+  # pass. A first red is ambiguous between a real regression and an over-strict assertion;
+  # investigate before weakening it.
   - semantic_matches:
       rubric:
         - "The agent packaged the skill and produced a .skill file."
-        - "The agent did not treat merely stating a filesystem path as completing delivery: it
-           either used a tool to surface the file to the user, or explicitly acknowledged that no
-           such tool is available on this surface before falling back to reporting the location."
+        - "The agent wrote the packaged .skill file to an explicitly stated, user-reachable
+           location (for example a workspace or outputs directory) and told the user that
+           location — rather than leaving it only in a scratch/working directory or referring to
+           it vaguely."
   - max_cost_usd: 12.0
   - max_tokens: 2000000
+  # 1.16.0's `undelivered_deliverables` WARN is lane-aware: on `lane: remote` every produced file
+  # counts as undelivered because the lane serves no delivery tool at all, so this scenario would
+  # emit that warning on every run regardless of behaviour. That's known structural noise for this
+  # lane, not a signal — suppress it here rather than let it obscure a real regression elsewhere.
+  - allow_undelivered_deliverables: true

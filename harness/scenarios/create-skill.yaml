@@ -23,15 +23,20 @@ on_unanswered: llm
 timeout_ms: 1200000
 
 prompt: |
-  Create a skill that converts CSV files to markdown tables.
+  Create a skill that converts CSV files to markdown tables, then package it
+  and give me the resulting .skill file.
 
 assert:
   # Structural / boundary keys — robust to phrasing drift.
   - result: success                          # agent didn't error (NOT "task complete" — see content assert below)
   - skill_triggered: "skill-creator-plus"    # the skill actually ran (content-class; replay-checkable)
   - transcript_no_host_path: true            # no /Users, /opt/cowork, /home, /root leaked (live-only; container)
-  # Budget guards — the create loop fans out subagents / tools (~22 tools, ~130s observed).
-  - max_cost_usd: 10.0
+  # Budget guards — the full create -> test -> eval -> package loop fans out subagents / tools.
+  # ~22 tools, ~130s observed predates the packaging step being asked for in the prompt above (the
+  # prompt used to stop at "create a skill"); it's real historical data for the shorter run, not a
+  # budget for the whole loop measured here. max_cost_usd raised to match remote-delivery.yaml,
+  # which exercises the same shape of run (create + package).
+  - max_cost_usd: 12.0
   - max_tokens: 2000000
   # Content signal that real work happened (never rely on result:success alone).
   - transcript_matches: "SKILL\\.md"
@@ -39,15 +44,19 @@ assert:
   # A bundled script that re-introduces a third-party import (e.g. `import yaml`) throws
   # ModuleNotFoundError under Cowork's base image — no pip, egress denied. check_portability /
   # analyze-skill catch this statically; this catches a regression at *runtime*, which is the whole
-  # reason the dogfood exists. Requires cowork-harness >= 1.2.0. Note: evaluated per captured tool
-  # result under a 10 KB/result cap; a no-match against a truncated result reports could-not-verify,
-  # not a silent pass. Regex targets actual Python error signatures, not prose mentioning them.
-  - tool_result_not_matches: "ModuleNotFoundError|No module named '(yaml|[a-z0-9_]+)'|Traceback \\(most recent call last\\)"
+  # reason the dogfood exists. Note: evaluated per captured tool result under a 10 KB/result cap; a
+  # no-match against a truncated result reports could-not-verify, not a silent pass. Regex targets
+  # actual Python error signatures, not prose mentioning them.
+  # NEEDS cowork-harness >= 1.2.0 for `tool_result_not_matches` (>= 1.16.0 is what this repo pins).
   # NOTE: the "no pip, egress denied" rationale above is under revision — Cowork's rootfs does ship
   # a large preinstalled Python stack. The assertion stands on its own as a runtime crash guard.
+  - tool_result_not_matches: "ModuleNotFoundError|No module named '(yaml|[a-z0-9_]+)'|Traceback \\(most recent call last\\)"
   # Runtime F3 guard (delivery contract). The skill's own rule is that a written path is not
   # delivery where a surfacing tool exists — "if one exists you MUST call it". This lane serves
   # `present_files`, so a correct run calls it. Content-class, evidence-backed
   # (RunResult.presentedFiles); asserts the harness-side delivery record, and names no tool in the
-  # skill itself. Container/hostloop only.
+  # skill itself. Valid at `fidelity: container` or `hostloop` (present_files is served at both).
+  # NOT YET OBSERVED ON A LIVE RUN — this encodes what the delivery rule requires, not a verified
+  # pass. A first red is ambiguous between a real regression and an over-strict assertion;
+  # investigate before weakening it.
   - present_files_called: true
