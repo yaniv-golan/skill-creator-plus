@@ -16,6 +16,7 @@ harness/
   scenarios/
     no-trigger.yaml          # negative control: an unrelated prompt must NOT trigger the skill
     create-skill.yaml        # flagship: "create a skill" triggers + runs clean (LIVE-ONLY, see below)
+    remote-delivery.yaml     # lane:remote delivery-contract guard (LIVE-ONLY, see below)
   cassettes/                 # (no committed cassettes — see below; recorded on-demand / locally)
 ```
 
@@ -30,6 +31,9 @@ applies; the resulting cassettes just aren't committed.
 - `no-trigger` — cheap negative control; records + replays cleanly.
 - `create-skill` — non-deterministic (LLM-authored gates) and bakes an un-scannable `.skill` artifact
   into the cassette; live-only by nature.
+- `remote-delivery` — same non-determinism plus a `semantic_matches` LLM-judged assertion (see below);
+  **live-only and never a PR gate**. CI only load-checks it via `record --dry-run` in the token-free
+  static lane.
 
 ## Prerequisites
 
@@ -69,6 +73,7 @@ cowork-harness replay harness/cassettes              # deterministic, token-free
 ```bash
 cowork-harness doctor --tier container
 cowork-harness run harness/scenarios/create-skill.yaml     # execute under the real sandbox
+cowork-harness run harness/scenarios/remote-delivery.yaml  # remote-lane delivery-contract check (see below)
 ```
 
 ## Recording cassettes (the one maintainer step this suite still needs)
@@ -111,6 +116,31 @@ Claude Code and output-only evals can't see:
 - **Gates are stochastic** — the Capture-Intent questions and their option labels are LLM-authored
   and reworded every run, so scripted exact-label `answers:` hard-fail; hence `on_unanswered: llm`
   for `create-skill`.
+
+## Remote-lane delivery contract (`remote-delivery.yaml`)
+
+On Cowork's **remote** lane, a file written to disk and never surfaced through a tool is silently
+lost — the session runs in a sandbox reclaimed at session end, and location delivers nothing there.
+Every other check in this suite (and `check_portability`'s `delivery-*` rules, `analyze-skill`)
+reasons about *authored text*; `remote-delivery.yaml` is the only check that observes the runtime
+behavior of our own packaging step: it runs the flagship "create a skill, then package and give it
+to me" prompt under `lane: remote` and asserts, via `semantic_matches`, that the agent either used a
+tool to surface the resulting `.skill` file or explicitly acknowledged that no such tool exists on
+this surface — never that it merely stated a filesystem path and called that delivery.
+
+It deliberately does **not** use `user_visible_artifact`: that key is rejected at load time on
+`lane: remote`, because on that lane it could only ever report "cannot verify" (no `present_files` is
+served there). The assertion is a `semantic_matches` rubric instead of a `transcript_matches` regex,
+because this repo's own guidance tells the agent to name no delivery tool, and none is served on this
+lane — so a correct run names no tool at all, which a name-matching regex would flag as red-on-correct.
+
+**Live-only and never a PR gate** — same reasoning as `create-skill.yaml` (LLM-authored gates, a
+binary `.skill` artifact) plus an LLM-judged `semantic_matches` assertion. CI only load-checks the
+scenario file (`record --dry-run`); a human runs it on demand:
+
+```bash
+cowork-harness run harness/scenarios/remote-delivery.yaml
+```
 
 ## Notes / landmines
 

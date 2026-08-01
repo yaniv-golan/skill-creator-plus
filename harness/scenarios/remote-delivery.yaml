@@ -1,0 +1,45 @@
+name: remote-delivery
+# Runtime guard for the remote-lane delivery contract (see
+# docs/internal/file-delivery-tool-portability-plan.md, Revision 4 / finding F3).
+#
+# WHY THIS EXISTS: on Cowork's remote lane, location delivers nothing — the session runs in a
+# sandbox reclaimed at session end, and `present_files` is not served there. A skill that writes
+# its deliverable and only states the path silently loses it. Every static check we have
+# (check_portability's delivery-* rules, analyze-skill) reasons about *authored text*; this is the
+# only check that observes the runtime behaviour of our own packaging step.
+#
+# WHY NO `user_visible_artifact`: that key is rejected at LOAD time on `lane: remote` — on that lane
+# it could only ever report "cannot verify". We assert the delivery *attempt* in the transcript
+# instead, which is what the harness's own rejection message directs you to do.
+#
+# LIVE-ONLY — deliberately not recorded to a committed cassette (same reasoning as create-skill.yaml:
+# non-deterministic LLM-authored gates, and a binary .skill artifact). CI only load-checks this file
+# via `record --dry-run`; a human runs it on demand. Never gate a PR on it.
+#
+# NEEDS cowork-harness >= 1.14.0 for `lane:` (>= 1.16.0 is what this repo pins). On an older CLI
+# this scenario does not load at all — it is NOT silently treated as `lane: local`.
+session: ../sessions/skill.yaml
+lane: remote                   # the delivery contract under test
+fidelity: container
+on_unanswered: llm             # gates are LLM-authored and reworded run-to-run; see create-skill.yaml
+timeout_ms: 1200000
+
+prompt: |
+  Create a skill that converts CSV files to markdown tables, then package it
+  and give me the resulting .skill file.
+
+assert:
+  - result: success
+  - skill_triggered: "skill-creator-plus"
+  # The delivery attempt itself, graded by MEANING not spelling. A literal regex is wrong here:
+  # our own guidance deliberately tells the agent to name no tool, and on this lane no delivery
+  # tool is served — so the CORRECT run emits no tool name at all, and a name-matching regex
+  # would be red-on-correct. `semantic_matches` is live-only, which this scenario already is.
+  - semantic_matches:
+      rubric:
+        - "The agent packaged the skill and produced a .skill file."
+        - "The agent did not treat merely stating a filesystem path as completing delivery: it
+           either used a tool to surface the file to the user, or explicitly acknowledged that no
+           such tool is available on this surface before falling back to reporting the location."
+  - max_cost_usd: 12.0
+  - max_tokens: 2000000
