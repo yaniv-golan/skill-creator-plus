@@ -49,17 +49,28 @@ If you're in Cowork, the main things to know are:
   Because a skill can't tell which lane it's on, teach both steps, always, in this order:
   1. **Write the deliverable to a stated path, unconditionally.** Never to cwd — in Cowork, cwd is a
      scratchpad the user can't see. This alone completes delivery on the local lane.
-  2. **Then present it, capability-conditionally, naming both tools as alternatives:** "If a tool for
-     surfacing files to the user is available (`present_files`, or `SendUserFile` on remote
-     surfaces), present the final file(s) with it; if neither exists, state the path." On the remote
-     lane, this step **is** the delivery.
+  2. **Then present it, capability-conditionally — state the outcome, not the tool:** "If a tool for
+     surfacing files to the user is available, present the final file(s) with it; if none exists,
+     state the path." On the remote lane, this step **is** the delivery.
+
+  Write step 2 generically in skills you author. The agent can already see its own tool list, so
+  naming a tool adds nothing it doesn't know — while a hardcoded name is wrong on every surface that
+  serves a different one, and rots when the names change. What prevents the silent loss is the
+  *outcome* ("present it to the user"; "a path alone is not delivery everywhere"), not the mechanism.
+  Be strict about the outcome and permissive about the tool.
+
+  *Which tool you will actually see — background for reading a transcript or debugging a delivery
+  failure, **not** text to copy into a skill: local Cowork serves `present_files`; remote Cowork and
+  Claude Code have the native `SendUserFile`. Both are observed behaviour, not a published contract,
+  and the split has already shifted once.*
 
   Never mention `device_commit_files` in authored skill text — it's Desktop plumbing that requires a
   `file_uuid` from a prior `SendUserFile` call; it is not a skill-level API.
 
   `check_portability.py` enforces this pattern with two rules: `delivery-tool-single-lane` fires
   when a skill names one delivery-tool family but not the other anywhere in its text, stranding the
-  lane served by the missing one (naming both, as above, is clean); `delivery-conditional-deliverable`
+  lane served by the missing one (the generic step-2 wording above names neither, which is clean, as
+  is naming both — only naming exactly one strands a lane); `delivery-conditional-deliverable`
   fires when a line names a delivery tool alongside a skip/omit phrase governing the artifact itself
   (the real bug this guards against is gating *packaging* on tool availability, not presenting it
   conditionally). A file that genuinely must deviate from this pattern suppresses either rule with a
