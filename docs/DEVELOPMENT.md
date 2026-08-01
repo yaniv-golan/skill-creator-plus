@@ -30,7 +30,7 @@ cd skill-creator-plus/skills/skill-creator-plus && python -m unittest discover -
 # Merge analyst notes into a benchmark result
 python -m scripts.aggregate_benchmark <dir> --notes notes.json  # merge analyst notes
 
-# cowork-harness static checks on the shipped skill (token-free, no Docker; needs cowork-harness >= 1.2.0)
+# cowork-harness static checks on the shipped skill (token-free, no Docker; needs cowork-harness >= 1.16.0)
 cowork-harness lint-skill   --strict skill-creator-plus/skills/skill-creator-plus
 cowork-harness analyze-skill --strict skill-creator-plus/skills/skill-creator-plus
 cowork-harness lint harness/scenarios/
@@ -48,8 +48,8 @@ maintainer CI, not part of the user-facing skill workflow. Full instructions: `h
   Desktop agent binary + a token — a maintainer step, not CI. Run `cowork-harness doctor --tier
   container` first.
 - **Install caveat:** `npx cowork-harness@<ver>` can silently serve a stale cached CLI. Verify
-  `cowork-harness --version` reports **1.2.x** (write-back detector landed in 1.1.0; the
-  `verify-cassettes` claude.com handshake fix landed in 1.2.0); the CI job pins `cowork-harness@1.2.0`
+  `cowork-harness --version` reports **1.16.x** (write-back detector landed in 1.1.0; the
+  `verify-cassettes` claude.com handshake fix landed in 1.2.0); the CI job pins `cowork-harness@1.16.0`
   in an isolated prefix and asserts the version.
 
 ### Cassette privacy policy (public repo — BLOCKING)
@@ -63,7 +63,7 @@ irreversible disclosure.
 
 There are **no sanctioned allowlist entries.** Any `verify-cassettes` finding is treated as real and
 must be investigated and the cassette re-recorded or scrubbed — never allowlisted away to force a
-commit. (cowork-harness ≥1.2.0 no longer emits the benign `claude.com` MCP-handshake false-positive
+commit. (cowork-harness ≥1.16.0 no longer emits the benign `claude.com` MCP-handshake false-positive
 that previously required a single `--allow-domain 'claude\.com'` exception; dropping that exception
 makes the gate strictly tighter — a genuine `claude.com` leak elsewhere in a cassette is no longer
 silently cleared.)
