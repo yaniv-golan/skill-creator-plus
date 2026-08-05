@@ -4,9 +4,10 @@ Cross-runtime portability linter for skills.
 
 skill-creator-plus can author skills for three runtimes — Claude Code, Claude.ai, and Claude
 Cowork — whose capabilities differ. A construct that works in Claude Code can silently break
-elsewhere: Claude.ai has no subagents and no `claude` CLI; Cowork has no browser/display and a
-default-deny egress sandbox whose base image lacks third-party Python packages (and can't
-pip-install them), and file-delivery tools differ per surface (Cowork alone has two, one per
+elsewhere: Claude.ai has no subagents and no `claude` CLI; Cowork has no browser/display and ships
+a large but finite preinstalled Python stack (an import outside it costs an install on every run,
+and egress is org-configurable so a locked-down org can deny that install), and file-delivery tools
+differ per surface (Cowork alone has two, one per
 product lane, and an agent sees only its own — naming only one in skill text strands the lane
 served by the other; the correct pattern phrases delivery by outcome and names no tool — naming
 both, capability-conditionally, is also acceptable — and never gates producing the artifact itself
@@ -45,6 +46,27 @@ TARGETS = ("claude-code", "claude-ai", "cowork")
 DESC_HARD_CAP = 1024          # description field spec cap — over this is an ERROR
 COMBINED_CAP = 1536           # description + when_to_use listing-entry truncation threshold
 DESC_BUDGET_HINT = 800        # a single description this large is a top contributor to the shared listing budget
+
+# Import roots (not PyPI names) confirmed preinstalled in Cowork's VM image by a live probe on
+# 2026-08-05 — Python 3.10.12, image shipping with Claude Desktop 1.25927.0. Importing one of these
+# in a bundled script is not a Cowork portability risk, so `thirdparty-import` stays silent for it.
+# This is observed state on ONE image in ONE org, not a published contract: it will drift, and a
+# much newer image should be re-probed rather than trusted against this list. A module dropped from
+# a future image becomes a silent false negative here — the harness's runtime ModuleNotFoundError
+# guard is the backstop. Probed 2026-08-05; the maintainers' runtime-claims verification pass § F8
+# holds the evidence (not in-repo: docs/internal/ is gitignored).
+COWORK_PREINSTALLED = frozenset({
+    "numpy",       # numpy 2.2.6
+    "pandas",      # pandas 2.3.3
+    "requests",    # requests 2.34.2
+    "yaml",        # PyYAML 6.0.3
+    "bs4",         # beautifulsoup4 4.15.0
+    "openpyxl",    # openpyxl 3.1.5
+    "PIL",         # Pillow 12.2.0
+    "matplotlib",  # matplotlib 3.10.9
+    "docx",        # python-docx 1.2.0
+    "pptx",        # python-pptx 1.0.2
+})
 
 SEVERITY_ERROR = "error"
 SEVERITY_WARNING = "warning"
@@ -380,7 +402,14 @@ def _stdlib_names():
 
 
 def check_thirdparty_imports(skill_path):
-    """Flag non-stdlib, non-local imports in bundled scripts — they break Cowork's isolated sandbox."""
+    """Flag bundled-script imports that Cowork's image does not already provide.
+
+    Modules in `COWORK_PREINSTALLED` are silent — the image ships them, so importing one is not a
+    portability risk. Anything else is ADVISORY, not a warning: the sandbox pip-installed an absent
+    package from PyPI successfully in the probed configuration, so the hard failure this rule once
+    predicted does not occur there. What remains is per-run install latency, plus the fact that
+    egress is org-configurable and a locked-down org can deny it.
+    """
     findings = []
     scripts = list(_iter_scripts(skill_path))
     if not scripts:
@@ -404,14 +433,19 @@ def check_thirdparty_imports(skill_path):
                 if node.module:
                     roots = [(node.module.split(".")[0], node.lineno)]
             for root, lineno in roots:
-                if root and root not in stdlib and root not in local_mods and root not in offenders:
+                if (root and root not in stdlib and root not in local_mods
+                        and root not in COWORK_PREINSTALLED and root not in offenders):
                     offenders[root] = f"{rel}:{lineno}"
     for mod, loc in sorted(offenders.items()):
         findings.append(_finding(
-            "thirdparty-import", SEVERITY_WARNING, ["cowork"],
-            f"bundled script imports third-party module `{mod}` — Cowork's base image lacks it and "
-            f"default-deny egress blocks `pip install`, so this step fails or no-ops there (also a "
-            f"risk on any network-isolated sandbox). Vendor it or degrade gracefully. At {loc}.",
+            "thirdparty-import", SEVERITY_ADVISORY, ["cowork"],
+            f"bundled script imports third-party module `{mod}`, which is not in the Python stack "
+            f"confirmed preinstalled in Cowork's image — so the skill pays a `pip install` on every "
+            f"run there. Cowork installed an absent package from PyPI successfully in the probed "
+            f"configuration, but egress is org-configurable and a locked-down org can deny it, in "
+            f"which case this step fails. Prefer the preinstalled stack where it suffices (numpy, "
+            f"pandas, requests, PyYAML, bs4, openpyxl, Pillow, matplotlib, python-docx, "
+            f"python-pptx), and degrade gracefully otherwise. At {loc}.",
             loc,
         ))
     return findings
@@ -449,8 +483,9 @@ def main():
             "Targets: claude-code | claude-ai | cowork | all (default: all)\n"
             "\n"
             "Exit codes:\n"
-            "  0  no blocking findings (advisory/warnings printed unless --strict)\n"
-            "  1  a finding gates: an over-cap description (always), or any finding under --strict\n"
+            "  0  no gating findings (advisories always report without gating)\n"
+            "  1  a finding gates: an over-cap description (always), or a warning/error under\n"
+            "     --strict (add --strict-advisories to gate on advisories too)\n"
             "  2  usage error\n"
             "  3  skill directory / SKILL.md not found"
         ),
@@ -461,7 +496,10 @@ def main():
                         help="Only report findings relevant to this runtime (default: all)")
     parser.add_argument("--json", action="store_true", help="Emit machine-readable JSON")
     parser.add_argument("--strict", action="store_true",
-                        help="Exit 1 if any finding is reported for the selected target")
+                        help="Exit 1 if any warning/error finding is reported for the selected target")
+    parser.add_argument("--strict-advisories", action="store_true",
+                        help="With --strict, also gate on advisory-severity findings "
+                             "(default: advisories are reported but never gate)")
     args = parser.parse_args()
 
     skill_path = Path(args.skill_path)
@@ -483,7 +521,9 @@ def main():
 
     shown = _filter_by_target(findings, args.target)
     has_hard_error = any(f["severity"] == SEVERITY_ERROR for f in shown)
-    gate = has_hard_error or (args.strict and len(shown) > 0)
+    gateable = [f for f in shown
+                if args.strict_advisories or f["severity"] != SEVERITY_ADVISORY]
+    gate = has_hard_error or (args.strict and len(gateable) > 0)
 
     if args.json:
         print(json.dumps({
@@ -503,7 +543,8 @@ def main():
                 loc = f" ({f['location']})" if f.get("location") else ""
                 print(f"  {icon.get(f['severity'], '-')} [{f['rule']}] ({tg}){loc}\n    {f['message']}")
             print(f"\n{len(shown)} finding(s). "
-                  + ("gating (--strict or over-cap description)." if gate else "advisory — exit 0. Use --strict to gate."))
+                  + ("gating (over-cap description, or a warning under --strict)."
+                     if gate else "non-gating — exit 0. Use --strict to gate on warnings."))
     sys.exit(1 if gate else 0)
 
 

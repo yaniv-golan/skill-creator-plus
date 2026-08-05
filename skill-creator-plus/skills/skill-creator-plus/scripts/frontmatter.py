@@ -2,9 +2,12 @@
 """
 Stdlib-only parser for SKILL.md YAML frontmatter.
 
-Why this exists: skill-creator-plus is distributed as a `.skill` zip and runs in sandboxes
-(Cowork's container, Claude.ai) that do NOT ship PyYAML and cannot `pip install` it (default-deny
-egress). Depending on PyYAML made `quick_validate.py` / `package_skill.py` crash there. Frontmatter
+Why this exists: skill-creator-plus is distributed as a `.skill` zip and runs in sandboxes whose
+package inventory it does not control and must not depend on. (The original 0.7.0 rationale assumed
+Cowork shipped no PyYAML and could not install one; that was measured wrong — a 2026-08-05 live probe
+found PyYAML 6.0.3 preinstalled and PyPI installs working. The decision is unchanged and stronger
+without that claim: a validator must not be hostage to any one image's contents, and Claude.ai's
+inventory was never probed at all.) Frontmatter
 is a small, well-constrained YAML subset — a mapping of scalars, string lists, and shallow nested
 mappings — so we parse it with the standard library instead of a full YAML engine.
 
