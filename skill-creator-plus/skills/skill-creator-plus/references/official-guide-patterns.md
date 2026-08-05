@@ -124,11 +124,13 @@ The `description` field is the primary — and on most hosts, the **only** — s
 - No XML tags (`<` `>`).
 - Include specific phrases users might say; mention relevant file types if applicable.
 
-### Claude-specific addenda (Claude Code v2.1.116)
+### Claude-specific addenda (Claude Code, verified against 2.1.222)
 
-- **`when_to_use`** is an optional companion field. Claude renders the listing as `<name>: <description> - <when_to_use>`. Non-Claude hosts ignore it entirely — **never move trigger-critical content out of `description` into `when_to_use`**.
-- **Combined listing-entry cap: 1,536 characters** for `description + when_to_use`. Above this, Claude truncates the entry.
-- **Listing budget collapse (the #1 "it used to work" Claude regression):** every skill shares a budget of roughly 1% of the context window (default ~8,000 chars at 200 K tokens). If the combined listing overflows and each non-bundled skill's share drops below ~20 chars, **every non-bundled skill collapses to name-only simultaneously** — no one gets a description. Override with the `SLASH_COMMAND_TOOL_CHAR_BUDGET` env var, or (better) trim `description` / `when_to_use` at the source.
+- **`when_to_use`** is an optional companion field. Claude Code renders the listing entry as `<name>: <description> - <when_to_use>`. Non-Claude hosts ignore it entirely — **never move trigger-critical content out of `description` into `when_to_use`**. Under Cowork it appears to be only *half* visible: the session puts two different skill listings in front of the model and only one of them carries `when_to_use` (see `references/environments.md` → *Two skill listings under Cowork*). That is a second, mechanism-level reason the field must never be load-bearing.
+- **Combined listing-entry cap: 1,536 characters** for `description + when_to_use`. This is the default of the `skillListingMaxDescChars` setting, not a hard-coded constant. Above it, Claude truncates the entry.
+- **The listing budget is shared, and overflow degrades per skill — not all at once.** Every skill competes for `contextWindow × 4 × skillListingBudgetFraction` characters (fraction defaults to `0.01`): ~8,000 chars at a 200 K context window, **~40,000 at 1 M**. On overflow Claude ranks skills by recency-weighted usage — `usageCount × max(0.5^(daysSinceLastUse/7), 0.1)` — then grants each its full description while budget remains; whatever no longer fits renders as name-only. **The skills you use keep their descriptions; the ones you never touch lose theirs first.** Bundled prompt skills, and skills set to `name-only`, are protected and never compete.
+
+  Two consequences for authors. A bloated `description` mostly costs *itself* and the least-recently-used skills below it — it does **not** silently blank the listing for everyone, so there is no single "offender" to hunt. And the skill most likely to lose its description is the one nobody has invoked lately, which is exactly the skill whose triggering you would then be unable to debug. Diagnose with `/doctor` (estimates listing cost and names the biggest contributors) and `/context` (its Skills row reports post-budget size). Tuning knobs: `skillListingBudgetFraction`, `skillListingMaxDescChars`, per-skill `skillOverrides: {<skill>: on|name-only|user-invocable-only|off}`, and the `SLASH_COMMAND_TOOL_CHAR_BUDGET` env override.
 
 ### Good examples (portable)
 
@@ -627,7 +629,7 @@ Key takeaway: skills are designed for reuse and auto-discovery; agents are desig
 
 ## Runtime Mechanics & Gotchas (Claude Code)
 
-Everything in this section is Claude-specific (observed from Claude Code v2.1.116). Other agentskills.io hosts have their own runtime behaviors. If your skill must work across hosts, design against the portable spec first, treat these mechanics as bonus behavior you can lean into only when you know the target is Claude.
+Everything in this section is Claude-specific (observed from Claude Code 2.1.222). Other agentskills.io hosts have their own runtime behaviors. If your skill must work across hosts, design against the portable spec first, treat these mechanics as bonus behavior you can lean into only when you know the target is Claude.
 
 ### Shell substitution (`` !`cmd` ``) — failure modes
 
@@ -672,7 +674,7 @@ On Claude, priority chain is: bundled → built-in plugins → policy/managed �
 
 ### Frontmatter fields to avoid
 
-- `progressMessage` — no parser, render path drops it. Dead code in Claude v2.1.116.
+- `progressMessage` — no parser, render path drops it. Dead code as of Claude Code 2.1.222.
 - Any custom/unknown field on Claude — silently dropped.
 
 ### SKILL.md filename — case matters on Linux/CI
@@ -701,16 +703,17 @@ Solutions:
 2. Be more specific: `"Processes PDF legal documents for contract review"` instead of `"Processes documents"`
 3. Clarify scope: `"Use specifically for online payment workflows, not for general financial queries."`
 
-### All Skills Suddenly Stop Triggering (Claude Listing Collapse)
-**Symptom:** On Claude Code, every skill still shows in the slash menu by name, but descriptions are missing — and Claude stops consulting skills it used yesterday. (Specific to Claude; non-Claude hosts have their own discovery mechanisms.)
+### A Skill's Description Disappears From the Listing (Claude Budget Overflow)
+**Symptom:** On Claude Code, a skill still appears by name but its description is gone, and Claude stops consulting a skill it used last month — while other skills keep their descriptions in the same listing. (Specific to Claude; non-Claude hosts have their own discovery mechanisms.)
 
-**Cause:** Claude's skill listing has a character budget (~1% of the context window, ~8,000 chars at 200 K). When the combined listing overflows and each non-bundled skill's share drops below ~20 chars, **every non-bundled skill collapses to name-only at once**. A single bloated `description` or `when_to_use` can take down the whole listing.
+**Cause:** The listing shares one character budget across all installed skills — `contextWindow × 4 × skillListingBudgetFraction`, fraction default `0.01`, so ~8,000 chars at 200 K and ~40,000 at 1 M. On overflow, Claude keeps full descriptions for the skills ranked highest by recency-weighted usage and renders the rest as name-only. Degradation is **per skill and ordered**, not simultaneous: full and name-only entries coexist in the same listing, and the skills you haven't invoked recently are the ones that lose their text.
 
 **Solutions:**
-1. Find the offender: list each installed skill's `description` + `when_to_use` lengths. The one well above the others is usually the cause.
-2. Trim at the source. Aim well below the per-entry 1,536 cap.
-3. Escape hatch: set `SLASH_COMMAND_TOOL_CHAR_BUDGET` (integer chars) to raise the budget.
-4. Prevention: run this skill's description optimizer (`scripts/run_loop.py`) — it's now length-aware and won't drift into bloated descriptions. Pass `--target-length` if you want a tighter target.
+1. Run `/doctor` — it estimates the listing's cost and names the biggest contributors. `/context`'s Skills row reports the post-budget size.
+2. Trim the biggest contributors at the source. Aim well below the 1,536-char per-entry default.
+3. Disable skills you don't use (`/skills`), or set `skillOverrides: {<skill>: name-only}` for the ones you only ever invoke by slash command — a protected `name-only` skill stops competing for budget entirely.
+4. Raise `skillListingBudgetFraction` in settings (or `SLASH_COMMAND_TOOL_CHAR_BUDGET` as an env override) if the listing genuinely needs to be bigger.
+5. Prevention: run this skill's description optimizer (`scripts/run_loop.py`) — it's length-aware and won't drift into bloated descriptions. Pass `--target-length` for a tighter target.
 
 ### Instructions Not Followed
 **Symptom:** Skill loads but Claude doesn't follow instructions.
