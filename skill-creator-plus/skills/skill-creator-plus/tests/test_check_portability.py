@@ -121,14 +121,35 @@ class ThirdPartyImportTests(unittest.TestCase):
         (skill / "scripts" / "tool.py").write_text(script_src)
         return skill
 
-    def test_thirdparty_import_flagged_for_cowork(self):
+    def test_absent_thirdparty_import_flagged_as_advisory(self):
         with tempfile.TemporaryDirectory() as td:
-            skill = self._skill_with_script(td, "import yaml\n")
+            skill = self._skill_with_script(td, "import humanize\n")
             findings = check_thirdparty_imports(skill)
             self.assertEqual(len(findings), 1)
             self.assertEqual(findings[0]["rule"], "thirdparty-import")
             self.assertEqual(findings[0]["targets"], ["cowork"])
-            self.assertIn("yaml", findings[0]["message"])
+            self.assertEqual(findings[0]["severity"], "advisory")
+            self.assertIn("humanize", findings[0]["message"])
+
+    def test_cowork_preinstalled_imports_not_flagged(self):
+        """The image ships the data/document stack a generated skill is most likely to import."""
+        with tempfile.TemporaryDirectory() as td:
+            skill = self._skill_with_script(
+                td,
+                "import pandas as pd\nimport numpy as np\nimport yaml\nimport requests\n"
+                "from bs4 import BeautifulSoup\nfrom PIL import Image\nimport openpyxl\n"
+                "import matplotlib.pyplot as plt\nimport docx\nimport pptx\n",
+            )
+            self.assertEqual(check_thirdparty_imports(skill), [])
+
+    def test_preinstalled_and_absent_mixed_flags_only_the_absent(self):
+        with tempfile.TemporaryDirectory() as td:
+            skill = self._skill_with_script(td, "import pandas\nimport humanize\n")
+            findings = check_thirdparty_imports(skill)
+            self.assertEqual(len(findings), 1)
+            self.assertIn("humanize", findings[0]["message"])
+            # Anchored at the humanize line (2), not the pandas line (1).
+            self.assertTrue(findings[0]["location"].endswith(":2"), findings[0]["location"])
 
     def test_stdlib_import_not_flagged(self):
         with tempfile.TemporaryDirectory() as td:
@@ -412,6 +433,36 @@ class DeliveryAllowMarkerContextTests(unittest.TestCase):
             skill = _skill(Path(td), "name: x\ndescription: d", body=body)
             findings, _ = lint_portability(skill)
             self.assertIn("delivery-tool-single-lane", _rules(findings))
+
+
+class StrictGatingTests(unittest.TestCase):
+    """`--strict` gates warnings and errors; advisories are informational by design."""
+
+    def _run(self, skill, *args):
+        import subprocess
+        return subprocess.run(
+            [sys.executable, "-m", "scripts.check_portability", str(skill), *args],
+            cwd=str(SCRIPT_DIR.parent), capture_output=True, text=True,
+        )
+
+    def test_advisory_alone_does_not_gate_under_strict(self):
+        with tempfile.TemporaryDirectory() as td:
+            skill = _skill(Path(td), f"name: x\ndescription: {'a' * 900}")
+            r = self._run(skill, "--target", "claude-code", "--strict")
+            self.assertIn("listing-desc-drop-risk", r.stdout)
+            self.assertEqual(r.returncode, 0, r.stdout)
+
+    def test_advisory_gates_with_strict_advisories(self):
+        with tempfile.TemporaryDirectory() as td:
+            skill = _skill(Path(td), f"name: x\ndescription: {'a' * 900}")
+            r = self._run(skill, "--target", "claude-code", "--strict", "--strict-advisories")
+            self.assertEqual(r.returncode, 1, r.stdout)
+
+    def test_error_gates_without_strict(self):
+        with tempfile.TemporaryDirectory() as td:
+            skill = _skill(Path(td), f"name: x\ndescription: {'a' * (DESC_HARD_CAP + 10)}")
+            r = self._run(skill)
+            self.assertEqual(r.returncode, 1, r.stdout)
 
 
 class SelfLintTests(unittest.TestCase):
