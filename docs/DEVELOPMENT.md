@@ -102,11 +102,23 @@ Never edit version fields manually in plugin.json or SKILL.md.
 
 ## Release Process
 
+`main` is protected — changes land via pull request — and **cutting a release is a maintainer step,
+not self-serve.** Don't push to `main` or push a tag without the maintainer's explicit go-ahead for
+that release. (Admin bypass is enabled, so a direct push from a maintainer account *succeeds* and
+merely prints `Bypassed rule violations` — the protection won't stop an accidental release, so the
+approval is the real gate. Automated agents: this includes you; committing locally is not approval
+to push.)
+
 ```bash
 ./tools/bump-version.sh X.Y.Z
 git commit -am "chore: bump version to X.Y.Z"
+# open a PR and get it merged, then tag the merge commit on main:
 git tag vX.Y.Z
-git push origin main --tags
+git push origin vX.Y.Z
 ```
 
-CI creates a GitHub Release with a zip artifact automatically.
+Push the **tag by name**, not `git push --tags`: `.github/workflows/release.yml` triggers on
+`push: tags: 'v*'`, so the tag alone is what cuts the release — `main` itself is already updated by
+the merge.
+
+CI creates a GitHub Release with a zip artifact automatically once the tag arrives.
