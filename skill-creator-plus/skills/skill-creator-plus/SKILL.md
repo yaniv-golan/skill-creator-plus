@@ -123,7 +123,7 @@ Skills use a three-level loading system:
 These word counts are approximate and you can feel free to go longer if needed.
 
 **Key patterns:**
-- Keep SKILL.md under 500 lines; if you're approaching this limit, add an additional layer of hierarchy along with clear pointers about where the model using the skill should go next to follow up.
+- Keep SKILL.md under 500 lines; if you're approaching this limit, add an additional layer of hierarchy along with clear pointers about where the model using the skill should go next to follow up. This is mechanical, not stylistic: after auto-compaction Claude re-attaches only the **first 5,000 tokens** of each skill (25,000 combined across skills), so a long SKILL.md loses its *tail* in any compacted session. Measure characters, not lines (~4 chars per token) — and front-load the load-bearing instructions.
 - Reference files clearly from SKILL.md with guidance on when to read them
 - For large reference files (>300 lines), include a table of contents
 

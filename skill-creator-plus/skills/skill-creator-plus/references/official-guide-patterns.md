@@ -519,6 +519,7 @@ Beyond the required `name` and `description`, these optional fields give you mor
 - **`disallowed-tools`**: The denylist counterpart — removes tools while the skill is active. Use this (not `allowed-tools`) to stop a skill from making unintended edits or running commands.
 - **`disable-model-invocation: true`**: Prevents Claude from auto-triggering the skill. It becomes slash-command only (e.g., `/deploy`). Use this for skills with side effects like deploying, sending messages, or deleting resources — anything where you don't want Claude firing it on its own.
 - **`context: fork`**: Forces the skill to run in a separate subagent context, keeping your main conversation clean. Use for research-heavy skills that would otherwise bloat the main context window. Note: this only makes sense for skills that contain an actual task, not for skills that are just guidelines.
+- **`background: false`** (with `context: fork`): Waits for the forked subagent's result in the invoking turn rather than backgrounding it. Use when the skill needs the subagent's output to continue. Requires Claude Code 2.1.218+.
 - **`skills:`** (on agent definitions): When building a subagent (in `.claude/agents/`), you can preload specific skills into it via the `skills:` frontmatter field. The full content of each listed skill gets injected at startup — the subagent doesn't need to discover them.
 - **`compatibility`**: Environment requirements (1-500 characters). Use to indicate required platform, system packages, or network access.
 - **`license`**: Use if making the skill open source (e.g., MIT, Apache-2.0).
@@ -535,6 +536,8 @@ Don't include README.md inside the skill folder. All documentation goes in SKILL
 - Keep under 500 lines (~5,000 words)
 - Move detailed docs to references/
 - Link to references instead of inlining
+
+**Why the limit is mechanical, not stylistic:** after auto-compaction, Claude re-attaches the most recent invocation of each skill, keeping the **first 5,000 tokens of each** under a **combined 25,000-token** budget, most-recent-first. So everything past ~5,000 tokens in a SKILL.md is the part a compacted session silently loses — and it's the tail, not the part you'd choose to drop. Note that 500 lines is a weak proxy for 5,000 tokens: measure characters (~4 per token), because a file can sit under the line count and still be twice the budget. Put the load-bearing instructions early and push detail into `references/`, which is re-read on demand rather than truncated.
 
 ---
 
