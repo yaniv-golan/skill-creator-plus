@@ -90,6 +90,31 @@ If you're in Cowork, the main things to know are:
 - Description optimization (`run_loop.py` / `run_eval.py`) should work in Cowork just fine since it uses `claude -p` via subprocess, not a browser, but please save it until you've fully finished making the skill and the user agrees it's in good shape.
 - **Updating an existing skill**: The user might be asking you to update an existing skill, not create a new one. Follow the update guidance in the claude.ai section above.
 
+### Two skill listings under Cowork
+
+Cowork appears to show the model **two** skill listings in the same session, and they don't agree.
+Observed in one controlled probe on the host loop (2026-08-05) plus the Desktop archive — treat it
+as observed behaviour, not a published contract:
+
+| | Desktop `<available_skills>` block | CLI `skill_listing` attachment |
+|---|---|---|
+| carries `when_to_use` | **no** | yes |
+| budget-governed / truncated | no — verbatim, untruncated | yes (shared listing budget applies) |
+| also adds | `<location>` + a read-only-cache note | — |
+
+Two consequences when authoring for Cowork:
+
+- **`when_to_use` is only half visible.** `description` reaches the model through both listings;
+  `when_to_use` through only one. This is an independent, mechanism-level reason for the rule that
+  `when_to_use` is never load-bearing — it is not just non-portable across hosts, it is partially
+  invisible on Claude's own Cowork surface.
+- **Cowork does not read the skills on your machine.** Cowork sessions and cloud sessions —
+  including scheduled routines — don't read your local `~/.claude/skills/`. They load the skills
+  enabled for the user's claude.ai account, synced at session start. (A session *does* have a
+  read-only `.claude/skills` mount, but that is the account-synced cache, not your working copy.)
+  So "I edited the skill locally" does not mean the Cowork session sees the edit; the account-level
+  skill has to be updated.
+
 ## Testing Cowork-targeted skills with cowork-harness
 
 skill-creator-plus can author skills for three runtimes — Claude Code, Claude Cowork, and Claude Chat. A skill that will run under **Cowork** faces a class of bug the quality evals cannot see: it only manifests under Cowork's real sandbox, default-deny egress, permission/AskUserQuestion protocol, and artifact-delivery rules (see "Cowork-Specific Instructions" above for the runtime constraints themselves). Examples: a `/sessions/...` host path leaking into model-visible text; an interactive HTML artifact whose relative `fetch`/form write-back is silently lost under Cowork (this is exactly the eval-viewer "says Saved, nothing reaches Claude" failure class this skill's own README documents); a denied egress; an unanswered permission gate; a deliverable that never reaches the user's workspace.
