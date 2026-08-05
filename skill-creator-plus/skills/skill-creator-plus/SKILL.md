@@ -308,7 +308,7 @@ Once all runs are done:
      --skill-name "my-skill" \
      --benchmark <workspace>/iteration-N/benchmark.json \
      > /dev/null 2>&1 &
-   VIEWER_PID=$!
+   echo $! > <workspace>/iteration-N/viewer.pid
    ```
    For iteration 2+, also pass `--previous-workspace <workspace>/iteration-<N-1>`.
 
@@ -352,8 +352,10 @@ Empty feedback means the user thought it was fine. Focus your improvements on th
 Kill the viewer server when you're done with it:
 
 ```bash
-kill $VIEWER_PID 2>/dev/null
+kill "$(cat <workspace>/iteration-N/viewer.pid)" 2>/dev/null && rm -f <workspace>/iteration-N/viewer.pid
 ```
+
+(The PID goes to a file because each bash invocation is a fresh shell — a `VIEWER_PID=$!` variable set at launch time is unset by the time you kill it, so the kill silently no-ops and the server keeps running. If the PID file is missing, `pkill -f generate_review.py` is the fallback.)
 
 ---
 

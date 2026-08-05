@@ -300,7 +300,7 @@ def main():
             "  python -m scripts.run_eval \\\n"
             "    --eval-set trigger-eval.json \\\n"
             "    --skill-path ./my-skill \\\n"
-            "    --model claude-opus-4-7\n"
+            "    --model claude-opus-5\n"
             "\n"
             "Output: JSON results to stdout. Requires the `claude` CLI on PATH.\n"
             "\n"
