@@ -231,7 +231,7 @@ See `references/schemas.md` for the full schema (including the `assertions` fiel
 
 This section is one continuous sequence — don't stop partway through. Do NOT use `/skill-test` or any other testing skill.
 
-Put results in `<skill-name>-workspace/` as a sibling to the skill directory. Within the workspace, organize results by iteration (`iteration-1/`, `iteration-2/`, etc.) and within that, each test case gets a directory named for what it tests (e.g. `pdf-extraction/`, `multi-page-form/` — Step 1 explains the naming). Don't create all of this upfront — just create directories as you go.
+Put results in `<skill-name>-workspace/`. **Place it somewhere the user can see and that you can write to — never as a sibling to the skill directory.** On a plugin or marketplace install the skill lives in a read-only cache, so a sibling path is unwritable; the agent then falls back to a scratchpad the user never sees, and on a remote Cowork session that scratchpad is reclaimed when the session ends, destroying the generated skill and every eval result with it. If you're unsure what's user-visible, ask, or use the same location you would deliver a finished file to. Within the workspace, organize results by iteration (`iteration-1/`, `iteration-2/`, etc.) and within that, each test case gets a directory named for what it tests (e.g. `pdf-extraction/`, `multi-page-form/` — Step 1 explains the naming). Don't create all of this upfront — just create directories as you go.
 
 ### Step 1: Spawn all runs (with-skill AND baseline) in the same turn
 
