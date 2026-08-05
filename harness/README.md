@@ -116,13 +116,12 @@ Claude Code and output-only evals can't see:
 - **Triggers and runs clean** — the skill activates on "create a skill…", produces a `SKILL.md` +
   packaged skill, with no host-path leak (`transcript_no_host_path`) and no egress surprises.
 - **Bundled scripts run under the base image** — `create-skill.yaml`'s `tool_result_not_matches`
-  guard fails the run if a script throws `ModuleNotFoundError`. (The original rationale was measured
-  wrong on 2026-08-05 — it assumed the base image carried no third-party packages and that egress
-  denied installs outright; in fact the image ships a large Python stack and installing from PyPI
-  works. The guard is kept because a module outside that stack still fails under an org that denies
-  egress, and any Traceback is a regression regardless.) This class of bug is
-  invisible in Claude Code (where the package is present) and to output-only evals — catching it is
-  why this suite exists. (The scripts are stdlib-only for exactly this reason; see `check_portability`.)
+  guard fails the run if a script throws `ModuleNotFoundError`. The image ships a large Python stack
+  and can install from PyPI, so most imports resolve — but a module outside that stack still fails
+  under an org that denies egress, and any Traceback here is a regression whatever its cause. This
+  class of bug is invisible in Claude Code (where the package is present) and to output-only evals —
+  catching it is why this suite exists. (The scripts are stdlib-only so they never depend on the
+  image's inventory; see `check_portability`.)
 - **Gates are stochastic** — the Capture-Intent questions and their option labels are LLM-authored
   and reworded every run, so scripted exact-label `answers:` hard-fail; hence `on_unanswered: llm`
   for `create-skill`.

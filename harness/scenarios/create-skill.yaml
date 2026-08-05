@@ -49,13 +49,10 @@ assert:
   # no-match against a truncated result reports could-not-verify, not a silent pass. Regex targets
   # actual Python error signatures, not prose mentioning them.
   # NEEDS cowork-harness >= 1.2.0 for `tool_result_not_matches` (>= 1.16.0 is what this repo pins).
-  # RESOLVED 2026-08-05 (maintainers' runtime-claims verification pass § F8 — docs/internal/ is
-  # gitignored, so this path is local-only: docs/internal/2026-08-05-runtime-claims-verification.md):
-  # the original "no pip, egress denied" rationale was wrong — a live probe found the image ships
-  # numpy/pandas/requests/PyYAML/bs4/openpyxl/Pillow/matplotlib/python-docx/python-pptx AND that
-  # `pip install` from PyPI succeeds. The assertion is KEPT on its own merits as a runtime crash
-  # guard: a module outside that stack still throws under an org that denies egress, and any
-  # Traceback here is a real regression whatever its cause.
+  # Why this assertion is worth keeping even though the image DOES ship a large Python stack
+  # (numpy/pandas/requests/PyYAML/bs4/openpyxl/Pillow/matplotlib/python-docx/python-pptx) and CAN
+  # install from PyPI, both probed live 2026-08-05: a module outside that stack still throws under
+  # an org that denies egress, and any Traceback here is a real regression whatever its cause.
   - tool_result_not_matches: "ModuleNotFoundError|No module named '(yaml|[a-z0-9_]+)'|Traceback \\(most recent call last\\)"
   # Runtime F3 guard (delivery contract). The skill's own rule is that a written path is not
   # delivery where a surfacing tool exists — "if one exists you MUST call it". This lane serves

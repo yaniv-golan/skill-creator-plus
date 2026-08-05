@@ -28,7 +28,7 @@ In Claude.ai, the core workflow is the same (draft → test → review → impro
 If you're in Cowork, the main things to know are:
 
 - You have subagents, so the main workflow (spawn test cases in parallel, run baselines, grade, etc.) all works. (However, if you run into severe problems with timeouts, it's OK to run the test prompts in series rather than parallel.)
-- You don't have a browser or display, so when generating the eval viewer, use `--static <output_path>` to write a standalone HTML file instead of starting a server. Then deliver that file by the two-step rule below — do **not** offer a bare link or a bare path and call it done. (The old "proffer a link the user can click" wording contradicted the two-step and cannot work on the remote lane at all, where nothing surfaces the outputs directory on its own.) If the surface offers a tool that renders a self-contained HTML document as a viewable page, that is a good fit for the viewer and appears to be available on both Cowork lanes — but it renders only in the desktop Cowork sidebar (not web, not mobile) and still has **no write-back channel**, so the paste-the-JSON feedback loop below is unchanged either way.
+- You don't have a browser or display, so when generating the eval viewer, use `--static <output_path>` to write a standalone HTML file instead of starting a server. Then deliver that file by the two-step rule below — do **not** offer a bare link or a bare path and call it done, which on the remote lane delivers nothing at all. If the surface offers a tool that renders a self-contained HTML document as a viewable page, that is a good fit for the viewer and appears to be available on both Cowork lanes — but it renders only in the desktop Cowork sidebar (not web, not mobile) and still has **no write-back channel**, so the paste-the-JSON feedback loop below is unchanged either way.
 - Claude tends to skip the eval viewer in Cowork and jump straight to analyzing results itself. This defeats the purpose — the human needs to see the outputs and give feedback before you revise anything. Always run `generate_review.py` first (not your own custom HTML), then wait for the human to review. The eval viewer exists so the human can form their own opinion before you start making changes.
 - **Feedback loop workaround (IMPORTANT):** In static mode there is no server, so the viewer cannot POST feedback to disk. When the user clicks "Submit All Reviews", the viewer shows the raw JSON in a copyable textarea. You (Claude) cannot read browser downloads, so the feedback loop requires one of these:
   1. The user **pastes the JSON** directly into the chat — you parse it inline. (Primary path; the viewer does not download any file.)
@@ -48,14 +48,10 @@ If you're in Cowork, the main things to know are:
 
   Because a skill can't tell which lane it's on, teach both steps, always, in this order:
   1. **Write the deliverable to a stated path, unconditionally** — a path you name in your reply, not
-     wherever the shell happens to be. This alone completes delivery on the local lane. (Earlier
-     versions of this doc justified the rule with "in Cowork, cwd is a scratchpad the user can't
-     see." That was wrong, and is retracted: a live probe found cwd **is** the outputs mount, and a
-     bare shell redirect into cwd landed in the user-visible outputs directory. The scratchpad is a
-     different location — the session exposes it as `CLAUDE_CODE_TMPDIR` / `CLAUDE_TMPDIR` — and a
-     file written *there* genuinely does not reach the user. The instruction stands on its own
-     merits: an explicitly stated path is what makes the file findable and what step 2 needs, and
-     tool-mediated writes have their own working directory.)
+     wherever the shell happens to be, because a tool-mediated write has its own working directory
+     and an unnamed file is one the user can't find. This alone completes delivery on the local lane.
+     Never write the deliverable to the session scratchpad (exposed as `CLAUDE_CODE_TMPDIR` /
+     `CLAUDE_TMPDIR`) — a file there does not reach the user.
   2. **Then present it — scan for the tool, and call it if it exists.** Scan your available tools
      for one whose description says it sends or presents files to the user; that is the delivery
      tool on this surface, whatever it happens to be called. If one exists you **must** call it —
@@ -81,18 +77,15 @@ If you're in Cowork, the main things to know are:
   - *Surface it in the conversation* — the file appears in the chat and the user can open it there.
     The remote lane's `SendUserFile` returns a `file_uuid` for exactly this.
   - *Write it into a connected folder on the user's device* — the file lands on their real disk
-    (mtime-guarded). This is a genuinely separate, model-facing capability: its own description tells
-    the model to "call this for every file deliverable the user asked for — a file that isn't
-    committed never reaches their disk," and a live probe watched an agent choose it unprompted
-    (`Write` → surface → commit) with the file arriving in the user's `~/Downloads`.
+    (mtime-guarded), and it takes a `file_uuid` from the surfacing call, so it runs *after* step 2
+    rather than instead of it. This is a real part of the remote lane's vocabulary, not internal
+    plumbing: an agent given only "get the file to me" was observed choosing it unprompted, and the
+    file arrived in the user's `~/Downloads`.
 
-  Earlier versions of this doc told authors never to mention the device-commit step, calling it
-  "Desktop plumbing … not a skill-level API." The prerequisite was right — it takes a `file_uuid`
-  from the surfacing call — but the conclusion was wrong: it is part of that lane's working
-  vocabulary. Still **name no tool in authored skill text** (same reason as always: the names differ
-  per surface and rot). Instead, when the user asked for a file *on their machine* rather than a file
-  *in the conversation*, say so by outcome: after surfacing it, if a tool exists that copies output
-  files onto the user's device, call it too — surfacing alone does not put the file on their disk.
+  As always, **name no tool in authored skill text** — the names differ per surface and rot. Phrase
+  it by outcome instead: when the user asked for a file *on their machine* rather than a file *in the
+  conversation*, then after surfacing it, if a tool exists that copies output files onto the user's
+  device, call that too — surfacing alone does not put the file on their disk.
 
   `check_portability.py` enforces this pattern with two rules: `delivery-tool-single-lane` fires
   when a skill names one delivery-tool family but not the other anywhere in its text, stranding the
