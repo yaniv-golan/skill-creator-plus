@@ -515,7 +515,8 @@ Most of Anthropic's best skills began as just a few lines and a single gotcha, t
 ### Additional Frontmatter Fields
 Beyond the required `name` and `description`, these optional fields give you more control:
 
-- **`allowed-tools`**: Restricts which tools Claude can use when the skill is active (e.g., `allowed-tools: Read, Grep, Glob`). Use this to prevent a skill from making unintended edits or running commands.
+- **`allowed-tools`**: Pre-approves tools for the turn that invokes the skill — Claude may use them without a permission prompt, and the grant clears on the user's next message (e.g. `allowed-tools: Read, Grep, Glob`). It is a **grant, not a restriction**. For a project-level skill it activates only once the folder's workspace-trust dialog is accepted.
+- **`disallowed-tools`**: The denylist counterpart — removes tools while the skill is active. Use this (not `allowed-tools`) to stop a skill from making unintended edits or running commands.
 - **`disable-model-invocation: true`**: Prevents Claude from auto-triggering the skill. It becomes slash-command only (e.g., `/deploy`). Use this for skills with side effects like deploying, sending messages, or deleting resources — anything where you don't want Claude firing it on its own.
 - **`context: fork`**: Forces the skill to run in a separate subagent context, keeping your main conversation clean. Use for research-heavy skills that would otherwise bloat the main context window. Note: this only makes sense for skills that contain an actual task, not for skills that are just guidelines.
 - **`skills:`** (on agent definitions): When building a subagent (in `.claude/agents/`), you can preload specific skills into it via the `skills:` frontmatter field. The full content of each listed skill gets injected at startup — the subagent doesn't need to discover them.
@@ -617,7 +618,7 @@ Skills and agents (defined in `.claude/agents/`) share similar structure but hav
 
 | Feature | Skill (SKILL.md) | Agent (.claude/agents/*.md) |
 |---------|------------------|----------------------------|
-| Tool control | `allowed-tools` (allowlist) | `disallowed-tools` (denylist) |
+| Tool control | `allowed-tools` (grant, no prompt) + `disallowed-tools` (denylist) | `disallowed-tools` (denylist) |
 | Auto-trigger | Default on; `disable-model-invocation: true` to disable | N/A — agents are always explicitly invoked |
 | Effort | Not applicable | `effort: low/medium/high` — controls thinking depth |
 | Turn limit | Not applicable | `max-turns: N` — caps the agent's turn count |
@@ -649,20 +650,35 @@ If the skill ships via an MCP server (vs. as a local skill or plugin):
 - `${CLAUDE_SKILL_DIR}` is **inert** and passes through unsubstituted.
 - `shell.interpreter` is ignored.
 - `${CLAUDE_SESSION_ID}` still works.
+- **`hooks` and `allowed-tools` are parsed and then dropped** — the runtime logs "MCP-sourced skills cannot register hooks" / "cannot bypass permissions." An MCP-shipped skill cannot grant itself tool access.
+
+### Shared-memory skills — a second carve-out
+
+A skill loaded from shared memory is more heavily restricted than an MCP-shipped one: capability frontmatter (`allowed-tools`, `hooks`, `model`, `shell`) is ignored, inline shell (`` !`` commands) does not run, symlinked files are not loaded, and a `SKILL.md` over 128 KB is skipped entirely. If a skill must work in that context, it can rely on nothing but its own Markdown.
 
 ### `paths:` is gitignore syntax, not glob
 
 Claude's public docs call `paths:` patterns "globs." The runtime uses the `ignore` npm package (gitignore syntax). `src/**` and `src/payments/**` work; `src/**.ts` does not. Activation is sticky per-session until `/clear`.
 
-### Auto-allow vs. permission prompt (Claude)
+### `allowed-tools` grants permission — it does not request it (Claude)
 
-Any **non-empty** value in these three Claude-specific fields triggers a user permission prompt when the skill is invoked:
+`allowed-tools` lists tools Claude may use **without asking** during the turn that invokes the skill; the grant clears when the user sends their next message. It is a grant, not a restriction, and its presence does not itself produce a permission prompt. Some specifics worth knowing:
 
-- `allowed-tools`
-- `hooks`
-- `shell`
+- **`${CLAUDE_SKILL_DIR}` inside an `allowed-tools` Bash rule** lets a skill run a bundled script with no permission prompt (2.1.129+).
+- **`shell:`** selects an interpreter only — `bash` or `powershell` for `` !``-command blocks. It has no permission semantics at all.
+- **`disallowed-tools`** is the denylist counterpart: it *removes* tools while the skill is active.
+- **The one real gate is workspace trust, and it is per folder, not per invocation.** For a skill in a project's `.claude/skills/`, its capability frontmatter (`allowed-tools`, `hooks`) takes effect only after the trust dialog has been accepted for that folder — the same model as `.claude/settings.json` rules. Accepting it once covers every later invocation.
+- **Therefore: review project skills before trusting a repository.** A skill can grant itself broad tool access, and trusting the folder is what activates that grant.
 
-For silent auto-allow, keep them absent or empty and rely on the session's existing tool permissions. Unknown/custom frontmatter fields are dropped by the parser — they don't prompt and they don't do anything.
+Unknown/custom frontmatter fields are dropped by the parser — they don't prompt and they don't do anything.
+
+### Skill content lifecycle (Claude)
+
+Two different lifetimes, easy to conflate:
+
+- **The skill's content is sticky.** An invoked `SKILL.md` enters the conversation once and **stays for the session**. Re-invoking with identical rendered content adds a note, not a second copy (2.1.202+). So a skill cannot "re-read itself" to refresh anything — design instructions to be read once.
+- **The `allowed-tools` grant is not.** It covers the invoking turn and clears on the user's next message. A long multi-turn workflow cannot lean on a grant from turn one.
+- **`background: false`** — with `context: fork`, waits for the subagent's result inside the invoking turn instead of backgrounding it. Use when the skill's next step needs the result. Requires 2.1.218+.
 
 ### Live reload — chokidar depth limit
 
