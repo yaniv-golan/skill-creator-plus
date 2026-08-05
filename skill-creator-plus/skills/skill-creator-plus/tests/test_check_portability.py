@@ -66,7 +66,19 @@ class DescriptionLengthTests(unittest.TestCase):
             skill = _skill(Path(td), "name: x\ndescription: A concise, useful description.")
             findings, _ = lint_portability(skill)
             self.assertNotIn("desc-over-hard-cap", _rules(findings))
+            self.assertNotIn("listing-desc-drop-risk", _rules(findings))
             self.assertNotIn("listing-collapse-risk", _rules(findings))
+
+    def test_large_description_flags_drop_risk_not_collapse(self):
+        with tempfile.TemporaryDirectory() as td:
+            skill = _skill(Path(td), f"name: x\ndescription: {'a' * 900}")
+            findings, _ = lint_portability(skill)
+            self.assertIn("listing-desc-drop-risk", _rules(findings))
+            f = next(f for f in findings if f["rule"] == "listing-desc-drop-risk")
+            self.assertEqual(f["severity"], "advisory")
+            # The corrected model: THIS description gets dropped when unused — not every skill at once.
+            self.assertNotIn("every skill", f["message"])
+            self.assertIn("least-recently-used", f["message"])
 
 
 class RuntimeConstructTests(unittest.TestCase):

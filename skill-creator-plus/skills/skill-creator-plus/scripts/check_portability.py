@@ -44,7 +44,7 @@ TARGETS = ("claude-code", "claude-ai", "cowork")
 # agentskills.io / Claude listing caps (see references/official-guide-patterns.md).
 DESC_HARD_CAP = 1024          # description field spec cap — over this is an ERROR
 COMBINED_CAP = 1536           # description + when_to_use listing-entry truncation threshold
-DESC_COLLAPSE_HINT = 800      # a single description this large materially feeds the ~8KB collapse
+DESC_BUDGET_HINT = 800        # a single description this large is a top contributor to the shared listing budget
 
 SEVERITY_ERROR = "error"
 SEVERITY_WARNING = "warning"
@@ -121,15 +121,19 @@ def check_description_length(fields):
     if wtu and combined > COMBINED_CAP:
         findings.append(_finding(
             "listing-entry-truncation", SEVERITY_WARNING, TARGETS,
-            f"description + when_to_use is {combined} chars — over the {COMBINED_CAP}-char listing "
-            f"entry cap; Claude truncates the entry, dropping trigger surface.",
+            f"description + when_to_use is {combined} chars — over the {COMBINED_CAP}-char "
+            f"listing-entry cap (the skillListingMaxDescChars default); Claude truncates the "
+            f"entry, dropping trigger surface.",
             "SKILL.md:when_to_use",
         ))
-    elif dlen > DESC_COLLAPSE_HINT:
+    elif dlen > DESC_BUDGET_HINT:
         findings.append(_finding(
-            "listing-collapse-risk", SEVERITY_ADVISORY, TARGETS,
-            f"description is {dlen} chars — large descriptions eat the shared ~8KB skill-listing "
-            f"budget; if it overflows, every skill collapses to name-only. Trim if the user runs many skills.",
+            "listing-desc-drop-risk", SEVERITY_ADVISORY, TARGETS,
+            f"description is {dlen} chars — Claude's skill listing shares one budget (~1% of the "
+            f"context window) across every installed skill, and on overflow it drops whole "
+            f"descriptions starting with the least-recently-used skills. A description this large "
+            f"is a top contributor to that overflow, and it is this skill's own description that "
+            f"goes name-only once the user stops invoking it regularly. Trim it.",
             "SKILL.md:description",
         ))
     return findings

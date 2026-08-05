@@ -156,13 +156,16 @@ def validate_skill(skill_path):
         if '<' in when_to_use or '>' in when_to_use:
             return False, "when_to_use cannot contain angle brackets (< or >)"
 
-    # Combined listing entry cap (Claude v2.1.116): description + when_to_use truncates at 1,536 chars.
+    # Combined listing entry cap: description + when_to_use truncates at 1,536 chars — the default
+    # of Claude Code's `skillListingMaxDescChars` setting (verified against 2.1.222), not a
+    # hard-coded constant. Kept as a hard failure because the default is what ships.
     # Both are stripped first so the measurement matches what Claude's listing actually renders.
     combined_len = len(description or '') + len(when_to_use)
     if combined_len > 1536:
         return False, (
             f"description + when_to_use combined is {combined_len} chars. "
-            f"Claude Code truncates skill listing entries at 1536 chars — trim one or both."
+            f"Claude Code truncates skill listing entries at 1536 chars "
+            f"(skillListingMaxDescChars default) — trim one or both."
         )
 
     # effort — keyword or integer (Claude-specific)
