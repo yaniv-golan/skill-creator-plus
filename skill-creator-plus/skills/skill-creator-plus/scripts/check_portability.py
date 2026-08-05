@@ -177,6 +177,10 @@ _BROWSER_RE = re.compile(r"\bwebbrowser\b|http\.server|HTTPServer|BaseHTTPReques
 # `TARGETS` — a single-lane skill can misbehave on any of the three runtimes depending on which
 # Cowork lane (or product) it lands on.
 # Fixed iteration order → deterministic finding order regardless of scan order.
+# NOT EXHAUSTIVE, deliberately: Claude Code tracks four delivery channels (`artifact`,
+# `cowork_present_files`, `send_user_file`, `brief`); these two are the ones whose *names* appearing
+# in skill text strand a lane. The rules are about single-lane naming, not about enumerating every
+# way a file can reach a user.
 _DELIVERY_TOOL_RES = (
     ("present_files", re.compile(r"\b(?:mcp__[A-Za-z0-9_]+__)?present_files\b")),
     ("SendUserFile", re.compile(r"\bSendUserFile\b")),
