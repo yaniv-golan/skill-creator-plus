@@ -289,7 +289,7 @@ def main():
             "  python -m scripts.run_loop \\\n"
             "    --eval-set trigger-eval.json \\\n"
             "    --skill-path ./my-skill \\\n"
-            "    --model claude-opus-4-7 \\\n"
+            "    --model claude-opus-5 \\\n"
             "    --max-iterations 5 --target-length 500 --plateau-patience 2 --verbose\n"
             "\n"
             "Output: JSON results to stdout; HTML report opened in browser unless --report=none.\n"

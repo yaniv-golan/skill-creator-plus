@@ -205,7 +205,7 @@ def main():
             "  python -m scripts.improve_description \\\n"
             "    --eval-results results.json \\\n"
             "    --skill-path ./my-skill \\\n"
-            "    --model claude-opus-4-7\n"
+            "    --model claude-opus-5\n"
             "\n"
             "Output: writes the improved description JSON to stdout.\n"
             "\n"
