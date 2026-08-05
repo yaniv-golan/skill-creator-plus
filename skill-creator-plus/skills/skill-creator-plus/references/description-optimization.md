@@ -59,7 +59,7 @@ cd <skill-creator-plus-skill-path> && python -m scripts.run_loop \
 
 Use the model ID from your system prompt (the one powering the current session) so the triggering test matches what the user actually experiences.
 
-`--target-length` is a soft target, not a hard cap. The improver is told about it; selection breaks ties by preferring shorter descriptions. Default 500 chars — shrink it if the user has many skills installed and is at risk of Claude's listing-budget collapse; raise it to 800+ if trigger accuracy genuinely needs more surface area. The hard cap stays at 1,024 chars (agentskills.io `description` field limit).
+`--target-length` is a soft target, not a hard cap. The improver is told about it; selection breaks ties by preferring shorter descriptions. Default 500 chars — shrink it if the user has many skills installed and is at risk of overflowing Claude's shared listing budget (where the least-recently-used skills lose their descriptions first); raise it to 800+ if trigger accuracy genuinely needs more surface area. The hard cap stays at 1,024 chars (agentskills.io `description` field limit).
 
 `--plateau-patience` stops the loop early if the test score hasn't improved in N consecutive iterations, instead of burning all 5 iterations appending verbiage to chase edge cases. Default 2.
 

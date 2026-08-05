@@ -133,7 +133,7 @@ Based on the failures, write a new and improved description that is more likely 
 
 **Length.** Aim for around {target_length} characters. The hard limits:
 - `description` field cap: 1,024 characters (agentskills.io spec). Over that, downstream validators reject or truncate.
-- On Claude specifically, the skill listing has a shared character budget across ALL installed skills. Every extra 100 characters you add is a direct cost — if any single skill's share falls below ~20 characters, **every** skill in the listing collapses to name-only. So shorter is better even when you have headroom. Each extra trigger phrase must pay for itself in hit rate.
+- On Claude specifically, the skill listing shares one character budget across ALL installed skills, and when it overflows Claude drops entire descriptions — starting with the skills the user has invoked least recently. Every extra 100 characters makes this skill a bigger contributor to that overflow and a likelier casualty of it. So shorter is better even when you have headroom. Each extra trigger phrase must pay for itself in hit rate.
 
 **Don't overfit.** Generalize from failures to broader categories of user intent rather than enumerating specific queries. An ever-expanding list of edge cases wastes budget and doesn't generalize to unseen queries.
 
