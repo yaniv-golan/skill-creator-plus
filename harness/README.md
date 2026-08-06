@@ -41,14 +41,23 @@ applies; the resulting cassettes just aren't committed.
 `cowork-harness` is a separate npm CLI (the Claude plugin ships only the skill, not the built CLI):
 
 ```bash
-npm i -g "cowork-harness@>=1.16.0"
-cowork-harness --version          # MUST report 1.16.x — `npx` can silently serve a stale cache
+npm i -g "cowork-harness@>=1.19.0"
+cowork-harness --version          # MUST report 1.19.x — `npx` can silently serve a stale cache
 ```
 
 - **Static checks + `lint` + `replay`**: token-free, no Docker, no staged agent, no token.
 - **Live `run` / `record`** (`container` fidelity): needs Docker **and** a staged Claude Desktop
   agent binary (or `COWORK_AGENT_BINARY`) **and** an Anthropic/OAuth token. Run
   `cowork-harness doctor --tier container` to check.
+- **If you ever add a host-inheriting scenario** (`protocol` / `hostloop`, or `cowork` resolving to
+  hostloop), note two 1.18+ behaviours that do not affect today's suite — every scenario here is
+  `fidelity: container`, which is tier-gated out of both. First, `record` **refuses before spending**
+  to write such a recording into a repo-visible path, and `harness/cassettes/` *is* repo-visible here
+  (it holds a tracked `.gitkeep`); use `--out` outside the repo, or override deliberately with
+  `--allow-host-inventory-fixture`. Second, `verify-cassettes` gains a `host-inventory` finding class
+  that flags the recording machine's own MCP servers, agents, account fields and installed skill names
+  frozen into the cassette — a real disclosure risk for a public repo, and not something `grep` or the
+  text scanner can see.
 
 ## The two lanes
 
@@ -60,7 +69,7 @@ cowork-harness lint-skill   --strict skill-creator-plus/skills/skill-creator-plu
 cowork-harness analyze-skill --strict skill-creator-plus/skills/skill-creator-plus
 
 # scenario lint (catches silent false-greens: wrong-lane assertions, mixed-class items)
-cowork-harness lint harness/scenarios/
+cowork-harness lint --strict --min-severity WARN harness/scenarios/
 
 # real-loader load-check (lint only WARNS on an unknown key; this proves the suite actually loads)
 cowork-harness record harness/scenarios/ --dry-run --quiet
@@ -133,9 +142,15 @@ lost — the session runs in a sandbox reclaimed at session end, and location de
 Every other check in this suite (and `check_portability`'s `delivery-*` rules, `analyze-skill`)
 reasons about *authored text*; `remote-delivery.yaml` is the only check that observes the runtime
 behavior of our own packaging step: it runs the flagship "create a skill, then package and give it
-to me" prompt under `lane: remote` and asserts, via `semantic_matches`, that the agent either used a
-tool to surface the resulting `.skill` file or explicitly acknowledged that no such tool exists on
-this surface — never that it merely stated a filesystem path and called that delivery.
+to me" prompt under `lane: remote` and asserts, via `semantic_matches`, that the agent packaged the
+skill and wrote the `.skill` file to an **explicitly stated, user-reachable location that it told the
+user about** — rather than leaving it in a scratch directory or referring to it vaguely.
+
+An earlier version of this paragraph described the rubric as grading whether the agent "used a tool
+to surface the file, or acknowledged that no such tool exists." That shape is **unassertable**, and
+cowork-harness 1.17.0 says so explicitly: the judged document is assistant text plus authored files,
+so the judge cannot see tool calls on any lane — the first branch could never grade true regardless
+of behaviour. The scenario's own inline comment carries the full reasoning.
 
 It deliberately does **not** use `user_visible_artifact`: that key is rejected at load time on
 `lane: remote`, because on that lane it could only ever report "cannot verify" (no `present_files` is

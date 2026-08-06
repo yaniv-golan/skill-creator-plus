@@ -22,14 +22,14 @@ jobs:
 
       - name: Install cowork-harness (pinned)
         run: |
-          npm i --prefix "$RUNNER_TEMP/ch" cowork-harness@1.16.0
+          npm i --prefix "$RUNNER_TEMP/ch" cowork-harness@1.19.0
           echo "$RUNNER_TEMP/ch/node_modules/.bin" >> "$GITHUB_PATH"
 
       - name: Verify cowork-harness version
         run: |
           V=$(cowork-harness --version | tail -1)
           echo "cowork-harness $V"
-          case "$V" in 1.16.*) ;; *) echo "expected 1.16.x, got $V"; exit 1;; esac
+          case "$V" in 1.19.*) ;; *) echo "expected 1.19.x, got $V"; exit 1;; esac
 
       - name: Lint skill (strict)
         run: |
@@ -41,7 +41,10 @@ jobs:
 
       - name: Lint harness scenarios
         run: |
-          cowork-harness lint harness/scenarios/
+          # --strict --min-severity WARN per cowork-harness 1.18.0: without --strict the step
+          # CANNOT fail on a WARN-class rule (it prints and exits 0), and bare --strict also
+          # fails on advisory INFO. Both flags are required for this gate to gate.
+          cowork-harness lint --strict --min-severity WARN harness/scenarios/
 
       - name: Load-check scenarios (token-free)
         run: |
@@ -52,10 +55,12 @@ jobs:
 
       - name: Verify + replay cassettes (if any)
         run: |
+          # --allow-empty (1.17.0) greens an EXISTING but cassette-free dir; a MISSING path still
+          # exits 2, so it cannot green a typo. `replay` still needs the guard, so the branch stays.
+          # No allowlist flags — cowork-harness >=1.16.0 no longer emits the benign claude.com
+          # MCP-handshake false positive that once required --allow-domain. Any finding is real.
+          cowork-harness verify-cassettes harness/cassettes --allow-empty
           if ls harness/cassettes/*.cassette.json >/dev/null 2>&1; then
-            # No allowlist flags — cowork-harness >=1.16.0 no longer emits the benign claude.com
-            # MCP-handshake false positive that once required --allow-domain. Any finding is real.
-            cowork-harness verify-cassettes harness/cassettes
             cowork-harness replay harness/cassettes
           else
             echo "No committed cassettes by design (self-cassettes of an actively-developed skill go stale every edit; see harness/README.md). The static checks above are the CI gate; cassettes are recorded on-demand / in the nightly lane."

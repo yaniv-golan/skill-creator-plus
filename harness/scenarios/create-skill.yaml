@@ -48,7 +48,7 @@ assert:
   # reason the dogfood exists. Note: evaluated per captured tool result under a 10 KB/result cap; a
   # no-match against a truncated result reports could-not-verify, not a silent pass. Regex targets
   # actual Python error signatures, not prose mentioning them.
-  # NEEDS cowork-harness >= 1.2.0 for `tool_result_not_matches` (>= 1.16.0 is what this repo pins).
+  # NEEDS cowork-harness >= 1.2.0 for `tool_result_not_matches` (>= 1.19.0 is what this repo pins).
   # Why this assertion is worth keeping even though the image DOES ship a large Python stack
   # (numpy/pandas/requests/PyYAML/bs4/openpyxl/Pillow/matplotlib/python-docx/python-pptx) and CAN
   # install from PyPI, both probed live 2026-08-05: a module outside that stack still throws under
