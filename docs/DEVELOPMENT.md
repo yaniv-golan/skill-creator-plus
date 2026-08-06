@@ -11,12 +11,15 @@ python skill-creator-plus/skills/skill-creator-plus/scripts/quick_validate.py sk
 cd skill-creator-plus/skills/skill-creator-plus && python -m scripts.check_portability . --target all
 # Rules: desc-over-hard-cap, listing-entry-truncation, listing-desc-drop-risk, subagent-dependency,
 # claude-cli-dependency, browser-display-dependency, thirdparty-import (allowlisted against Cowork's
-# preinstalled stack), delivery-tool-single-lane, delivery-conditional-deliverable.
+# preinstalled stack), delivery-tool-single-lane, delivery-conditional-deliverable,
+# compaction-truncation-risk (SKILL.md over the 19,900-CHARACTER post-compaction cap — exact, not a
+# heuristic: the runtime's "5,000 token" limit is Math.round(chars/4), binary-verified in 2.1.222).
 # --strict gates on warnings/errors only; advisories report but never gate (add --strict-advisories
 # to gate on those too). Exit codes: 0 no gating findings, 1 gated, 2 usage error, 3 path not found.
-# Note this skill's own baseline: 3 advisories (subagent / claude-CLI / browser deps, all Claude-Code-
-# first by design) — so `--target all` is exit 0, and `--target cowork --strict` is exit 1 on the
-# browser-display warning. A NEW rule id is the regression signal, not a non-empty finding list.
+# Note this skill's own baseline: 4 findings (subagent / claude-CLI / browser deps, all Claude-Code-
+# first by design, plus its own compaction-truncation-risk at ~2.0x cap) — so `--target all` is exit 0,
+# and `--target cowork --strict` is exit 1 on the browser-display warning. A NEW rule id is the
+# regression signal, not a non-empty finding list.
 
 # Syntax-check all scripts
 for f in skill-creator-plus/skills/skill-creator-plus/scripts/*.py; do python -c "import py_compile; py_compile.compile('$f', doraise=True)"; done

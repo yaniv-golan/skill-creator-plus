@@ -68,6 +68,15 @@ COWORK_PREINSTALLED = frozenset({
     "pptx",        # python-pptx 1.0.2
 })
 
+# Post-compaction re-attachment truncates each invoked skill's content to this many CHARACTERS.
+# The runtime sizes skill content as Math.round(chars/4) against a hardcoded 5,000 cap and slices to
+# 5000*4 minus a 98-char truncation marker — so the real limit is characters, not tokens, and a
+# tokenizer reading is the wrong unit (it runs ~26% under on technical markdown).
+# Verified against the Claude Code 2.1.222 bundle: Nvy=5000 and $vy=25000 are literals with no
+# context-window scaling. Truncation is DESTRUCTIVE — the shortened text is written back to the
+# registry, so a second compaction cannot recover the tail; only re-reading from disk can.
+COMPACTION_CAP_CHARS = 19900
+
 SEVERITY_ERROR = "error"
 SEVERITY_WARNING = "warning"
 SEVERITY_ADVISORY = "advisory"
@@ -263,6 +272,30 @@ def _iter_clauses(text):
     tail = text[pos:]
     if tail.strip():
         yield tail, text.count("\n", 0, pos) + 1
+
+
+def check_compaction_budget(skill_md_text):
+    """Flag a SKILL.md whose tail will be dropped when a session auto-compacts.
+
+    Exact, not heuristic: the cap is a hardcoded character count in the runtime, so this is a
+    straight length comparison — no tokenizer, no estimate, no divisor to tune.
+    """
+    findings = []
+    n = len(skill_md_text)
+    if n <= COMPACTION_CAP_CHARS:
+        return findings
+    cut_line = skill_md_text[:COMPACTION_CAP_CHARS].count("\n") + 1
+    findings.append(_finding(
+        "compaction-truncation-risk", SEVERITY_ADVISORY, ["claude-code", "cowork"],
+        f"SKILL.md is {n:,} chars — {n / COMPACTION_CAP_CHARS:.2f}x the {COMPACTION_CAP_CHARS:,}-char "
+        f"limit that survives auto-compaction. Everything after roughly line {cut_line} is dropped "
+        f"once a session compacts, and the truncation is written back, so a second compaction cannot "
+        f"recover it — only re-reading the file from disk can. This is a CHARACTER budget: measure "
+        f"with `wc -m` (not `wc -c`, which counts bytes, and not a tokenizer, which reads ~26% low on "
+        f"technical markdown). To fix, move whole phases into references/ rather than trimming prose.",
+        "SKILL.md",
+    ))
+    return findings
 
 
 def check_runtime_constructs(skill_path):
@@ -461,9 +494,11 @@ def lint_portability(skill_path):
     skill_md = skill_path / "SKILL.md"
     if not skill_md.exists():
         return [], "SKILL.md not found"
-    fields = parse_frontmatter(skill_md.read_text())
+    skill_md_text = skill_md.read_text()
+    fields = parse_frontmatter(skill_md_text)
     findings = []
     findings += check_description_length(fields)
+    findings += check_compaction_budget(skill_md_text)
     findings += check_runtime_constructs(skill_path)
     findings += check_thirdparty_imports(skill_path)
     return findings, None
