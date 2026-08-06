@@ -533,11 +533,33 @@ Beyond the required `name` and `description`, these optional fields give you mor
 Don't include README.md inside the skill folder. All documentation goes in SKILL.md or references/. (A repo-level README for human users is separate.)
 
 ### SKILL.md Size
-- Keep under 500 lines (~5,000 words)
+- Keep under 500 lines (~5,000 words) — a *readability* rule, inherited from Anthropic's guide. It is **not** the compaction budget: a file can sit comfortably inside the line rule and still be **2× the 19,900-character limit** below, because line count says nothing about line length. Check both.
 - Move detailed docs to references/
 - Link to references instead of inlining
 
-**Why the limit is mechanical, not stylistic:** after auto-compaction, Claude re-attaches the most recent invocation of each skill, keeping the **first 5,000 tokens of each** under a **combined 25,000-token** budget, most-recent-first. So everything past ~5,000 tokens in a SKILL.md is the part a compacted session silently loses — and it's the tail, not the part you'd choose to drop. Note that 500 lines is a weak proxy for 5,000 tokens: measure characters (~4 per token), because a file can sit under the line count and still be twice the budget. Put the load-bearing instructions early and push detail into `references/`, which is re-read on demand rather than truncated.
+**Why the limit is mechanical, not stylistic:** after auto-compaction, Claude re-attaches the most recent invocation of each skill, keeping the **first 5,000 tokens of each** under a **combined 25,000-token** budget, most-recent-first. So everything past ~5,000 tokens in a SKILL.md is the part a compacted session silently loses — and it's the tail, not the part you'd choose to drop. Put the load-bearing instructions early and push detail into `references/`, which is re-read on demand rather than truncated.
+
+**The budget is characters, not tokens — measure it with `wc -m`.** The cap is documented as "5,000 tokens," but the runtime computes the size of a skill's content as `Math.round(chars / 4)`, a character heuristic rather than a tokenizer. So the effective per-skill limit is:
+
+| Documented | What the runtime actually enforces |
+|---|---|
+| 5,000 tokens per skill | **19,900 characters** (5,000 × 4, minus a 100-char truncation marker) |
+| 25,000 tokens combined | **100,000 characters** across all invoked skills |
+
+```bash
+wc -m SKILL.md          # characters — the unit that matters
+# 19,900 or less survives compaction. Note: wc -c gives BYTES, which over-counts
+# any file containing em-dashes or other multi-byte characters.
+```
+
+**Do not measure this with a real tokenizer.** `count_tokens` answers a different question, and the two units diverge widely on technical markdown — one file measured for this guide came to 13,388 real tokens against 39,696 characters, roughly 2.95 chars/token rather than 4. It is the *character* figure the compaction budget compares against, so a tokenizer reading is not wrong, just irrelevant here — and relying on it would put you ~26% off in the unsafe direction.
+
+**Two ways a skill loses content permanently, neither documented publicly:**
+
+1. **Truncation is written back to the registry.** When a skill is truncated at re-attachment, the shortened text *replaces* the stored copy. A second compaction in the same session cannot recover the tail — it is gone for the session, not merely un-attached. The file on disk is untouched, so a `Read` still recovers it; nothing else will.
+2. **Combined-cap overflow zeroes a skill outright.** Re-attachment packs skills most-recently-invoked first against the 100,000-char combined budget. A skill that doesn't fit has its stored content set to **empty** and is dropped from every later re-attachment that session. So a session using several large skills can silently lose a smaller one entirely.
+
+Practical consequence: if a skill exceeds the cap, front-load whatever must survive, and state early in the file that the reader should re-read it from disk if a later section appears to be missing. If a skill is over budget, the fix is to move whole phases into `references/` — not to trim prose, which rarely recovers enough.
 
 ---
 
