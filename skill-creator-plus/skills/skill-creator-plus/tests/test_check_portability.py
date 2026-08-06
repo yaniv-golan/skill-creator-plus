@@ -9,7 +9,9 @@ from check_portability import (  # noqa: E402
     parse_frontmatter,
     lint_portability,
     check_thirdparty_imports,
+    check_compaction_budget,
     _filter_by_target,
+    COMPACTION_CAP_CHARS,
     DESC_HARD_CAP,
     TARGETS,
 )
@@ -79,6 +81,35 @@ class DescriptionLengthTests(unittest.TestCase):
             # The corrected model: THIS description gets dropped when unused — not every skill at once.
             self.assertNotIn("every skill", f["message"])
             self.assertIn("least-recently-used", f["message"])
+
+
+class CompactionBudgetTests(unittest.TestCase):
+    """The cap is a hardcoded character count in the runtime, so this check is exact."""
+
+    def test_under_cap_is_clean(self):
+        with tempfile.TemporaryDirectory() as td:
+            skill = _skill(Path(td), "name: x\ndescription: d", body="short body\n")
+            findings, _ = lint_portability(skill)
+            self.assertNotIn("compaction-truncation-risk", _rules(findings))
+
+    def test_over_cap_flags_advisory_with_the_cut_line(self):
+        with tempfile.TemporaryDirectory() as td:
+            body = "".join(f"line {i} padding padding padding padding\n" for i in range(700))
+            skill = _skill(Path(td), "name: x\ndescription: d", body=body)
+            self.assertGreater(len((skill / "SKILL.md").read_text()), COMPACTION_CAP_CHARS)
+            findings, _ = lint_portability(skill)
+            self.assertIn("compaction-truncation-risk", _rules(findings))
+            f = next(f for f in findings if f["rule"] == "compaction-truncation-risk")
+            self.assertEqual(f["severity"], "advisory")
+            self.assertEqual(f["targets"], ["claude-code", "cowork"])
+            # names the character unit, not tokens — the whole point of the rule
+            self.assertIn("wc -m", f["message"])
+            self.assertIn("roughly line", f["message"])
+
+    def test_boundary_exactly_at_cap_is_clean(self):
+        text = "a" * COMPACTION_CAP_CHARS
+        self.assertEqual(check_compaction_budget(text), [])
+        self.assertEqual(len(check_compaction_budget(text + "a")), 1)
 
 
 class RuntimeConstructTests(unittest.TestCase):
