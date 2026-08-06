@@ -11,8 +11,14 @@ name: no-trigger
 # carries its proactive description and a `trigger` param by default, so the surface this scenario
 # asserts against changed underneath it. Left unpinned deliberately — production is ON, so an
 # unpinned run is the faithful test and a failure here would be a real over-triggering finding
-# rather than drift. NOT YET RUN LIVE SINCE THE FLIP; pin `skills.proactive_suggest_enabled: false`
-# in the session if you need the pre-1.18.0 surface back.
+# rather than drift.
+#
+# VERIFIED LIVE 2026-08-06 after the flip (container, $0.20, 1 turn): `mcp__skills__suggest_skills`
+# WAS served — so the proactive surface was actually exercised, not merely assumed — and the control
+# still passed with `skillActivity: []` and no tool calls. That resolves the question the upgrade
+# opened: leaving it unpinned is both faithful and green. Pin
+# `skills.proactive_suggest_enabled: false` in the session only if you deliberately want the
+# pre-1.18.0 surface back.
 session: ../sessions/skill.yaml
 fidelity: container
 on_unanswered: fail
