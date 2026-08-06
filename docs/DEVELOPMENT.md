@@ -7,8 +7,16 @@
 python skill-creator-plus/skills/skill-creator-plus/scripts/quick_validate.py skill-creator-plus/skills/skill-creator-plus
 # JSON output for tooling: add --json. Exit codes: 0 valid, 1 invalid, 2 reserved (stdlib-only now), 3 path not found.
 
-# Cross-runtime portability lint (stdlib-only; --target claude-code|claude-ai|cowork|all; --strict to gate)
+# Cross-runtime portability lint (stdlib-only; --target claude-code|claude-ai|cowork|all)
 cd skill-creator-plus/skills/skill-creator-plus && python -m scripts.check_portability . --target all
+# Rules: desc-over-hard-cap, listing-entry-truncation, listing-desc-drop-risk, subagent-dependency,
+# claude-cli-dependency, browser-display-dependency, thirdparty-import (allowlisted against Cowork's
+# preinstalled stack), delivery-tool-single-lane, delivery-conditional-deliverable.
+# --strict gates on warnings/errors only; advisories report but never gate (add --strict-advisories
+# to gate on those too). Exit codes: 0 no gating findings, 1 gated, 2 usage error, 3 path not found.
+# Note this skill's own baseline: 3 advisories (subagent / claude-CLI / browser deps, all Claude-Code-
+# first by design) — so `--target all` is exit 0, and `--target cowork --strict` is exit 1 on the
+# browser-display warning. A NEW rule id is the regression signal, not a non-empty finding list.
 
 # Syntax-check all scripts
 for f in skill-creator-plus/skills/skill-creator-plus/scripts/*.py; do python -c "import py_compile; py_compile.compile('$f', doraise=True)"; done
@@ -30,7 +38,8 @@ cd skill-creator-plus/skills/skill-creator-plus && python -m unittest discover -
 # Merge analyst notes into a benchmark result
 python -m scripts.aggregate_benchmark <dir> --notes notes.json  # merge analyst notes
 
-# cowork-harness static checks on the shipped skill (token-free, no Docker; needs cowork-harness >= 1.16.0)
+# cowork-harness static checks on the shipped skill (token-free, no Docker; needs cowork-harness
+# >= 1.16.0 — see `harness/README.md`)
 cowork-harness lint-skill   --strict skill-creator-plus/skills/skill-creator-plus
 cowork-harness analyze-skill --strict skill-creator-plus/skills/skill-creator-plus
 cowork-harness lint harness/scenarios/
