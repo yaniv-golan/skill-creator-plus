@@ -3,6 +3,16 @@ name: no-trigger
 # Catches description over-triggering / collision. `no_skill_triggered` is content-class
 # (survives replay); it is never a vacuous pass (evidence-unavailable if the Skill tool is
 # unobservable, not a silent green).
+# BASELINE FLOAT — no scenario here pins `baseline:` (a scenario key; it is silently ignored in a
+# session file), so every run resolves the CLI's newest shipped baseline. The 1.16.0 -> 1.19.0
+# upgrade moved that from desktop-1.24012.9 to desktop-1.25927.0, and with it one gate that bears
+# directly on this negative control: `proactiveSkillSuggestEnabled` flipped
+# {"on": false, "source": "defaultValue"} -> {"on": true, "source": "force"}. `suggest_skills` now
+# carries its proactive description and a `trigger` param by default, so the surface this scenario
+# asserts against changed underneath it. Left unpinned deliberately — production is ON, so an
+# unpinned run is the faithful test and a failure here would be a real over-triggering finding
+# rather than drift. NOT YET RUN LIVE SINCE THE FLIP; pin `skills.proactive_suggest_enabled: false`
+# in the session if you need the pre-1.18.0 surface back.
 session: ../sessions/skill.yaml
 fidelity: container
 on_unanswered: fail

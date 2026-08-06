@@ -552,7 +552,7 @@ wc -m SKILL.md          # characters — the unit that matters
 # any file containing em-dashes or other multi-byte characters.
 ```
 
-**Do not measure this with a real tokenizer.** `count_tokens` answers a different question, and the two units diverge widely on technical markdown — one file measured for this guide came to 13,388 real tokens against 39,696 characters, roughly 2.95 chars/token rather than 4. It is the *character* figure the compaction budget compares against, so a tokenizer reading is not wrong, just irrelevant here — and relying on it would put you ~26% off in the unsafe direction.
+**Do not measure this with a real tokenizer.** `count_tokens` answers a different question, and the two units diverge widely on technical markdown — one file measured for this guide came to 13,388 real tokens against 39,696 characters, roughly 2.95 chars/token rather than 4. It is the *character* figure the compaction budget compares against, so a tokenizer reading is not wrong, just irrelevant here — and on technical markdown (~3 chars/token) relying on it overstates the overage by ~35%, erring toward a false red. Prose-heavy content above 4 chars/token would err the other way — which is the reason to measure characters rather than reason about the ratio at all.
 
 **Two ways a skill loses content permanently, neither documented publicly:**
 

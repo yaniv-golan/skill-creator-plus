@@ -70,8 +70,10 @@ COWORK_PREINSTALLED = frozenset({
 
 # Post-compaction re-attachment truncates each invoked skill's content to this many CHARACTERS.
 # The runtime sizes skill content as Math.round(chars/4) against a hardcoded 5,000 cap and slices to
-# 5000*4 minus a 98-char truncation marker — so the real limit is characters, not tokens, and a
-# tokenizer reading is the wrong unit (it runs ~26% under on technical markdown).
+# 5000*4 minus a 100-char truncation marker — so the real limit is characters, not tokens, and a
+# tokenizer reading is the wrong unit — it measures something the budget never consults, and on
+# technical markdown (~3 chars/token) reads ~35% HIGHER than the runtime's own chars/4,
+# overstating the overage. Prose-heavy content at >4 chars/token would invert that.
 # Verified against the Claude Code 2.1.222 bundle: Nvy=5000 and $vy=25000 are literals with no
 # context-window scaling. Truncation is DESTRUCTIVE — the shortened text is written back to the
 # registry, so a second compaction cannot recover the tail; only re-reading from disk can.
@@ -291,8 +293,9 @@ def check_compaction_budget(skill_md_text):
         f"limit that survives auto-compaction. Everything after roughly line {cut_line} is dropped "
         f"once a session compacts, and the truncation is written back, so a second compaction cannot "
         f"recover it — only re-reading the file from disk can. This is a CHARACTER budget: measure "
-        f"with `wc -m` (not `wc -c`, which counts bytes, and not a tokenizer, which reads ~26% low on "
-        f"technical markdown). To fix, move whole phases into references/ rather than trimming prose.",
+        f"with `wc -m` (not `wc -c`, which counts bytes, and not a tokenizer, which measures a unit "
+        f"the budget never consults and reads ~35% high here). To fix, move whole phases into "
+        f"references/ rather than trimming prose.",
         "SKILL.md",
     ))
     return findings

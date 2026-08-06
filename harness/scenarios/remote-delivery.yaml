@@ -16,7 +16,7 @@ name: remote-delivery
 # non-deterministic LLM-authored gates, and a binary .skill artifact). CI only load-checks this file
 # via `record --dry-run`; a human runs it on demand. Never gate a PR on it.
 #
-# NEEDS cowork-harness >= 1.14.0 for `lane:` (>= 1.16.0 is what this repo pins). On an older CLI
+# NEEDS cowork-harness >= 1.14.0 for `lane:` (>= 1.19.0 is what this repo pins). On an older CLI
 # this scenario does not load at all — it is NOT silently treated as `lane: local`.
 session: ../sessions/skill.yaml
 lane: remote                   # the delivery contract under test
@@ -53,8 +53,32 @@ assert:
            it vaguely."
   - max_cost_usd: 12.0
   - max_tokens: 2000000
-  # 1.16.0's `undelivered_deliverables` WARN is lane-aware: on `lane: remote` every produced file
-  # counts as undelivered because the lane serves no delivery tool at all, so this scenario would
-  # emit that warning on every run regardless of behaviour. That's known structural noise for this
-  # lane, not a signal — suppress it here rather than let it obscure a real regression elsewhere.
-  - allow_undelivered_deliverables: true
+  # NO `allow_undelivered_deliverables` here, deliberately — and note this reverses an earlier
+  # decision taken against 1.16.0 behaviour. Back then the WARN fired on every remote run regardless
+  # of what the skill did (the `presentedFiles` arm is structurally always empty on a lane that
+  # serves no delivery tool), so suppressing it removed pure noise. 1.17.0 fixed that: a
+  # `deliveryObservable()` predicate now gates the signal, and the sibling `delivery_unobservable`
+  # WARN states the gap honestly instead of guessing.
+  #
+  # The key's meaning changed with it. On `lane: remote` it ALSO suppresses `delivery_unobservable`,
+  # so asserting it now means "I accept that delivery is unverifiable here" — which, in the one
+  # scenario whose entire purpose is the delivery contract, would silence the most honest thing the
+  # harness can tell us.
+  #
+  # Precisely: on this lane only ONE of the pair can fire. `isDeliveryEvidenceUsable` returns false
+  # when the lane is remote, so `undelivered_deliverables` is unreachable here (the harness's own
+  # source marks that arm UNREACHABLE). What remains is `delivery_unobservable`, and its conditions
+  # — remote lane, workspace files present, at least one non-input file — do not vary with skill
+  # behaviour, so it is a CONSTANT on every passing run, not a signal. It is warn-only and cannot
+  # fail the run. We leave it audible not because it discriminates but so the coverage gap stays on
+  # the record instead of being papered over by a modifier that now means something stronger.
+  #
+  # WHY NO `file_exists` FOR THE `.skill`, despite the load-time rejection message recommending
+  # exactly that: `file_exists` resolves a LITERAL path under the work root (`containedPath`) — it
+  # does not glob, and no glob-capable existence key exists in the assertion set. Both the skill's
+  # name and its output directory are model-chosen here, and *choosing a user-reachable location is
+  # the thing under test*; pinning either in the prompt to make a literal path assertable would
+  # delete the behaviour being measured. Known residual weakness, stated rather than hidden: rubric
+  # item 1 ("packaged the skill and produced a .skill file") is an action claim the judge can only
+  # read narration about, so a run that says it packaged and did not would grade green on that item.
+  # Fixing it needs a glob-capable existence assertion the harness does not currently offer.
