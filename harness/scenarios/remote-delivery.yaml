@@ -41,14 +41,22 @@ assert:
   # (an explicit "no such tool exists" statement) — it would red a correct run and grade identically
   # on a broken one. The gradeable signal on this lane is *where the file ended up and whether that
   # location was communicated*, not whether a tool was invoked.
-  # STILL NOT OBSERVED ON A LIVE RUN — this encodes what the delivery rule requires, not a verified
-  # pass. A first red is ambiguous between a real regression and an over-strict assertion;
-  # investigate before weakening it.
+  # OBSERVED PASSING (2/2 rubric claims) — but read what that does and does not mean, because this
+  # is the assertion most likely to be over-read.
   #
-  # Note the asymmetry, because it is easy to read the sibling scenario's green as covering this one:
-  # `create-skill.yaml` verified the delivery contract on the LOCAL lane (2026-08-27/28, twice). This
-  # scenario covers the REMOTE lane, where location delivers nothing and `present_files` is not
-  # served — a different contract, still unverified. The local green says nothing about it.
+  # What passed: the GRADEABLE signal — the agent wrote the .skill to an explicitly stated,
+  # user-reachable location and told the user where. Judged by rubric.
+  # What is still NOT measured: whether anything reached the user. `delivery_unobservable` fires on
+  # every run here — nothing is delivered by location on this lane, and the harness models no remote
+  # delivery tool (production uses the agent-native SendUserFile). The run's delivery behaviour is
+  # UNMEASURED, not clean. That warning is deliberately not suppressed: `allow_undelivered_deliverables`
+  # would silence it, and in the one scenario whose whole purpose is the delivery contract that would
+  # mean "I accept this is unverifiable" — the most honest thing the harness can say here.
+  #
+  # So this green is weaker than its sibling's. `create-skill.yaml` verifies the LOCAL lane with
+  # evidence (`present_files_called`, RunResult.presentedFiles). This verifies that the skill BEHAVES
+  # as the rule requires on the remote lane; it cannot verify the delivery landed. Do not read either
+  # green as covering the other lane.
   # COVERAGE GAP, and this scenario is where it bites (harness/README.md § "Known coverage gap:
   # script output paths"): `containedPath` blocks `file_exists`/`user_visible_artifact`/
   # `computer_links_resolve` from ever seeing a stray bash write, so the exposed assertion classes

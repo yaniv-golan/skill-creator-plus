@@ -179,9 +179,12 @@ scenario file (`record --dry-run`); a human runs it on demand:
 cowork-harness run harness/scenarios/remote-delivery.yaml
 ```
 
-**`create-skill.yaml` is verified live** (passed at `container`; `remote-delivery.yaml` is not — see
-its header). Guards matter as much as assertions here: a run can pass all eight asserts and still
-fail on `outputs-delete` or `host-path`, which is how this suite has actually earned its cost.
+**All three scenarios have passed live**, but not with equal force. `create-skill.yaml` verifies the
+local-lane delivery contract with *evidence* (`present_files_called`). `remote-delivery.yaml` passes
+a *rubric* — on `lane: remote` nothing is delivered by location and the harness models no remote
+delivery tool, so `delivery_unobservable` fires on every run and delivery there is unmeasured rather
+than clean. Guards matter as much as assertions: a run can pass every assert and still fail on
+`outputs-delete` or `host-path`, which is how this suite has actually earned its cost.
 
 ### Known coverage gap: script output paths
 
