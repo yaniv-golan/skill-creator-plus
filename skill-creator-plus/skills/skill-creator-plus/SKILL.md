@@ -4,7 +4,7 @@ description: Create, test, evaluate, and iteratively improve Claude skills. Use 
 license: MIT
 metadata:
   author: Yaniv Golan
-  version: "0.9.0"
+  version: "0.10.0"
 ---
 
 # Skill Creator
@@ -123,7 +123,7 @@ Skills use a three-level loading system:
 These word counts are approximate and you can feel free to go longer if needed.
 
 **Key patterns:**
-- Keep SKILL.md under 500 lines; if you're approaching this limit, add an additional layer of hierarchy along with clear pointers about where the model using the skill should go next to follow up. This is mechanical, not stylistic: after auto-compaction Claude re-attaches each invoked skill truncated to **19,900 characters**, and the truncation is **written back** — a second compaction cannot recover the tail. Measure the skill you're authoring with `wc -m` (characters — not bytes, not tokens). Front-load the load-bearing instructions. See `references/official-guide-patterns.md` (SKILL.md Size) for the mechanism and the two ways a skill can lose content entirely.
+- Keep SKILL.md under 500 lines; if you're approaching this limit, add an additional layer of hierarchy along with clear pointers about where the model using the skill should go next to follow up. This is mechanical, not stylistic: after auto-compaction Claude re-attaches each invoked skill truncated to **19,900 characters**, and usually writes the truncation **back** — a second compaction cannot recover the tail. Measure the skill you're authoring with `wc -m` (characters — not bytes, not tokens). Front-load the load-bearing instructions. See `references/official-guide-patterns.md` (SKILL.md Size) for the mechanism and the two ways a skill can lose content entirely.
 - Reference files clearly from SKILL.md with guidance on when to read them
 - For large reference files (>300 lines), include a table of contents
 
@@ -231,7 +231,7 @@ See `references/schemas.md` for the full schema (including the `assertions` fiel
 
 This section is one continuous sequence — don't stop partway through. Do NOT use `/skill-test` or any other testing skill.
 
-Put results in `<skill-name>-workspace/`. **Place it somewhere the user can see and that you can write to — never as a sibling to the skill directory.** On a plugin or marketplace install the skill lives in a read-only cache, so a sibling path is unwritable; the agent then falls back to a scratchpad the user never sees, and on a remote Cowork session that scratchpad is reclaimed when the session ends, destroying the generated skill and every eval result with it. If you're unsure what's user-visible, ask, or use the same location you would deliver a finished file to. Within the workspace, organize results by iteration (`iteration-1/`, `iteration-2/`, etc.) and within that, each test case gets a directory named for what it tests (e.g. `pdf-extraction/`, `multi-page-form/` — Step 1 explains the naming). Don't create all of this upfront — just create directories as you go.
+Put results in `<skill-name>-workspace/`. **Put it somewhere user-visible and writable — never as a sibling to the skill directory.** In desktop Cowork your **file tools** already sit in the outputs directory: use a bare relative path, never an `outputs/` prefix, which hides it. Your **shell** does not, so resolve the workspace once to an absolute `<abs-workspace>` and use that in every shell command and sub-agent prompt. On a plugin or marketplace install the skill directory is read-only, so a sibling path silently falls back to a scratchpad the user never sees — and on remote Cowork that is destroyed at session end. If you're unsure, ask. Organize it by iteration (`iteration-1/`, `iteration-2/`), and within that one directory per test case named for what it tests (`pdf-extraction/`, `multi-page-form/` — Step 1 explains the naming). Create directories as you go.
 
 ### Step 1: Spawn all runs (with-skill AND baseline) in the same turn
 
@@ -244,7 +244,7 @@ Execute this task:
 - Skill path: <path-to-skill>
 - Task: <eval prompt>
 - Input files: <eval files if any, or "none">
-- Save outputs to: <workspace>/iteration-<N>/eval-<ID>/with_skill/outputs/
+- Save outputs to: <abs-workspace>/iteration-<N>/eval-<ID>/with_skill/outputs/
 - Outputs to save: <what the user cares about — e.g., "the .docx file", "the final CSV">
 - Also write outputs/user_notes.md: anything you were unsure about, workarounds you used, or things a human should review (write "none" if nothing)
 - Also write outputs/metrics.json: {"total_tool_calls": <n>, "errors_encountered": <n>} — your best count of tool calls made and errors hit
@@ -252,7 +252,7 @@ Execute this task:
 
 **Baseline run** (same prompt, but the baseline depends on context):
 - **Creating a new skill**: no skill at all. Same prompt, no skill path, save to `without_skill/outputs/`, with the same user_notes.md and metrics.json instructions.
-- **Improving an existing skill**: the old version. Before editing, snapshot the skill (`cp -r <skill-path> <workspace>/skill-snapshot/`), then point the baseline subagent at the snapshot. Save to `old_skill/outputs/`.
+- **Improving an existing skill**: the old version. Before editing, snapshot the skill (`cp -r <skill-path> <abs-workspace>/skill-snapshot/`), then point the baseline subagent at the snapshot. Save to `old_skill/outputs/`.
 
 Write an `eval_metadata.json` for each test case (assertions can be empty for now). Give each eval a descriptive name based on what it's testing — not just "eval-0". Use this name for the directory too. If this iteration uses new or modified eval prompts, create these files for each new eval directory — don't assume they carry over from previous iterations.
 
@@ -293,26 +293,28 @@ Once all runs are done:
 
 1. **Grade each run** — spawn a grader subagent (or grade inline) that reads `agents/grader.md` and evaluates each assertion against the outputs. Save results to `grading.json` in each config directory (e.g., `eval-1/with_skill/grading.json`). The grading.json expectations array must use the fields `text`, `passed`, and `evidence` (not `name`/`met`/`details` or other variants) — the viewer depends on these exact field names. For assertions that can be checked programmatically, write and run a script rather than eyeballing it — scripts are faster, more reliable, and can be reused across iterations. If a check is also something a user of the finished skill would benefit from running themselves (e.g., a `validate_X.py` or `smoke_test_X.sh`), bundle it in the skill's `scripts/` directory so the same code serves both the eval grader and end users.
 
+**Every shell command below uses `<abs-workspace>` — the absolute path you resolved once at the start of this section.** Shell calls are independent — no cwd carries between them — and a relative path resolves against the shell's own working directory, which under Cowork is not where your file tools write. A `cd` in one call does not persist to the next, so it cannot substitute for this. The same applies to any path you put in a sub-agent dispatch prompt.
+
 2. **Aggregate into benchmark** — run the aggregation script from the skill-creator directory:
    ```bash
-   python -m scripts.aggregate_benchmark <workspace>/iteration-N --skill-name <name>
+   python -m scripts.aggregate_benchmark <abs-workspace>/iteration-N --skill-name <name>
    ```
    This produces `benchmark.json` and `benchmark.md` with pass_rate, time, and tokens for each configuration, with mean ± stddev and the delta. If generating benchmark.json manually, see `references/schemas.md` for the exact schema the viewer expects, and order each with_skill run before its baseline counterpart in the `runs` array.
 
-3. **Do an analyst pass** — read the benchmark data and surface patterns the aggregate stats might hide. See `agents/analyzer.md` (the "Analyzing Benchmark Results" section) for what to look for — things like assertions that always pass regardless of skill (non-discriminating), high-variance evals (possibly flaky), and time/token tradeoffs. Save the notes to `<workspace>/iteration-N/notes.json`, then merge them into the benchmark: `python -m scripts.aggregate_benchmark <workspace>/iteration-N --notes <workspace>/iteration-N/notes.json` — otherwise the viewer's "Analysis Notes" section stays empty.
+3. **Do an analyst pass** — read the benchmark data and surface patterns the aggregate stats might hide. See `agents/analyzer.md` (the "Analyzing Benchmark Results" section) for what to look for — things like assertions that always pass regardless of skill (non-discriminating), high-variance evals (possibly flaky), and time/token tradeoffs. Save the notes to `<abs-workspace>/iteration-N/notes.json`, then merge them into the benchmark: `python -m scripts.aggregate_benchmark <abs-workspace>/iteration-N --notes <abs-workspace>/iteration-N/notes.json` — otherwise the viewer's "Analysis Notes" section stays empty.
 
 4. **Launch the viewer** with both qualitative outputs and quantitative data:
    ```bash
    nohup python <skill-creator-path>/eval-viewer/generate_review.py \
-     <workspace>/iteration-N \
+     <abs-workspace>/iteration-N \
      --skill-name "my-skill" \
-     --benchmark <workspace>/iteration-N/benchmark.json \
+     --benchmark <abs-workspace>/iteration-N/benchmark.json \
      > /dev/null 2>&1 &
-   echo $! > <workspace>/iteration-N/viewer.pid
+   echo $! > <abs-workspace>/iteration-N/viewer.pid
    ```
-   For iteration 2+, also pass `--previous-workspace <workspace>/iteration-<N-1>`.
+   For iteration 2+, also pass `--previous-workspace <abs-workspace>/iteration-<N-1>`.
 
-   **Cowork / headless environments:** If `webbrowser.open()` is not available or the environment has no display, use `--static <output_path>` to write a standalone HTML file instead of starting a server. When the user clicks "Submit All Reviews", the viewer displays the raw JSON in a copyable textarea (no file is downloaded — blob downloads blank the page in embedded viewers). The user pastes the JSON directly into the chat, or saves it themselves into the workspace as `feedback.json`. **Important: In static mode, you cannot read feedback.json from disk** — see `references/environments.md` (Cowork section) for how to handle the feedback loop.
+   **Cowork / headless environments:** If `webbrowser.open()` is not available or the environment has no display, use `--static <absolute-output-path>` to write a standalone HTML file instead of starting a server. When the user clicks "Submit All Reviews", the viewer displays the raw JSON in a copyable textarea (no file is downloaded — blob downloads blank the page in embedded viewers). The user pastes the JSON directly into the chat, or saves it themselves into the workspace as `feedback.json`. **Important: In static mode, you cannot read feedback.json from disk** — see `references/environments.md` (Cowork section) for how to handle the feedback loop.
 
 Note: please use generate_review.py to create the viewer; there's no need to write custom HTML.
 
@@ -352,7 +354,7 @@ Empty feedback means the user thought it was fine. Focus your improvements on th
 Kill the viewer server when you're done with it:
 
 ```bash
-kill "$(cat <workspace>/iteration-N/viewer.pid)" 2>/dev/null && rm -f <workspace>/iteration-N/viewer.pid
+kill "$(cat <abs-workspace>/iteration-N/viewer.pid)" 2>/dev/null && rm -f <abs-workspace>/iteration-N/viewer.pid
 ```
 
 (The PID goes to a file because each bash invocation is a fresh shell — a `VIEWER_PID=$!` variable set at launch time is unset by the time you kill it, so the kill silently no-ops and the server keeps running. If the PID file is missing, `pkill -f generate_review.py` is the fallback.)
@@ -433,7 +435,7 @@ Before packaging, run through the quick checklist from `references/official-guid
 
 You can run `python -m scripts.quick_validate <path-to-skill>` to check some of these automatically.
 
-Also run `python -m scripts.check_portability <path-to-skill> --target <claude-code|claude-ai|cowork|all>` — a stdlib-only cross-runtime linter (no dependencies, runs in any environment). It flags constructs that break on the skill's target runtime: an over-cap `description`, subagent use (absent on Claude.ai), `claude` CLI use (absent on Claude.ai), browser/server assumptions (no display in Cowork/Claude.ai), third-party Python imports outside the stack Cowork preinstalls (each costs a `pip install` on every run, and a locked-down org can deny the egress that install needs), a `SKILL.md` over the 19,900-character post-compaction cap (`compaction-truncation-risk`), a delivery tool named for only one Cowork lane (`delivery-tool-single-lane` — phrase delivery by outcome, naming no tool; naming both, capability-conditionally, is also acceptable and stays clean), and the deliverable itself gated on a delivery tool's availability (`delivery-conditional-deliverable`). Pass `--target` matching where the skill will run; `--strict` to gate.
+Also run `python -m scripts.check_portability <path-to-skill> --target <claude-code|claude-ai|cowork|all>` — a stdlib-only cross-runtime linter (no dependencies, runs in any environment). It flags constructs that break on the skill's target runtime: an over-cap `description`, subagent use (absent on Claude.ai), `claude` CLI use (absent on Claude.ai), browser/server assumptions (no display in Cowork/Claude.ai), third-party Python imports outside the stack Cowork preinstalls (each costs a `pip install` on every run, and a locked-down org can deny the egress that install needs), a `SKILL.md` over the 19,900-character post-compaction cap (`compaction-truncation-risk`), a workspace placed under a relative `outputs/` path, which nests a second outputs level and hides it (`outputs-prefix-relative`), a delivery tool named for only one Cowork lane (`delivery-tool-single-lane` — phrase delivery by outcome, naming no tool; naming both, capability-conditionally, is also acceptable and stays clean), and the deliverable itself gated on a delivery tool's availability (`delivery-conditional-deliverable`). Pass `--target` matching where the skill will run; `--strict` to gate.
 
 If `cowork-harness` is installed, also run its two token-free static checks — `cowork-harness lint-skill --strict <skill-dir>` and `cowork-harness analyze-skill --strict <skill-dir>`. They're cheap and safe on any skill, and catch runtime bugs the checklist can't (host-path leaks, interactive-artifact write-backs lost under Cowork); their findings matter most for **Cowork-targeted** skills. Optional — skip silently if the tool isn't installed. See `references/environments.md` § *Testing Cowork-targeted skills with cowork-harness*.
 
@@ -445,9 +447,9 @@ Package the final skill into a distributable `.skill` file (run from the skill-c
 python -m scripts.package_skill <path/to/skill-folder> [output-dir]
 ```
 
-`output-dir` is optional and defaults to the skill folder's parent — pass the workspace or outputs directory explicitly when you want the artifact elsewhere.
+`output-dir` is optional and defaults to the skill folder's parent, which is unwritable on a plugin or marketplace install — pass the destination explicitly, as an absolute path when a script will consume it.
 
-Write the `.skill` file to a stated path — the workspace, or its outputs directory if it has one — never to cwd. Then present it: scan your available tools for one whose description says it sends or presents files to the user, and call it — the file is not delivered until you do, and stating the path is not a substitute. Only if no such tool exists, the path you already stated is the presentation. See `references/environments.md` → *Delivering files to the user* for why this two-step rule exists and which tool serves which surface. Packaging itself works everywhere Python does — never make it conditional on a presentation tool.
+Write the `.skill` file to a path you name in your reply — the workspace. (In Cowork your working directory already *is* the user-visible outputs directory, so a bare filename is correct there; never write it to an unnamed location.) Then present it: scan your available tools for one whose description says it sends or presents files to the user, and call it — the file is not delivered until you do, and stating the path is not a substitute. Only if no such tool exists, the path you already stated is the presentation. See `references/environments.md` → *Delivering files to the user* for why this two-step rule exists and which tool serves which surface. Packaging itself works everywhere Python does — never make it conditional on a presentation tool.
 
 ---
 

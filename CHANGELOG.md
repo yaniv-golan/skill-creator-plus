@@ -2,6 +2,31 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.10.0] - 2026-08-27
+
+Path guidance under Cowork was wrong in four places, and one of them re-created the exact failure it was written to prevent. Every claim below was re-verified first-party against Claude Code 2.1.247.
+
+### Fixed
+- **The workspace instruction told agents to hide the workspace.** `references/environments.md` said to put it "under the outputs directory" — but in Cowork the agent's working directory already *is* that directory, so `outputs/<name>-workspace/` resolves to `outputs/outputs/…` and stops appearing in the user's Working-folder panel. The write succeeds and the tool reports success, so nothing fails loudly. It also said a connected folder could be named relatively; only an absolute path reaches one, and a relative name silently creates a decoy directory inside outputs instead.
+- **The eval loop wrote its own results where nobody could reach them.** Seven shell commands in `SKILL.md` passed relative `<workspace>/…` paths — the benchmark, the analyst notes, the viewer and its PID file. Under Cowork the shell starts in the session root, not the outputs directory, so those resolved into VM-private space. The `viewer.pid` round-trip was doubly broken: shell calls carry no working directory between them, so `cd`-then-use-relative cannot work either. Paths are now resolved once and passed absolute.
+- **`SKILL.md`'s packaging step said "never to cwd"**, which in Cowork steers away from the only user-visible location there is.
+- **`run_loop.py --report` defaulted to the system temp directory** whenever `--results-dir` was given, and `references/description-optimization.md` instructed a `/tmp` write followed by `open`. Both are unreachable under a sandboxed runtime. The report now lands beside `--results-dir` when there is one (temp remains the fallback when there isn't), and the anchor directory is created before the first write.
+- **`official-guide-patterns.md` stated two conditional compaction behaviours as unconditional.** Truncation write-back and combined-cap zeroing are both skipped when a skill's content is already in the conversation body, and a skill carried as an attachment is not re-attached, truncated or zeroed at all. The same overstatement was in `compaction-truncation-risk`'s message.
+
+### Added
+- **The bash-vs-file-tool path split, stated for the first time.** `Read`/`Write`/`Edit` start in the outputs directory; the shell starts in the session root, and anything outside `/sessions/<id>/mnt/` — `/tmp` included — reaches neither the user nor the file tools. No relative path is correct for both families, so bundled scripts take absolute paths. Also documented: shell calls carry no cwd between them; a sub-agent cannot resolve a connected folder's mount name from its own prompt, so a dispatching skill must pass the resolved path; and `Write`'s result echoes the path it was *given*, not a resolved one.
+- **`outputs-prefix-relative` lint rule** (warning, Cowork-only). Flags a workspace placed under a relative `outputs/` path. Deliberately narrow — it matches only paths resolving to a `-workspace` directory, because a wider rule has to guess what base a bare `outputs/` is relative to, and guessing is how a rule ends up firing on correct text.
+- **Two script-authoring conventions** in `official-guide-patterns.md`: accept absolute output paths and echo back the resolved one, and phrase a sandbox path as the shell's location or a script's argument rather than as a file-tool write target — the latter is a real denial, and static checkers flag it.
+- **A known-coverage-gap note in `harness/README.md`.** No harness tier reproduces the cwd split, so a green dogfood does not certify script output paths. `containedPath` prevents a stray write from satisfying `file_exists`, `user_visible_artifact` or `computer_links_resolve`; the exposure is `semantic_matches`, which is what `remote-delivery.yaml` grades on. Also records two probe-method traps: `audit.jsonl` rewrites VM paths and will corrupt a path comparison, and a model may silently prepend `cd` to the command under test.
+
+### Changed
+- **One edit touches text an upstream findings note lists as already correct.** The two-step delivery bullet in `references/environments.md` said a tool-mediated write "has its own working directory" without saying which — read alongside the new path-split bullet twenty lines above, that was ambiguous in the one place ambiguity is expensive. It now cross-references the split. The two ordered delivery steps themselves are unchanged.
+- **The post-compaction cap is re-verified at 19,900 characters and now documented as derived arithmetic.** The value is unchanged; what changed is that it is no longer presented as a literal you could grep for. It is `5,000 tokens × 4` minus a 100-character truncation marker — 98 visible characters plus two leading newlines, a detail that makes the marker easy to mis-measure as 98 and the cap as 19,902. The 5,000 and 25,000 constants are unchanged across 2.1.222, 2.1.246 and 2.1.247: three builds, three minified namings, identical values.
+- **The chars-per-token divisor is documented as derived, not binary-verified.** The truncator's `× 4` implies the model, but the size function itself could not be resolved. The character budget, which is what the linter gates on, is unaffected.
+- **The combined 25,000-token budget is consumed by post-truncation sizes**, so a large skill contributes its capped 5,000 tokens rather than its full length. Read with the most-recently-invoked-first ordering, this explains a counter-intuitive outcome: the skill that vanishes is rarely the big one.
+- **`references/environments.md` no longer identifies the session scratchpad as `CLAUDE_CODE_TMPDIR` / `CLAUDE_TMPDIR`.** That variable is real — a per-uid temp-directory override defaulting to `/tmp` — but it is not the scratchpad. The guidance is now stated by outcome: a deliverable goes to a bare filename or an absolute outputs path, and anywhere else is a temporary file by definition.
+- **The Cowork section no longer inherits the Claude.ai section's `/tmp` staging steps.**
+
 ## [0.9.0] - 2026-08-06
 
 Every Claude-runtime claim in this repo was re-verified against the shipping Claude Code binary. Four were wrong and are corrected below.

@@ -8,7 +8,7 @@ name: create-skill
 # mean shipping an un-scannable blob and broadening the verify-cassettes allowlist beyond the single
 # sanctioned `claude.com` entry. It's also non-deterministic (LLM-authored gates). So run it live
 # (or in the deferred nightly lane), not on the token-free replay lane. Verified locally: records +
-# replays ✓, host-path guard ✓. See harness/README.md § "Dogfood findings".
+# replays ✓, host-path guard ✓. See harness/README.md § "What a live run checks".
 #
 # Why on_unanswered: llm (not scripted answers): the skill's Capture-Intent gates are
 # LLM-authored and REWORDED every run (observed: "large or messy CSVs" -> "larger or messier
@@ -17,6 +17,11 @@ name: create-skill
 # assertions below (which only require the skill to run and produce a SKILL.md), so per the harness
 # guidance we let an LLM decider answer them. The recorded cassette is flagged NON-DETERMINISTIC
 # but replays byte-deterministically — fine for the replay regression lane.
+#
+# COVERAGE GAP (see harness/README.md § "Known coverage gap: script output paths"): a green run here
+# does NOT certify that a bundled script's output path reached the user. No tier reproduces
+# production's bash-vs-file-tool cwd split; `container` persists the write where production
+# discards it.
 session: ../sessions/skill.yaml
 fidelity: container            # required for transcript_no_host_path (fails by design on protocol/hostloop)
 on_unanswered: llm

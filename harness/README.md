@@ -166,7 +166,43 @@ scenario file (`record --dry-run`); a human runs it on demand:
 cowork-harness run harness/scenarios/remote-delivery.yaml
 ```
 
+### Known coverage gap: script output paths
+
+**A green run here does not certify that a bundled script's output reached the user.** In production
+under host-loop Cowork, `mcp__workspace__bash` starts at the session root `/sessions/<id>`, while the
+file tools start in the outputs directory — so a relative path written by a *script* lands somewhere
+neither the user nor the file tools can reach, silently. No harness tier reproduces that split.
+Measured, one run per tier (2026-08-27), `printf 'RELMARK\n' > rel.txt; pwd; readlink -f rel.txt`:
+
+```
+container : cwd = /sessions/<id>             -> PERSISTS to the run dir as session/rel.txt
+hostloop  : cwd = /sessions/<id>/mnt/outputs -> mnt/outputs/rel.txt     [pre-fix harness; since changed]
+```
+
+`container` puts the write in the right *location* with the wrong *semantics*: it persists where
+production discards it. This suite is container-only, so that is the row that applies to us.
+
+**What a stray bash write can actually fake, precisely:** `containedPath` rejects anything resolving
+to `..` or above the work root, so `file_exists`, `user_visible_artifact` and `computer_links_resolve`
+cannot reach such a file at all. The exposure is `semantic_matches` and `no_lost_write_back`, which
+grade the authored set. So the defensible claim is narrow: **a rubric like "the report was written"
+grades TRUE on a file production would discard.** `remote-delivery.yaml` grades entirely via
+`semantic_matches`, so it is the scenario this actually bites.
+
+Blocked on two upstream `cowork-harness` ship items that land together; this repo is the named first
+validation target. Until they land, do not read a green dogfood as covering script paths.
+
 ## Notes / landmines
+
+- **Read agent transcripts, not `audit.jsonl`, for any path-shaped comparison.** `audit.jsonl` is a
+  translated projection that rewrites VM paths to host equivalents, so it will quietly corrupt a
+  path claim. Use the transcripts under `.claude/projects/`.
+- **A probe can be defeated by the model normalising the thing under test.** A post-fix verification
+  appeared to show the fix had failed because the model had silently prepended
+  `cd /sessions/.../mnt/outputs &&` to the command it was handed; it was caught only by re-checking
+  the clean pre-fix runs. This happened four times in one investigation. Forbid `cd`, command
+  chaining and absolute paths explicitly in the probe prompt, and read the command **actually sent**
+  from `events.jsonl` rather than trusting the tool's output.
 
 - `create-skill.yaml` uses `fidelity: container` — required for `transcript_no_host_path` (it fails
   by design on `protocol`/`hostloop`). A scenario using `no_scratchpad_leak` must also be `container`

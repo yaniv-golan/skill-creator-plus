@@ -16,6 +16,8 @@ You receive these parameters in your prompt:
 - **transcript_path**: Path to the execution transcript (markdown file)
 - **outputs_dir**: Directory containing output files from execution
 
+Every *path* parameter above arrives **resolved and absolute** — use each exactly as given, and write grading output only inside the `outputs_dir` you were handed. Don't rebuild a path from a directory name or write anything relative to "here". The shell's working directory is not the one the file tools use, so a relative path can resolve somewhere neither the user nor the agent that dispatched you can reach. If a path you need is missing, ask for it rather than guessing.
+
 ## Process
 
 ### Step 1: Read the Transcript

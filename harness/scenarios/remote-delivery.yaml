@@ -44,6 +44,13 @@ assert:
   # NOT YET OBSERVED ON A LIVE RUN — this encodes what the delivery rule requires, not a verified
   # pass. A first red is ambiguous between a real regression and an over-strict assertion;
   # investigate before weakening it.
+  # COVERAGE GAP, and this scenario is where it bites (harness/README.md § "Known coverage gap:
+  # script output paths"): `containedPath` blocks `file_exists`/`user_visible_artifact`/
+  # `computer_links_resolve` from ever seeing a stray bash write, so the exposed assertion classes
+  # are `semantic_matches` and `no_lost_write_back` — and this scenario grades entirely via the
+  # former. Precisely: a rubric item like "wrote the file to a stated location" grades TRUE on a
+  # file that production would discard. Narrow claim, deliberately: not "artifact assertions can be
+  # faked", which is false and was withdrawn upstream.
   - semantic_matches:
       rubric:
         - "The agent packaged the skill and produced a .skill file."

@@ -410,7 +410,11 @@ def main() -> None:
     )
     parser.add_argument(
         "--static", "-s", type=Path, default=None,
-        help="Write standalone HTML to this path instead of starting a server",
+        help="Write standalone HTML to this path instead of starting a server. "
+             "Pass an ABSOLUTE path: this script runs under the shell, whose working "
+             "directory may differ from the calling agent's, so a relative path can land "
+             "somewhere neither the user nor the agent can reach. The resolved path is "
+             "printed on success.",
     )
     args = parser.parse_args()
 
@@ -443,7 +447,7 @@ def main() -> None:
         html = generate_html(runs, skill_name, previous, benchmark, is_static=True)
         args.static.parent.mkdir(parents=True, exist_ok=True)
         args.static.write_text(html)
-        print(f"\n  Static viewer written to: {args.static}\n")
+        print(f"\n  Static viewer written to: {args.static.resolve()}\n")
         sys.exit(0)
 
     # Kill any existing process on the target port

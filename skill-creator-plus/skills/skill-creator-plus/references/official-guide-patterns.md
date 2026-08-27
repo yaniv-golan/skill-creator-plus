@@ -444,6 +444,10 @@ Not everything belongs in a script. Use this framework to decide what should be 
 
 A script that works fine for a human can be unusable for an agent. When an agent runs your script, it reads stdout and stderr to decide what to do next — design choices that seem cosmetic to a human are load-bearing for agents. Apply these conventions to every script you bundle.
 
+**Accept absolute output paths, and echo back the absolute path you actually wrote.** A script runs under the shell, whose working directory is not the one the calling agent's file tools use. A relative output path can land somewhere neither the user nor the agent can reach, and the script will report success anyway. Resolve the path and print it — a bundled script is the only component that can honestly report where the bytes went, because `Write`'s own result echoes the path it was *given*, not a resolved one. Related: shell calls are independent, with no cwd carried between them, so a `cd` in one call cannot set up state for the next.
+
+**When your skill text names a sandbox path, phrase it as the shell's location or a script's argument — never as a file-tool write target.** Static checkers flag prose describing a file-tool write/save/read/edit to a VM path (that operation really is denied), while "the shell starts in `<path>`" or "pass `<path>` to the script" is both correct and clean. A skill that gets this backwards fails its own author's lint.
+
 **Non-interactive only.** Agents run in non-interactive shells. A script that blocks on a TTY prompt, password input, or confirmation menu hangs forever. Accept all input via flags, environment variables, or stdin — never `input()`, `read`, or interactive selection libraries. If a required value is missing, fail fast with a clear error stating what's needed.
 
 ```
@@ -539,11 +543,11 @@ Don't include README.md inside the skill folder. All documentation goes in SKILL
 
 **Why the limit is mechanical, not stylistic:** after auto-compaction, Claude re-attaches the most recent invocation of each skill, keeping the **first 5,000 tokens of each** under a **combined 25,000-token** budget, most-recent-first. So everything past ~5,000 tokens in a SKILL.md is the part a compacted session silently loses — and it's the tail, not the part you'd choose to drop. Put the load-bearing instructions early and push detail into `references/`, which is re-read on demand rather than truncated.
 
-**The budget is characters, not tokens — measure it with `wc -m`.** The cap is documented as "5,000 tokens," but the runtime computes the size of a skill's content as `Math.round(chars / 4)`, a character heuristic rather than a tokenizer. So the effective per-skill limit is:
+**The budget is characters, not tokens — measure it with `wc -m`.** The cap is documented as "5,000 tokens," but the runtime sizes a skill's content with a character heuristic rather than a tokenizer — `Math.round(chars / 4)` (**derived**: the truncator slices to `tokens × 4`, which implies the 4-chars-per-token model, but the size function itself could not be resolved in the bundle). Both figures below are therefore derived arithmetic, not literals you can grep for. The effective per-skill limit is:
 
 | Documented | What the runtime actually enforces |
 |---|---|
-| 5,000 tokens per skill | **19,900 characters** (5,000 × 4, minus a 100-char truncation marker) |
+| 5,000 tokens per skill | **19,900 characters** (5,000 × 4, minus the 100-char truncation marker — 98 visible characters plus two leading newlines) |
 | 25,000 tokens combined | **100,000 characters** across all invoked skills |
 
 ```bash
@@ -554,10 +558,12 @@ wc -m SKILL.md          # characters — the unit that matters
 
 **Do not measure this with a real tokenizer.** `count_tokens` answers a different question, and the two units diverge widely on technical markdown — one file measured for this guide came to 13,388 real tokens against 39,696 characters, roughly 2.95 chars/token rather than 4. It is the *character* figure the compaction budget compares against, so a tokenizer reading is not wrong, just irrelevant here — and on technical markdown (~3 chars/token) relying on it overstates the overage by ~35%, erring toward a false red. Prose-heavy content above 4 chars/token would err the other way — which is the reason to measure characters rather than reason about the ratio at all.
 
-**Two ways a skill loses content permanently, neither documented publicly:**
+**Two ways a skill loses content for the rest of a session, neither documented publicly. Both are conditional — the condition is stated with each:**
 
-1. **Truncation is written back to the registry.** When a skill is truncated at re-attachment, the shortened text *replaces* the stored copy. A second compaction in the same session cannot recover the tail — it is gone for the session, not merely un-attached. The file on disk is untouched, so a `Read` still recovers it; nothing else will.
-2. **Combined-cap overflow zeroes a skill outright.** Re-attachment packs skills most-recently-invoked first against the 100,000-char combined budget. A skill that doesn't fit has its stored content set to **empty** and is dropped from every later re-attachment that session. So a session using several large skills can silently lose a smaller one entirely.
+1. **Truncation is written back to the registry.** When a skill is truncated at re-attachment, the shortened text *replaces* the stored copy, so a second compaction in the same session cannot recover the tail. The file on disk is untouched, so a `Read` still recovers it; nothing else will. **Condition:** the write-back is skipped when the skill's content is already present in the conversation body — in that case the stored copy survives intact and the skill is simply omitted from that pass.
+2. **Combined-cap overflow zeroes a skill outright.** Re-attachment packs skills most-recently-invoked first against the combined budget. A skill that doesn't fit has its stored content set to **empty**, and because a zeroed skill is skipped on sight it stays dropped for the rest of the session. **Condition:** the same one — a skill whose content is already in the conversation body is omitted rather than zeroed. Separately, a skill already carried as an attachment is skipped entirely: not re-attached, not truncated, not zeroed.
+
+**The combined budget is consumed by post-truncation sizes**, so a large skill contributes its *capped* 5,000 tokens to the 25,000 total, not its full length. Read that together with the most-recently-invoked-first ordering, because the two only make sense as a pair: more skills fit than you would guess, so the combined cap bites later and less predictably than the per-skill one — and since eviction is least-recently-invoked-first, **the skill that vanishes is rarely the big one.** An author reasoning about size alone will look in the wrong place when a skill goes missing.
 
 Practical consequence: if a skill exceeds the cap, front-load whatever must survive, and state early in the file that the reader should re-read it from disk if a later section appears to be missing. If a skill is over budget, the fix is to move whole phases into `references/` — not to trim prose, which rarely recovers enough.
 

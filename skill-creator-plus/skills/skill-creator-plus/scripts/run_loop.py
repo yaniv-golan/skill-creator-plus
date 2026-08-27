@@ -316,8 +316,8 @@ def main():
                         help="Stop early if test score doesn't improve for this many consecutive iterations.")
     parser.add_argument("--model", required=True, help="Model for improvement")
     parser.add_argument("--verbose", action="store_true", help="Print progress to stderr")
-    parser.add_argument("--report", default="auto", help="Generate HTML report at this path (default: 'auto' for temp file, 'none' to disable)")
-    parser.add_argument("--results-dir", default=None, help="Save all outputs (results.json, report.html, log.txt) to a timestamped subdirectory here")
+    parser.add_argument("--report", default="auto", help="Generate HTML report at this path. Default 'auto' writes it beside --results-dir when that is given, else the system temp dir; 'none' disables. Pass an ABSOLUTE path — this script runs under the shell, whose working directory may differ from the calling agent's.")
+    parser.add_argument("--results-dir", default=None, help="Save all outputs (results.json, report.html, log.txt) to a timestamped subdirectory here. Pass an ABSOLUTE path — this script runs under the shell, whose working directory may differ from the calling agent's.")
     args = parser.parse_args()
 
     eval_set = json.loads(Path(args.eval_set).read_text())
@@ -333,9 +333,19 @@ def main():
     if args.report != "none":
         if args.report == "auto":
             timestamp = time.strftime("%Y%m%d_%H%M%S")
-            live_report_path = Path(tempfile.gettempdir()) / f"skill_description_report_{skill_path.name}_{timestamp}.html"
+            # Default beside the results dir, not the system temp dir: under sandboxed
+            # runtimes (e.g. Cowork) the shell's temp dir is private to the VM and reaches
+            # neither the user nor the agent's file tools. Fall back to temp only if there
+            # is no results dir to anchor to.
+            _anchor = Path(args.results_dir) if args.results_dir else Path(tempfile.gettempdir())
+            live_report_path = _anchor / f"skill_description_report_{skill_path.name}_{timestamp}.html"
         else:
             live_report_path = Path(args.report)
+        # The anchor directory may not exist yet: --results-dir names a directory this script
+        # creates (see below), and an explicit --report may name a path under one. Create it
+        # before writing, or the very first write fails. tempfile.gettempdir() always exists,
+        # which is why this was not needed before the default changed.
+        live_report_path.parent.mkdir(parents=True, exist_ok=True)
         # Open the report immediately so the user can watch
         live_report_path.write_text("<html><body><h1>Starting optimization loop...</h1><meta http-equiv='refresh' content='5'></body></html>")
         webbrowser.open(str(live_report_path))

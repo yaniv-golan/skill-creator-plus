@@ -1,4 +1,6 @@
+import subprocess
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -27,6 +29,34 @@ class SplitTest(unittest.TestCase):
         self.assertTrue(train)
         self.assertTrue(test)
         self.assertEqual(len(train) + len(test), 10)
+
+
+class ResultsDirIsCreatedBeforeWriteTests(unittest.TestCase):
+    """A non-existent --results-dir must not crash before the loop starts.
+
+    Regression pin: the live report is written into the --results-dir anchor, but the directory
+    is created later in main(). The old default (system temp) always existed, so nothing caught
+    it when the default changed. Runs the CLI because the bug lives in main()'s ordering, not in
+    an importable helper.
+    """
+
+    def test_nonexistent_results_dir_does_not_crash_at_startup(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            skill = tmp / "sk"
+            skill.mkdir()
+            (skill / "SKILL.md").write_text("---\nname: sk\ndescription: d\n---\nB\n")
+            eval_set = tmp / "es.json"
+            eval_set.write_text('{"queries": []}')
+            target = tmp / "does" / "not" / "exist"
+            proc = subprocess.run(
+                [sys.executable, "-m", "scripts.run_loop",
+                 "--eval-set", str(eval_set), "--skill-path", str(skill),
+                 "--model", "x", "--results-dir", str(target)],
+                cwd=str(SKILL_ROOT), capture_output=True, text=True, timeout=120,
+            )
+            self.assertNotIn("FileNotFoundError", proc.stderr)
+            self.assertTrue(target.exists(), "the anchor directory was not created before use")
 
 
 if __name__ == "__main__":

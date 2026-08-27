@@ -34,7 +34,7 @@ Present the eval set to the user for review using the HTML template:
    - `__EVAL_DATA_PLACEHOLDER__` → the JSON array of eval items (no quotes around it — it's a JS variable assignment). After serializing, replace `</` with `<\/` in the JSON string to prevent `</script>` in data from breaking the HTML parser.
    - `__SKILL_NAME_PLACEHOLDER__` → the skill's name, HTML-escaped (`&` → `&amp;`, `<` → `&lt;`, `>` → `&gt;`)
    - `__SKILL_DESCRIPTION_PLACEHOLDER__` → the skill's current description, HTML-escaped the same way (these land in HTML, not JS — unescaped `<` breaks the page)
-3. Write to a temp file (e.g., `/tmp/eval_review_<skill-name>.html`) and open it: `open /tmp/eval_review_<skill-name>.html`
+3. Write it to a path you name in your reply — inside the workspace, as an absolute path, e.g. `<abs-workspace>/eval_review_<skill-name>.html`. Don't write it to `/tmp`: under sandboxed runtimes that directory is private to the VM and reaches neither the user nor your file tools. If a display is available you can `open` it; otherwise present the file with whatever tool surfaces files to the user, or state the path.
 4. The user can edit queries, toggle should-trigger, add/remove entries, then click "Export Eval Set"
 5. The file downloads to `~/Downloads/eval_set.json` — check the Downloads folder for the most recent version in case there are multiple (e.g., `eval_set (1).json`)
 

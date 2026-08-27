@@ -10,12 +10,26 @@ python skill-creator-plus/skills/skill-creator-plus/scripts/quick_validate.py sk
 # Cross-runtime portability lint (stdlib-only; --target claude-code|claude-ai|cowork|all)
 cd skill-creator-plus/skills/skill-creator-plus && python -m scripts.check_portability . --target all
 # Rules: desc-over-hard-cap, listing-entry-truncation, listing-desc-drop-risk, subagent-dependency,
-# claude-cli-dependency, browser-display-dependency, thirdparty-import (allowlisted against Cowork's
+# claude-cli-dependency, browser-display-dependency, outputs-prefix-relative (Cowork-only:
+# a workspace under a relative `outputs/` path nests a second outputs level and hides it),
+# thirdparty-import (allowlisted against Cowork's
 # preinstalled stack), delivery-tool-single-lane, delivery-conditional-deliverable,
-# compaction-truncation-risk (SKILL.md over the 19,900-CHARACTER post-compaction cap — exact, not a
-# heuristic: the runtime's "5,000 token" limit is Math.round(chars/4), binary-verified in 2.1.222).
+# compaction-truncation-risk (SKILL.md over the 19,900-CHARACTER post-compaction cap — DERIVED
+# arithmetic (5,000 tokens x 4 minus a 100-char marker: 98 visible chars + two leading
+# newlines), not a literal in the bundle; not a
+# heuristic: the runtime's "5,000 token" limit is sized by a character model, DERIVED as
+# Math.round(chars/4) — the 5,000/25,000 constants are binary-verified across 2.1.222/246/247,
+# but the size function itself was not resolved, so treat the divisor as derived).
 # --strict gates on warnings/errors only; advisories report but never gate (add --strict-advisories
 # to gate on those too). Exit codes: 0 no gating findings, 1 gated, 2 usage error, 3 path not found.
+# NOTE: CI does NOT run check_portability — `.github/workflows/validate.yml` runs
+# quick_validate + unittest only. What actually guards this baseline in CI is the
+# SelfLintTests in tests/test_check_portability.py, which lint the shipped tree. Don't
+# read a green CI as the CLI having gated these rules. Two of those tests enforce what
+# this comment claims: one asserts the finding-id SET is exactly the four below (so a NEW
+# rule id reds CI rather than silently changing the baseline), and one asserts the
+# load-bearing workspace instructions still fall inside SKILL.md's compaction-surviving
+# prefix (they nearly didn't, twice — a version bump and an added clause both push them).
 # Note this skill's own baseline: 4 findings (subagent / claude-CLI / browser deps, all Claude-Code-
 # first by design, plus its own compaction-truncation-risk at ~2.0x cap) — so `--target all` is exit 0,
 # and `--target cowork --strict` is exit 1 on the browser-display warning. A NEW rule id is the

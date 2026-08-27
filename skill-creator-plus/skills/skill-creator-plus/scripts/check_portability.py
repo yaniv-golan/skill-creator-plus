@@ -69,14 +69,25 @@ COWORK_PREINSTALLED = frozenset({
 })
 
 # Post-compaction re-attachment truncates each invoked skill's content to this many CHARACTERS.
-# The runtime sizes skill content as Math.round(chars/4) against a hardcoded 5,000 cap and slices to
-# 5000*4 minus a 100-char truncation marker — so the real limit is characters, not tokens, and a
-# tokenizer reading is the wrong unit — it measures something the budget never consults, and on
+# DERIVED ARITHMETIC, not a literal: the runtime slices to (5,000-token cap x 4) minus the
+# 100-character truncation marker => 19,900. No `19900` appears anywhere in the bundle; don't go
+# looking for one. The marker is `\n\n[... skill content truncated for compaction; use Read on
+# the skill path if you need the full text]` — 98 visible characters PLUS two leading newlines.
+# Measuring only the bracketed text yields 98 and a wrong cap of 19,902; a grep anchored on `[`
+# cannot see the newlines at all. Re-verified byte-exact in 2.1.247. The per-skill cap (5,000) and the combined cross-skill cap (25,000) are
+# hardcoded with no context-window scaling — verified first-party in 2.1.222 (Nvy/$vy), 2.1.246
+# (V3o/K3o) and 2.1.247 (YJo/ZJo): three builds, three minified namings, identical values.
+# The size function itself is DERIVED, not confirmed: the truncator's `t*4` implies a
+# 4-chars-per-token model consistent with Math.round(chars/4), but the estimator could not be
+# resolved in the bundle. That does not affect this check, which gates on characters.
+# A tokenizer reading is the wrong unit — it measures something the budget never consults, and on
 # technical markdown (~3 chars/token) reads ~35% HIGHER than the runtime's own chars/4,
 # overstating the overage. Prose-heavy content at >4 chars/token would invert that.
-# Verified against the Claude Code 2.1.222 bundle: Nvy=5000 and $vy=25000 are literals with no
-# context-window scaling. Truncation is DESTRUCTIVE — the shortened text is written back to the
-# registry, so a second compaction cannot recover the tail; only re-reading from disk can.
+# Truncation is destructive in the common case: the shortened text is written back to the registry,
+# so a second compaction cannot recover the tail. That write-back is CONDITIONAL — it is skipped
+# when the skill's content is already present in the conversation body, and a skill already carried
+# as an attachment is not re-attached, truncated or zeroed at all. The size finding holds on every
+# branch, which is why this rule is advisory on length alone.
 COMPACTION_CAP_CHARS = 19900
 
 SEVERITY_ERROR = "error"
@@ -230,6 +241,20 @@ _DELIVERY_FALLBACK_RE = re.compile(
 # *prose describing* the marker (e.g. a doc explaining "suppress this with a `portability-allow:
 # file-delivery-tool` comment") cannot silently disable the rule it's describing — only an actual
 # marker directive can.
+# A RELATIVE `outputs/...` path naming a workspace. Deliberately narrow: boundary-anchored so
+# `with_skill/outputs/` and `<run-dir>/outputs/` can't match, optional `./` because that form
+# normalises and doubles identically, and it must resolve to a `-workspace` directory. A wider rule
+# would have to guess what base a bare `outputs/` is relative to, which is how the earlier
+# `file-delivery-tool-hardcoded` rule ended up firing on correct text.
+_OUTPUTS_WORKSPACE_RE = re.compile(
+    r"(?:(?<=^)|(?<=[\s`('\"\[*=:>]))(?:\./)?outputs/[^\s`'\"|*]*?[-_]?workspace\b"
+)
+
+# HTML-comment form ONLY. check_outputs_prefix scans markdown, where a leading `#` is a heading,
+# not a comment — accepting it would let a fenced example or a section title silently blind the
+# whole file, which is the most natural way someone documents the escape hatch.
+_OUTPUTS_ALLOW_RE = re.compile(r"<!--\s*portability-allow:\s*outputs-prefix\s*-->")
+
 _DELIVERY_ALLOW_RE = re.compile(
     r"(?m)^[ \t]*#[ \t]*portability-allow:\s*file-delivery-tool\b"
     r"|<!--\s*portability-allow:\s*file-delivery-tool\s*-->"
@@ -291,8 +316,10 @@ def check_compaction_budget(skill_md_text):
         "compaction-truncation-risk", SEVERITY_ADVISORY, ["claude-code", "cowork"],
         f"SKILL.md is {n:,} chars — {n / COMPACTION_CAP_CHARS:.2f}x the {COMPACTION_CAP_CHARS:,}-char "
         f"limit that survives auto-compaction. Everything after roughly line {cut_line} is dropped "
-        f"once a session compacts, and the truncation is written back, so a second compaction cannot "
-        f"recover it — only re-reading the file from disk can. This is a CHARACTER budget: measure "
+        f"once a session compacts. In the common case the truncation is written back, so a second "
+        f"compaction cannot recover the tail — only re-reading the file from disk can (the "
+        f"write-back is skipped when the content is already in the conversation body). This is a "
+        f"CHARACTER budget: measure "
         f"with `wc -m` (not `wc -c`, which counts bytes, and not a tokenizer, which measures a unit "
         f"the budget never consults and reads ~35% high here). To fix, move whole phases into "
         f"references/ rather than trimming prose.",
@@ -441,6 +468,48 @@ def _stdlib_names():
     }
 
 
+def check_outputs_prefix(skill_path):
+    """Flag skill text telling an agent to put its workspace under a relative `outputs/` path.
+
+    In Cowork the agent's working directory already IS the outputs directory, so `outputs/x` nests a
+    second level and the workspace stops appearing in the user's Working-folder panel. Scans
+    instruction text only — a script's own relative path is a different problem, covered by the
+    absolute-path guidance in references/environments.md.
+    """
+    findings = []
+    for p in _iter_text_files(skill_path):
+        try:
+            text = p.read_text()
+        except OSError:
+            continue
+        if _OUTPUTS_ALLOW_RE.search(text):
+            continue
+        rel = p.relative_to(skill_path)
+        for n, line in enumerate(text.split("\n"), 1):
+            m = _OUTPUTS_WORKSPACE_RE.search(line)
+            if not m:
+                continue
+            loc = f"{rel}:{n}"
+            findings.append(_finding(
+                "outputs-prefix-relative", SEVERITY_WARNING, ["cowork"],
+                f"instructs a workspace at the relative path `{m.group(0)}` — in Cowork the agent's "
+                f"working directory already IS the outputs directory, so this resolves to "
+                f"`outputs/outputs/...` for a FILE TOOL (whose cwd is already the outputs "
+                f"directory), and the workspace stops appearing in the user's Working-folder panel; "
+                f"under the SHELL the same string resolves against the session root instead, which "
+                f"is worse — invisible to the user and unreachable by the file tools. Either way "
+                f"the write succeeds and reports success, so nothing fails loudly. Fix per family: "
+                f"a bare relative path (`<skill-name>-workspace/`) for file tools, and an absolute "
+                f"path for anything handed to a shell command or a sub-agent. To reach a folder the "
+                f"user connected, an absolute path is required in both. A documented absolute "
+                f"`.../mnt/outputs/...` path does not trip this. Suppress per file with an HTML-"
+                f"comment `<!-- portability-allow: outputs-prefix -->`. At {loc}.",
+                loc,
+            ))
+            break
+    return findings
+
+
 def check_thirdparty_imports(skill_path):
     """Flag bundled-script imports that Cowork's image does not already provide.
 
@@ -503,6 +572,7 @@ def lint_portability(skill_path):
     findings += check_description_length(fields)
     findings += check_compaction_budget(skill_md_text)
     findings += check_runtime_constructs(skill_path)
+    findings += check_outputs_prefix(skill_path)
     findings += check_thirdparty_imports(skill_path)
     return findings, None
 

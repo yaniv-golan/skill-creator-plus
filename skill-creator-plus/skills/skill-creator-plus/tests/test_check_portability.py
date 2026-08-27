@@ -10,6 +10,7 @@ from check_portability import (  # noqa: E402
     lint_portability,
     check_thirdparty_imports,
     check_compaction_budget,
+    check_outputs_prefix,
     _filter_by_target,
     COMPACTION_CAP_CHARS,
     DESC_HARD_CAP,
@@ -466,6 +467,109 @@ class DeliveryAllowMarkerContextTests(unittest.TestCase):
             self.assertIn("delivery-tool-single-lane", _rules(findings))
 
 
+class OutputsPrefixTests(unittest.TestCase):
+    """The 13 cases the rule was prototyped against, plus scoping and suppression.
+
+    Cases 5-8 and 13 are regression pins for real in-repo text that an earlier, wider
+    formulation of this rule fired on. Case 10 is the sharpest: the sentence that TELLS an
+    author not to do this contains the string `outputs/`, and a rule that flags its own fix
+    is the failure mode `delivery-tool-single-lane` was written to replace.
+    """
+
+    def _fires(self, body):
+        with tempfile.TemporaryDirectory() as tmp:
+            d = _skill(Path(tmp), "name: s\ndescription: d", body)
+            return [f["rule"] for f in check_outputs_prefix(d)]
+
+    def test_plain_workspace_path_fires(self):
+        self.assertIn("outputs-prefix-relative", self._fires("Create the workspace at `outputs/my-skill-workspace/`.\n"))
+
+    def test_dot_slash_form_fires(self):
+        # ./outputs/... normalises and doubles identically in production.
+        self.assertIn("outputs-prefix-relative", self._fires("Create it at `./outputs/my-skill-workspace/`.\n"))
+
+    def test_templated_placeholder_fires(self):
+        self.assertIn("outputs-prefix-relative", self._fires("Put results in `outputs/<skill-name>-workspace/`.\n"))
+
+    def test_markdown_bold_emphasis_fires(self):
+        self.assertIn("outputs-prefix-relative", self._fires("Write to **outputs/my-skill-workspace/**\n"))
+
+    def test_workspace_without_hyphen_fires(self):
+        self.assertIn("outputs-prefix-relative", self._fires("Put results in outputs/workspace/\n"))
+
+    def test_underscore_separator_fires(self):
+        self.assertIn("outputs-prefix-relative", self._fires("Use `outputs/eval_workspace/`\n"))
+
+    def test_key_equals_value_fires(self):
+        self.assertIn("outputs-prefix-relative", self._fires("path=outputs/x-workspace\n"))
+
+    def test_plural_workspaces_is_clean(self):
+        self.assertEqual(self._fires("See outputs/workspaces/ for many\n"), [])
+
+    def test_unquoted_midsentence_fires(self):
+        self.assertIn("outputs-prefix-relative", self._fires("Put the workspace under outputs/csv-to-md-workspace and go.\n"))
+
+    def test_real_eval_dispatch_block_is_clean(self):
+        self.assertEqual(self._fires("- Also write outputs/user_notes.md: anything you were unsure about\n"), [])
+
+    def test_with_skill_outputs_is_clean(self):
+        self.assertEqual(self._fires("- Save outputs to: <workspace>/iteration-<N>/with_skill/outputs/\n"), [])
+
+    def test_run_dir_outputs_is_clean(self):
+        self.assertEqual(self._fires("Located at `<run-dir>/outputs/metrics.json`.\n"), [])
+
+    def test_non_workspace_relative_outputs_is_clean(self):
+        self.assertEqual(self._fires("The grader writes to `outputs/grading.json` in each run dir.\n"), [])
+
+    def test_report_under_build_workspace_is_clean(self):
+        self.assertEqual(self._fires("Save the report to outputs/report.html under the build workspace.\n"), [])
+
+    def test_the_rules_own_fix_text_is_clean(self):
+        self.assertEqual(self._fires("Never prefix it with `outputs/`: that nests a second outputs level.\n"), [])
+
+    def test_absolute_mnt_outputs_is_clean(self):
+        self.assertEqual(self._fires("Under the shell it is `/sessions/<id>/mnt/outputs/my-skill-workspace/`.\n"), [])
+
+    def test_the_correct_answer_is_clean(self):
+        self.assertEqual(self._fires("Use a bare relative path -- `<skill-name>-workspace/`.\n"), [])
+
+    def test_workspace_placeholder_subdir_is_clean(self):
+        self.assertEqual(self._fires("Snapshot to `<workspace>/skill-snapshot/`.\n"), [])
+
+    def test_html_comment_marker_suppresses(self):
+        body = "<!-- portability-allow: outputs-prefix -->\nCreate it at `outputs/my-skill-workspace/`.\n"
+        self.assertEqual(self._fires(body), [])
+
+    def test_fenced_code_example_of_the_marker_does_not_suppress(self):
+        """Documenting the escape hatch must not disable it -- the most natural spoof."""
+        body = ("Example:\n```\n# portability-allow: outputs-prefix\n```\n"
+                "Create it at `outputs/my-skill-workspace/`.\n")
+        self.assertIn("outputs-prefix-relative", self._fires(body))
+
+    def test_markdown_heading_form_does_not_suppress(self):
+        """A leading `#` is a HEADING in markdown, not a comment -- it must not blind the file."""
+        body = "# portability-allow: outputs-prefix\nCreate it at `outputs/my-skill-workspace/`.\n"
+        self.assertIn("outputs-prefix-relative", self._fires(body))
+
+    def test_targets_cowork_only(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            d = _skill(Path(tmp), "name: s\ndescription: d", "Use `outputs/my-skill-workspace/`.\n")
+            findings, _ = lint_portability(d)
+            self.assertNotIn("outputs-prefix-relative", _rules(_filter_by_target(findings, "claude-code")))
+            self.assertIn("outputs-prefix-relative", _rules(_filter_by_target(findings, "cowork")))
+
+    def test_prose_mention_of_marker_does_not_suppress(self):
+        """The marker only counts in comment context -- prose ABOUT it must not disable the rule.
+
+        Mirrors DeliveryAllowMarkerContextTests: a reference doc explaining "suppress this with a
+        `portability-allow: outputs-prefix` comment" must still be scanned, or documenting the
+        escape hatch silently disables the rule for the file that documents it.
+        """
+        body = ("You can suppress this with a portability-allow: outputs-prefix comment.\n"
+                "Create it at `outputs/my-skill-workspace/`.\n")
+        self.assertIn("outputs-prefix-relative", self._fires(body))
+
+
 class StrictGatingTests(unittest.TestCase):
     """`--strict` gates warnings and errors; advisories are informational by design."""
 
@@ -497,6 +601,65 @@ class StrictGatingTests(unittest.TestCase):
 
 
 class SelfLintTests(unittest.TestCase):
+    def test_this_skill_does_not_trip_outputs_prefix(self):
+        """Pin against the REAL tree, not an excerpt -- an isolated-lines test would false-green.
+
+        The earlier, wider formulation of this rule fired on SKILL.md's own eval dispatch block;
+        testing those lines in isolation passed while the shipped file was flagged.
+        """
+        skill_root = Path(__file__).resolve().parent.parent
+        self.assertEqual(check_outputs_prefix(skill_root), [])
+        # Anti-gaming: clean must mean "no violation", not "rule switched off". Mirrors the
+        # assertion the delivery self-lint carries.
+        # Assert the SUPPRESSING FORM is absent, not the phrase: environments.md documents the
+        # escape hatch in prose, which is correct and must not fail this.
+        for name in ("SKILL.md", "references/environments.md"):
+            self.assertNotIn("<!-- portability-allow: outputs-prefix",
+                             (skill_root / name).read_text(),
+                             f"{name} suppresses the rule instead of complying with it")
+
+    def test_load_bearing_workspace_facts_survive_compaction(self):
+        """The instructions an agent needs AT the workspace step must be in the surviving prefix.
+
+        Not a delta gate: `SKILL.md` may legitimately grow. What must stay true is that the three
+        facts an agent acts on when it creates the workspace are still readable after a session
+        auto-compacts, because compaction truncates to COMPACTION_CAP_CHARS and writes the
+        truncation back. This nearly regressed twice while it was being written -- once from a
+        routine version bump (frontmatter sits ahead of this text) and once from adding an
+        explanatory clause earlier in the file -- so it is pinned rather than trusted.
+
+        If this fails, do NOT move the cap. Move content out of SKILL.md into references/, which
+        is read on demand and never truncated.
+        """
+        skill_md = (Path(__file__).resolve().parent.parent / "SKILL.md").read_text()
+        surviving = skill_md[:COMPACTION_CAP_CHARS]
+        for fact, why in [
+            ("<abs-workspace>", "the shell/sub-agent path placeholder is never defined"),
+            ("**file tools** already sit", "the cwd claim reads as unqualified, which is the bug"),
+            ("Your **shell** does not", "the shell-vs-file-tool split is lost"),
+        ]:
+            self.assertIn(fact, surviving,
+                          f"dropped past the compaction cut: {why}. Move content to references/.")
+
+    def test_shipped_baseline_rule_ids_are_exactly_these(self):
+        """`docs/DEVELOPMENT.md` says a NEW rule id is the regression signal -- enforce that.
+
+        The docs state a baseline of 4 findings and that the suite (not the CLI, which CI does not
+        run) is what guards it. Nothing asserted the SET, so a new rule firing on our own tree
+        would have gone unnoticed. Adding a rule that legitimately fires here means updating this
+        list deliberately, which is the point.
+        """
+        skill_root = Path(__file__).resolve().parent.parent
+        findings, structural_error = lint_portability(skill_root)
+        self.assertIsNone(structural_error)
+        self.assertEqual(
+            _rules(findings),
+            {"compaction-truncation-risk", "subagent-dependency",
+             "claude-cli-dependency", "browser-display-dependency"},
+            "the shipped skill's finding set changed -- a NEW rule id here is a regression signal, "
+            "not a number to update without reading why it fired",
+        )
+
     def test_this_skill_trips_neither_delivery_rule(self):
         """Pins the SKILL.md / environments.md wording against regression.
 

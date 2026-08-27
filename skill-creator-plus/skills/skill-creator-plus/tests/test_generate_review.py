@@ -1,4 +1,5 @@
 import json
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -36,6 +37,35 @@ class EscapingTest(unittest.TestCase):
         self.assertNotIn("</script>", data_line)
         self.assertNotIn("<!--", data_line)
         self.assertNotIn("<script", data_line)
+
+
+class StaticPathIsReportedAbsoluteTests(unittest.TestCase):
+    """`--static` must echo the RESOLVED path.
+
+    A relative --static under a sandboxed runtime resolves against the shell's cwd, which is not
+    the one the calling agent's file tools use; echoing the raw input hides where the bytes went.
+    Uses a relative input, or it would pass against an implementation that never resolved.
+    """
+
+    def test_static_output_line_is_absolute(self):
+        import os
+        with tempfile.TemporaryDirectory() as tmp:
+            ws = Path(tmp)
+            (ws / "a" / "outputs").mkdir(parents=True)   # generate_review exits early with no runs
+            prev = os.getcwd()
+            os.chdir(tmp)
+            try:
+                proc = subprocess.run(
+                    [sys.executable, str(VIEWER_DIR / "generate_review.py"),
+                     str(ws), "--static", "out.html"],   # RELATIVE --static is the case under test
+                    capture_output=True, text=True, timeout=120,
+                )
+            finally:
+                os.chdir(prev)
+            line = [l for l in proc.stdout.splitlines() if "Static viewer written to:" in l]
+            self.assertTrue(line, f"no static-write line in stdout:\n{proc.stdout}\n{proc.stderr}")
+            reported = line[0].split("written to:", 1)[1].strip()
+            self.assertTrue(Path(reported).is_absolute(), reported)
 
 
 if __name__ == "__main__":
