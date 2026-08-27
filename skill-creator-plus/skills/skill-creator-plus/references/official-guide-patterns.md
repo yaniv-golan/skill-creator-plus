@@ -478,6 +478,16 @@ not visible, the fallback appends a second level, and you have re-created the `o
 doubling — silently. One bit of evidence cannot separate three or more surfaces. A probe that
 guesses is worse than an argument that is missing, because the missing argument is loud.
 
+### Claude-specific frontmatter: what these fields actually do
+
+`SKILL.md` states the rules; this is the mechanism behind them.
+
+**`when_to_use`.** Claude Code joins it with `description` in its skill listing, and the combined pair is capped at 1,536 characters there. Non-Claude hosts ignore the field entirely, so trigger information placed only here is invisible to them. Under Cowork it is worse than non-portable: the session appears to show the model **two** listings and only one carries `when_to_use` (see `references/environments.md` → *Two skill listings under Cowork*), so it is partially invisible even on Claude. Keep `description` self-sufficient and treat `when_to_use` as additive phrasing only.
+
+**`allowed-tools` / `disallowed-tools` / `shell`.** `allowed-tools` **grants**: it pre-approves tools for the invoking turn so Claude uses them without a permission prompt, and the grant clears on the user's next message. Populating it does **not** cause a prompt. `disallowed-tools` is the denylist that removes tools while the skill is active. `shell` only selects an interpreter (`bash`/`powershell`) and carries no permission semantics.
+
+The one real gate is **workspace trust**: for a skill in a project's `.claude/skills/`, its capability frontmatter (`allowed-tools`, `hooks`) takes effect only after the trust dialog is accepted for that folder — once per folder, not per invocation. Review project skills before trusting a repo; a skill can grant itself broad tool access. MCP-sourced and shared-memory skills drop these fields entirely — see the carve-outs below.
+
 ### Designing Scripts for Agent Use
 
 A script that works fine for a human can be unusable for an agent. When an agent runs your script, it reads stdout and stderr to decide what to do next — design choices that seem cosmetic to a human are load-bearing for agents. Apply these conventions to every script you bundle.

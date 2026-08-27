@@ -23,19 +23,23 @@ At a high level, the process of creating a skill goes like this:
 - Repeat until you're satisfied
 - Expand the test set and try again at larger scale
 
-Your job when using this skill is to figure out where the user is in this process and then jump in and help them progress through these stages. So for instance, maybe they're like "I want to make a skill for X". You can help narrow down what they mean, write a draft, write the test cases, figure out how they want to evaluate, run all the prompts, and repeat.
+Figure out where the user is in this loop and join them there. "I want a skill for X" starts at the top; an existing draft jumps straight to eval/iterate. Order is flexible, and once the skill is done you can run the description improver (a separate script) to sharpen its triggering.
 
-On the other hand, maybe they already have a draft of the skill. In this case you can go straight to the eval/iterate part of the loop.
+### The one-pass path
 
-Of course, you should always be flexible and if the user is like "I don't need to run a bunch of evaluations, just vibe with me", you can do that instead.
+Often the user wants a working skill now, not an eval report. That is a legitimate route, not a shortcut — take it when they ask for the skill itself, or say they don't want evals:
 
-Then after the skill is done (but again, the order is flexible), you can also run the skill description improver, which we have a whole separate script for, to optimize the triggering of the skill.
+1. **Draft** the skill (Capture Intent → Write the SKILL.md, below).
+2. **Smoke-test every script you bundled**, directly: run it on synthetic input with the problems planted (malformed rows, wrong delimiter, unusual encoding, empty and header-only files, a missing file), plus one realistic case. A script that only ever ran on clean input is untested.
+3. **Validate**: `quick_validate` then `check_portability` (see *Validate Against the Official Checklist*).
+4. **Package and deliver** it (see *Package the Skill*).
+5. **Then offer** the eval loop and description optimization as follow-ups.
 
-Cool? Cool.
+Steps 2 and 3 *are* the verification when you skip evals — shipping without eval evidence is fine, shipping with nothing exercised is not. **Not running in Claude Code? Read `references/environments.md` first** — where files must be written, and how to deliver them, differ per runtime.
 
 ## Communicating with the user
 
-The skill creator is liable to be used by people across a wide range of familiarity with coding jargon. If you haven't heard (and how could you, it's only very recently that it started), there's a trend now where the power of Claude is inspiring plumbers to open up their terminals, parents and grandparents to google "how to install npm". On the other hand, the bulk of users are probably fairly computer-literate.
+Users span a wide range of familiarity with coding jargon — from people who just opened a terminal for the first time to seasoned engineers. Calibrate to the person, not to the median.
 
 So please pay attention to context cues to understand how to phrase your communication! In the default case, just to give you some idea:
 
@@ -66,10 +70,7 @@ Start by understanding the user's intent. The current conversation might already
 
 Before writing anything, help the user articulate what "working" looks like. These are aspirational targets, not precise thresholds — but they keep the iteration loop focused.
 
-- **Quantitative**: Does the skill trigger on ~90% of relevant queries? Does it complete the workflow in fewer tool calls than without? Are there zero failed API calls?
-- **Qualitative**: Can a user get through the workflow without needing to redirect Claude? Are results consistent across sessions? Does a new user succeed on their first try?
-
-See `references/official-guide-patterns.md` (Success Criteria section) for measurement approaches.
+Cover both **quantitative** (does it trigger reliably? fewer tool calls than without? no failed calls?) and **qualitative** (can the user finish without redirecting Claude? consistent across sessions?). See `references/official-guide-patterns.md` (Success Criteria) for the full set and how to measure them.
 
 ### Interview and Research
 
@@ -78,6 +79,8 @@ Proactively ask questions about edge cases, input/output formats, example files,
 Check available MCPs - if useful for research (searching docs, finding similar skills, looking up best practices), research in parallel via subagents if available, otherwise inline. Come prepared with context to reduce burden on the user.
 
 ### Write the SKILL.md
+
+**Where the skill directory goes:** somewhere the user can keep it — a location in their project, confirmed with them if unclear. Never inside this plugin's own directory (read-only on a plugin install), and never a scratch directory. In Cowork use a bare relative `<skill-name>/` in your working directory; `references/environments.md` has the mechanism.
 
 Based on the user interview, fill in these components:
 
@@ -88,12 +91,13 @@ Based on the user interview, fill in these components:
 - **license** (optional): License name or bundled license file reference.
 - **compatibility** (optional, max 500 chars): Use when your skill has environment requirements (e.g. "Requires git, docker"; "Designed for Claude Code").
 - **metadata** (optional): Arbitrary key-value pairs. Recommended: `author`, `version`.
+- **When the user hasn't specified**: omit `license` and `metadata.author` rather than inventing them — a licence or byline you made up is a claim on their behalf. Default `metadata.version` to `0.1.0`.
 - **allowed-tools** (optional, experimental): Space-separated pre-approved tool patterns.
 
 **Claude-specific extensions (supported; skills remain portable if you don't use them):**
 
-- **when_to_use** (Claude-only): A separate field Claude Code joins with `description` in its skill listing. **Non-Claude hosts ignore this field entirely** — never put load-bearing trigger info here. If you use it, keep `description` self-sufficient and use `when_to_use` purely to add extra phrasing for Claude's matcher. The combined `description + when_to_use` is capped at 1,536 chars in Claude's listing. Under Cowork it looks worse than merely non-portable — the session appears to show the model two listings and only one carries `when_to_use` (see `references/environments.md` → *Two skill listings under Cowork*), so it is partially invisible even on Claude.
-- **allowed-tools / disallowed-tools / shell (Claude-specific)**: `allowed-tools` **grants** — it pre-approves tools for the invoking turn so Claude uses them without a permission prompt, and the grant clears on the user's next message. It does not trigger a prompt by being present. `disallowed-tools` is the denylist that removes tools while the skill is active. `shell` only selects an interpreter (`bash`/`powershell`) and has no permission semantics. The one real gate is **workspace trust**: for a skill in a project's `.claude/skills/`, its capability frontmatter (`allowed-tools`, `hooks`) takes effect only after the trust dialog is accepted for that folder — once per folder, not per invocation. Review project skills before trusting a repo; a skill can grant itself broad tool access. See `references/official-guide-patterns.md` for the MCP-sourced and shared-memory carve-outs, where these fields are dropped entirely.
+- **when_to_use** (Claude-only): extra phrasing for Claude's matcher. **Never put load-bearing trigger info here** — non-Claude hosts ignore it, and under Cowork it is only half-visible even on Claude. Keep `description` self-sufficient.
+- **allowed-tools / disallowed-tools / shell (Claude-specific)**: these *grant and restrict*; none of them triggers a permission prompt. The real gate is **workspace trust**, accepted once per folder — so review a project's skills before trusting its repo.
 - Other Claude-only fields (`model`, `effort`, `agent`, `context: fork`, `paths`, `disable-model-invocation`, `user-invocable`, `argument-hint`, Dynamic Context Injection, path variables): documented in `references/official-guide-patterns.md` (Advanced Skill Authoring Features). Non-Claude hosts silently ignore them.
 
 - **the rest of the skill :)**
@@ -433,7 +437,7 @@ Before packaging, run through the quick checklist from `references/official-guid
 - [ ] SKILL.md stays under ~500 lines (detailed content in references/)
 - [ ] No README.md inside the skill folder
 
-You can run `python -m scripts.quick_validate <path-to-skill>` to check some of these automatically.
+You can run `python -m scripts.quick_validate <path-to-skill>` to check some of these automatically. **Run this and `check_portability` below from the skill-creator-plus skill directory** — the `python -m` module form resolves `scripts.` relative to the current directory, so it fails anywhere else.
 
 Also run `python -m scripts.check_portability <path-to-skill> --target <claude-code|claude-ai|cowork|all>` — a stdlib-only cross-runtime linter (no dependencies, runs in any environment). It flags constructs that break on the skill's target runtime: an over-cap `description`, subagent use (absent on Claude.ai), `claude` CLI use (absent on Claude.ai), browser/server assumptions (no display in Cowork/Claude.ai), third-party Python imports outside the stack Cowork preinstalls (each costs a `pip install` on every run, and a locked-down org can deny the egress that install needs), a `SKILL.md` over the 19,900-character post-compaction cap (`compaction-truncation-risk`), a workspace placed under a relative `outputs/` path, which nests a second outputs level and hides it (`outputs-prefix-relative`), a delivery tool named for only one Cowork lane (`delivery-tool-single-lane` — phrase delivery by outcome, naming no tool; naming both, capability-conditionally, is also acceptable and stays clean), and the deliverable itself gated on a delivery tool's availability (`delivery-conditional-deliverable`). Pass `--target` matching where the skill will run; `--strict` to gate.
 
