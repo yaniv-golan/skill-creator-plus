@@ -17,7 +17,7 @@ At a high level, the process of creating a skill goes like this:
 - Write a draft of the skill
 - Create a few test prompts and run claude-with-access-to-the-skill on them
 - Help the user evaluate the results both qualitatively and quantitatively
-  - While the runs happen in the background, draft some quantitative evals if there aren't any (if there are some, you can either use as is or modify if you feel something needs to change about them). Then explain them to the user (or if they already existed, explain the ones that already exist)
+  - While the runs happen, draft quantitative evals if there aren't any (or adapt the existing ones), then explain them to the user (or if they already existed, explain the ones that already exist)
   - Use the `eval-viewer/generate_review.py` script to show the user the results for them to look at, and also let them look at the quantitative metrics
 - Rewrite the skill based on feedback from the user's evaluation of the results (and also if there are any glaring flaws that become apparent from the quantitative benchmarks)
 - Repeat until you're satisfied
@@ -30,7 +30,7 @@ Figure out where the user is in this loop and join them there. "I want a skill f
 Often the user wants a working skill now, not an eval report. That is a legitimate route, not a shortcut — take it when they ask for the skill itself, or say they don't want evals:
 
 1. **Draft** the skill (Capture Intent → Write the SKILL.md, below).
-2. **Smoke-test every script you bundled**, directly: run it on synthetic input with the problems planted (malformed rows, wrong delimiter, unusual encoding, empty and header-only files, a missing file), plus one realistic case. A script that only ever ran on clean input is untested.
+2. **Smoke-test every script you bundled**, directly: run it on synthetic input with the problems planted (malformed rows, wrong delimiter, unusual encoding, empty and header-only files, a missing file), plus one realistic case. A script that only ever ran on clean input is untested. When a smoke test fails, work out whether the script or the *test* is wrong before changing either — a synthetic fixture is a guess too. A check worth keeping belongs in the skill's own `scripts/`, so its users can run it as well.
 3. **Validate**: `quick_validate` then `check_portability` (see *Validate Against the Official Checklist*).
 4. **Package and deliver** it (see *Package the Skill*).
 5. **Then offer** the eval loop and description optimization as follow-ups.
@@ -41,12 +41,12 @@ Steps 2 and 3 *are* the verification when you skip evals — shipping without ev
 
 Users span a wide range of familiarity with coding jargon — from people who just opened a terminal for the first time to seasoned engineers. Calibrate to the person, not to the median.
 
-So please pay attention to context cues to understand how to phrase your communication! In the default case, just to give you some idea:
+Read the context cues and pitch accordingly. In the default case:
 
 - "evaluation" and "benchmark" are borderline, but OK
 - for "JSON" and "assertion" you want to see serious cues from the user that they know what those things are before using them without explaining them
 
-It's OK to briefly explain terms if you're in doubt, and feel free to clarify terms with a short definition if you're unsure if the user will get it.
+If you're unsure a term will land, define it briefly in passing.
 
 ---
 
@@ -297,7 +297,7 @@ Once all runs are done:
 
 1. **Grade each run** — spawn a grader subagent (or grade inline) that reads `agents/grader.md` and evaluates each assertion against the outputs. Save results to `grading.json` in each config directory (e.g., `eval-1/with_skill/grading.json`). The grading.json expectations array must use the fields `text`, `passed`, and `evidence` (not `name`/`met`/`details` or other variants) — the viewer depends on these exact field names. For assertions that can be checked programmatically, write and run a script rather than eyeballing it — scripts are faster, more reliable, and can be reused across iterations. If a check is also something a user of the finished skill would benefit from running themselves (e.g., a `validate_X.py` or `smoke_test_X.sh`), bundle it in the skill's `scripts/` directory so the same code serves both the eval grader and end users.
 
-**Every shell command below uses `<abs-workspace>` — the absolute path you resolved once at the start of this section.** Shell calls are independent — no cwd carries between them — and a relative path resolves against the shell's own working directory, which under Cowork is not where your file tools write. A `cd` in one call does not persist to the next, so it cannot substitute for this. The same applies to any path you put in a sub-agent dispatch prompt.
+**Every shell command below uses `<abs-workspace>` — the absolute path you resolved once at the start of this section.** Never rely on a working directory carrying between shell calls: on some surfaces each call is independent, so a `cd` in one call is gone by the next. An absolute path is correct on every surface, which is why you resolve once rather than `cd` first. A relative path also resolves against the *shell's* working directory, which under Cowork is not where your file tools write. The same applies to any path you put in a sub-agent dispatch prompt.
 
 2. **Aggregate into benchmark** — run the aggregation script from the skill-creator directory:
    ```bash

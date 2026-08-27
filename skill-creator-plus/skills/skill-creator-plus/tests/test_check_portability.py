@@ -652,6 +652,13 @@ class SelfLintTests(unittest.TestCase):
             ("<abs-workspace>", "the shell/sub-agent path placeholder is never defined"),
             ("**file tools** already sit", "the cwd claim reads as unqualified, which is the bug"),
             ("Your **shell** does not", "the shell-vs-file-tool split is lost"),
+            # The one-pass route's verification doctrine. Both sentences were ported INLINE rather
+            # than cross-referenced, because the eval-section text they came from sits past the cut
+            # -- a pointer into it would dangle in exactly the compacted session this guards.
+            ("whether the script or the *test* is wrong",
+             "the one-pass route loses its 'the fixture can be wrong' epistemics"),
+            ("belongs in the skill's own `scripts/`",
+             "the one-pass route loses the bundle-the-check guidance"),
         ]:
             self.assertIn(fact, surviving,
                           f"dropped past the compaction cut: {why}. Move content to references/.")

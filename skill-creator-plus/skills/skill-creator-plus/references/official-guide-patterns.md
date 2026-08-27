@@ -488,6 +488,20 @@ guesses is worse than an argument that is missing, because the missing argument 
 
 The one real gate is **workspace trust**: for a skill in a project's `.claude/skills/`, its capability frontmatter (`allowed-tools`, `hooks`) takes effect only after the trust dialog is accepted for that folder — once per folder, not per invocation. Review project skills before trusting a repo; a skill can grant itself broad tool access. MCP-sourced and shared-memory skills drop these fields entirely — see the carve-outs below.
 
+### A default body skeleton (optional)
+
+Nothing requires a particular section order, and a skill whose shape follows its own workflow is
+usually better than one bent to a template. But starting from nothing costs time, so if no structure
+suggests itself:
+
+**Workflow** (the steps, in order) → **Options** (the decisions the user gets) → **Interpretation**
+(how to read what comes back) → **Gotchas** (what goes wrong and what to do) → **Adjacent inputs**
+(neighbouring cases and where they route instead).
+
+**Gotchas is the highest-signal section** — it is where a skill stops restating what a capable model
+already infers and starts carrying knowledge the model does not have. If a section is thin, cut it;
+deviate wherever the work has a different shape. This is a starting point, not a form to fill in.
+
 ### Designing Scripts for Agent Use
 
 A script that works fine for a human can be unusable for an agent. When an agent runs your script, it reads stdout and stderr to decide what to do next — design choices that seem cosmetic to a human are load-bearing for agents. Apply these conventions to every script you bundle.
