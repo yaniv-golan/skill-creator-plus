@@ -246,13 +246,13 @@ Execute this task:
 - Input files: <eval files if any, or "none">
 - Save outputs to: <abs-workspace>/iteration-<N>/eval-<ID>/with_skill/outputs/
 - Outputs to save: <what the user cares about — e.g., "the .docx file", "the final CSV">
-- Also write outputs/user_notes.md: anything you were unsure about, workarounds you used, or things a human should review (write "none" if nothing)
-- Also write outputs/metrics.json: {"total_tool_calls": <n>, "errors_encountered": <n>} — your best count of tool calls made and errors hit
+- Also write <abs-workspace>/iteration-<N>/eval-<ID>/with_skill/outputs/user_notes.md: anything you were unsure about, workarounds you used, or things a human should review (write "none" if nothing)
+- Also write <abs-workspace>/iteration-<N>/eval-<ID>/with_skill/outputs/metrics.json: {"total_tool_calls": <n>, "errors_encountered": <n>} — your best count of tool calls made and errors hit
 ```
 
 **Baseline run** (same prompt, but the baseline depends on context):
-- **Creating a new skill**: no skill at all. Same prompt, no skill path, save to `without_skill/outputs/`, with the same user_notes.md and metrics.json instructions.
-- **Improving an existing skill**: the old version. Before editing, snapshot the skill (`cp -r <skill-path> <abs-workspace>/skill-snapshot/`), then point the baseline subagent at the snapshot. Save to `old_skill/outputs/`.
+- **Creating a new skill**: no skill at all. Same prompt, no skill path, save to `<abs-workspace>/iteration-<N>/eval-<ID>/without_skill/outputs/`, with the same user_notes.md and metrics.json instructions (absolute, for the same reason).
+- **Improving an existing skill**: the old version. Before editing, snapshot the skill (`cp -r <skill-path> <abs-workspace>/skill-snapshot/`), then point the baseline subagent at the snapshot. Save to `<abs-workspace>/iteration-<N>/eval-<ID>/old_skill/outputs/`.
 
 Write an `eval_metadata.json` for each test case (assertions can be empty for now). Give each eval a descriptive name based on what it's testing — not just "eval-0". Use this name for the directory too. If this iteration uses new or modified eval prompts, create these files for each new eval directory — don't assume they carry over from previous iterations.
 

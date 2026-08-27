@@ -509,8 +509,23 @@ class OutputsPrefixTests(unittest.TestCase):
     def test_unquoted_midsentence_fires(self):
         self.assertIn("outputs-prefix-relative", self._fires("Put the workspace under outputs/csv-to-md-workspace and go.\n"))
 
-    def test_real_eval_dispatch_block_is_clean(self):
-        self.assertEqual(self._fires("- Also write outputs/user_notes.md: anything you were unsure about\n"), [])
+    def test_eval_dispatch_relative_outputs_is_a_known_MISS_not_a_pass(self):
+        """This rule does NOT catch `outputs/user_notes.md` in a dispatch prompt -- and that line
+        was a REAL BUG, not correct text.
+
+        An earlier version of this suite asserted it "is_clean", which certified a live defect:
+        the line goes verbatim to a sub-agent whose file-tool cwd IS the outputs directory, so
+        the path doubles to `outputs/outputs/...` and lands outside the eval run directory. The
+        shipped SKILL.md now uses an explicit absolute placeholder instead.
+
+        The miss is recorded rather than fixed. Covering the general class needs a predicate that
+        knows what base a bare `outputs/` is relative to; a regex measured against 263 installed
+        skills flagged the canonical CORRECT explanations of this very bug at ~1-in-18 precision.
+        That is the `file-delivery-tool-hardcoded` failure mode (see check_portability.py), so the
+        class stays prose guidance in references/environments.md, not a rule.
+        """
+        self.assertEqual(self._fires("- Also write outputs/user_notes.md: notes\n"), [],
+                         "known miss -- if this ever fires, a predicate was found; update the docs")
 
     def test_with_skill_outputs_is_clean(self):
         self.assertEqual(self._fires("- Save outputs to: <workspace>/iteration-<N>/with_skill/outputs/\n"), [])
