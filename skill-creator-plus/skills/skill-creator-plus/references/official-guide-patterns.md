@@ -440,6 +440,44 @@ Not everything belongs in a script. Use this framework to decide what should be 
 - Steps 1, 2, 5 → **Script.** Deterministic, same every time. Only the output (fetched data, cleaned data, PDF path) enters context.
 - Steps 3, 4 → **Instruct.** Requires judgment about what matters and how to frame it.
 
+### Declare at authoring time, probe at run time — never detect the host
+
+A skill that must behave differently on different surfaces has two honest levers, and identity is
+neither of them.
+
+**Authoring time: declare.** `--target claude-code|claude-ai|cowork|all` states where the skill is
+meant to run, and the linter checks the skill against that. This is a fact about intent, fixed when
+you write it.
+
+**Run time: probe for the capability, not the host.** Branch on *whether the thing you need is
+there*, never on *which product you think you are in*. The delivery rule already works this way:
+"scan your available tools for one whose description says it sends files to the user; if one exists
+you must call it." It names no tool and no runtime, so it stays correct when a surface adds a tool,
+renames one, or ships it behind a per-account gate.
+
+**Why not an environment check.** The obvious idea is a marker like `CLAUDE_CODE_IS_COWORK`. It
+fails in the worst possible way: a skill spans two execution contexts, and the shell context is
+sealed — none of those markers survive into it. So the check returns "not Cowork" *in exactly the
+configuration you most needed to detect*, silently, and every branch downstream is wrong. Host
+identity is also the least stable thing to key on: within a single product name, the shell's working
+directory has been mis-described in shipped prompt text, an in-app browser has appeared behind
+per-account gates, and one tool has changed its input schema by session kind while keeping its name.
+A skill keyed to "am I in X" inherits all of that. A skill keyed to "can I see what I need" does not.
+
+**Paths are the case where the right answer is to probe for nothing at all.** A bundled script is
+tempted to work out its own output location. Don't: the caller already knows it, holds the file
+tools, and is the only party that can name a path the user will see. The caller resolves the
+destination once and passes it as an absolute path; the script accepts it and echoes back what it
+actually wrote. A script with no caller takes the destination as a **required argument and fails
+loudly when it is missing** — it never invents a directory.
+
+That last clause is load-bearing, and here is the failure it prevents. A probe of the shape
+"if a Cowork-shaped mount is visible, write there, otherwise write to `outputs/`" looks fail-safe
+and is not: on a surface where the shell already starts *inside* the outputs directory, the mount is
+not visible, the fallback appends a second level, and you have re-created the `outputs/outputs/`
+doubling — silently. One bit of evidence cannot separate three or more surfaces. A probe that
+guesses is worse than an argument that is missing, because the missing argument is loud.
+
 ### Designing Scripts for Agent Use
 
 A script that works fine for a human can be unusable for an agent. When an agent runs your script, it reads stdout and stderr to decide what to do next — design choices that seem cosmetic to a human are load-bearing for agents. Apply these conventions to every script you bundle.

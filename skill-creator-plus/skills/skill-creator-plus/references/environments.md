@@ -142,6 +142,16 @@ Two consequences when authoring for Cowork:
   So "I edited the skill locally" does not mean the Cowork session sees the edit; the account-level
   skill has to be updated.
 
+## Telling runtimes apart
+
+Short answer: don't. Declare where a skill is meant to run with `--target` at authoring time, and at
+run time branch on whether the capability you need is present — not on which product you are in. An
+environment marker like `CLAUDE_CODE_IS_COWORK` does not survive into the shell context, so it
+reports "not Cowork" in precisely the configuration that needed detecting. For paths the rule is
+stronger still: a script should not work out its own output location at all — the caller resolves it
+once and passes an absolute path. See `references/official-guide-patterns.md` → *Declare at
+authoring time, probe at run time* for the reasoning and the failure a guessing probe produces.
+
 ## Testing Cowork-targeted skills with cowork-harness
 
 skill-creator-plus can author skills for three runtimes — Claude Code, Claude Cowork, and Claude Chat. A skill that will run under **Cowork** faces a class of bug the quality evals cannot see: it only manifests under Cowork's real sandbox, default-deny egress, permission/AskUserQuestion protocol, and artifact-delivery rules (see "Cowork-Specific Instructions" above for the runtime constraints themselves). Examples: a `/sessions/...` host path leaking into model-visible text; an interactive HTML artifact whose relative `fetch`/form write-back is silently lost under Cowork (this is exactly the eval-viewer "says Saved, nothing reaches Claude" failure class this skill's own README documents); a denied egress; an unanswered permission gate; a deliverable that never reaches the user's workspace.
