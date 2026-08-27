@@ -588,6 +588,15 @@ Don't include README.md inside the skill folder. All documentation goes in SKILL
 | 5,000 tokens per skill | **19,900 characters** (5,000 × 4, minus the 100-char truncation marker — 98 visible characters plus two leading newlines) |
 | 25,000 tokens combined | **100,000 characters** across all invoked skills |
 
+*Provenance, because these are numbers a reader should be able to re-check rather than trust: the
+5,000 and 25,000 caps are hardcoded literals with no context-window scaling, read first-party from
+the Claude Code bundle and unchanged across **2.1.222, 2.1.246 and 2.1.247** — three builds, three
+different minified binding names, identical values. The character figures are derived from them
+(`cap × 4`, minus the 100-character truncation marker for the per-skill row); neither appears as a
+literal anywhere, so grepping for `19900` will find nothing. The `× 4` divisor is itself derived: it
+follows from the truncator's own arithmetic, but the function that sizes the content could not be
+resolved in the bundle, so treat it as a well-supported inference rather than a verified constant.*
+
 ```bash
 wc -m SKILL.md          # characters — the unit that matters
 # 19,900 or less survives compaction. Note: wc -c gives BYTES, which over-counts
