@@ -659,6 +659,13 @@ class SelfLintTests(unittest.TestCase):
              "the one-pass route loses its 'the fixture can be wrong' epistemics"),
             ("belongs in the skill's own `scripts/`",
              "the one-pass route loses the bundle-the-check guidance"),
+            # The size rule must state the metric that actually binds. A line count cannot protect
+            # a character budget -- this very file passes "under 500 lines" at 2.07x the cap.
+            ("under 19,900 characters — measure with `wc -m`",
+             "the size rule reverts to a line count, which cannot enforce the real limit"),
+            # Truncation recovery is only useful if it survives the truncation it describes.
+            ("re-read `SKILL.md` from disk",
+             "the truncation-recovery instruction is itself truncated away"),
         ]:
             self.assertIn(fact, surviving,
                           f"dropped past the compaction cut: {why}. Move content to references/.")

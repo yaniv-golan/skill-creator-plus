@@ -25,6 +25,8 @@ At a high level, the process of creating a skill goes like this:
 
 Figure out where the user is in this loop and join them there. "I want a skill for X" starts at the top; an existing draft jumps straight to eval/iterate. Order is flexible, and once the skill is done you can run the description improver (a separate script) to sharpen its triggering.
 
+**If a section this file refers to seems to be missing, it was truncated — re-read `SKILL.md` from disk before continuing.** Compaction cuts the tail and writes the cut back, so what's in context can be a partial copy. (This works only when a truncation marker is present; it cannot detect a skill dropped whole by the combined cap.)
+
 ### The one-pass path
 
 Often the user wants a working skill now, not an eval report. That is a legitimate route, not a shortcut — take it when they ask for the skill itself, or say they don't want evals:
@@ -63,7 +65,7 @@ Start by understanding the user's intent. The current conversation might already
    - **Document & Asset Creation** — consistent, high-quality output (docs, presentations, code, designs)
    - **Workflow Automation** — multi-step processes benefiting from consistent methodology
    - **MCP Enhancement** — workflow guidance layered on top of MCP tool access
-   For a more granular taxonomy (9 types from Anthropic's internal experience), see the "Expanded Skill Type Taxonomy" section of the reference file — it covers Library & API Reference, Product Verification, Data Fetching & Analysis, Business Process & Team Automation, Code Scaffolding & Templates, Code Quality & Review, CI/CD & Deployment, Runbooks, and Infrastructure Operations. Knowing the type helps choose the right techniques.
+   For a finer taxonomy (9 types, from library/API reference through runbooks and infra ops), see "Expanded Skill Type Taxonomy" in the reference file. Knowing the type helps choose the right techniques.
 5. Should we set up test cases to verify the skill works? Skills with objectively verifiable outputs (file transforms, data extraction, code generation, fixed workflow steps) benefit from test cases. Skills with subjective outputs (writing style, art) often don't need them. Suggest the appropriate default based on the skill type, but let the user decide.
 
 ### Define Success Criteria
@@ -121,13 +123,13 @@ skill-name/
 
 Skills use a three-level loading system:
 1. **Metadata** (name + description) - Always in context (~100 words)
-2. **SKILL.md body** - In context whenever skill triggers (<500 lines ideal)
+2. **SKILL.md body** - In context whenever skill triggers (keep under 19,900 chars — `wc -m`)
 3. **Bundled resources** - As needed (unlimited, scripts can execute without loading)
 
 These word counts are approximate and you can feel free to go longer if needed.
 
 **Key patterns:**
-- Keep SKILL.md under 500 lines; if you're approaching this limit, add an additional layer of hierarchy along with clear pointers about where the model using the skill should go next to follow up. This is mechanical, not stylistic: after auto-compaction Claude re-attaches each invoked skill truncated to **19,900 characters**, and usually writes the truncation **back** — a second compaction cannot recover the tail. Measure the skill you're authoring with `wc -m` (characters — not bytes, not tokens). Front-load the load-bearing instructions. See `references/official-guide-patterns.md` (SKILL.md Size) for the mechanism and the two ways a skill can lose content entirely.
+- **Keep SKILL.md under 19,900 characters — measure with `wc -m`, not a line count.** This is the limit that actually bites: after auto-compaction Claude re-attaches each invoked skill truncated to that many characters and usually writes the truncation **back**, so a second compaction cannot recover the tail. A line count cannot protect it — a file can pass "under 500 lines" and still be twice over (this one is). If you're approaching the cap, add a layer of hierarchy and move whole phases into `references/`, which is not capped; front-load whatever must survive. See `references/official-guide-patterns.md` (SKILL.md Size) for the mechanism and the two ways a skill loses content entirely.
 - Reference files clearly from SKILL.md with guidance on when to read them
 - For large reference files (>300 lines), include a table of contents
 
@@ -194,7 +196,7 @@ When designing a skill's architecture, decide what goes into bundled `scripts/` 
 - Flexible error recovery (interpreting unexpected results, deciding next steps)
 - Workflow orchestration where the sequence may vary
 
-This is a starting point, not the final answer. The strongest signal for what to script comes later, from observing convergence across eval runs (see "Look for repeated work across test cases" below) — if 2-3 independent runs all reinvent the same helper, that's empirical evidence the logic belongs in a script. Don't over-script upfront; let the convergence signal guide you. See [Script vs. Instruct decision framework](references/official-guide-patterns.md) ("When to Script vs. When to Instruct") for the full framework and examples.
+A starting point, not the answer. The strongest signal comes later: if 2-3 independent eval runs all reinvent the same helper, that logic belongs in a script (see "Look for repeated work across test cases"). Don't over-script upfront. See [Script vs. Instruct decision framework](references/official-guide-patterns.md) ("When to Script vs. When to Instruct") for the full framework and examples.
 
 **When you do bundle a script, design it for agent consumption** — non-interactive, `--help`-documented, structured output (JSON/CSV), helpful errors, meaningful exit codes, idempotent by default. A script that works fine for a human can be unusable for an agent. See [official-guide-patterns.md](references/official-guide-patterns.md) ("Designing Scripts for Agent Use") for the full conventions.
 
@@ -434,7 +436,7 @@ Before packaging, run through the quick checklist from `references/official-guid
 - [ ] If the skill produces a file for its user, the final step writes it to a stated path and then presents it (a path alone isn't delivery on every surface)
 - [ ] Examples provided where helpful
 - [ ] References clearly linked from SKILL.md
-- [ ] SKILL.md stays under ~500 lines (detailed content in references/)
+- [ ] SKILL.md stays under 19,900 characters (`wc -m`) — detailed content in references/, which is not capped
 - [ ] No README.md inside the skill folder
 
 You can run `python -m scripts.quick_validate <path-to-skill>` to check some of these automatically. **Run this and `check_portability` below from the skill-creator-plus skill directory** — the `python -m` module form resolves `scripts.` relative to the current directory, so it fails anywhere else.
