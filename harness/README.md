@@ -41,8 +41,8 @@ applies; the resulting cassettes just aren't committed.
 `cowork-harness` is a separate npm CLI (the Claude plugin ships only the skill, not the built CLI):
 
 ```bash
-npm i -g "cowork-harness@>=1.19.0"
-cowork-harness --version          # MUST report 1.19.x — `npx` can silently serve a stale cache
+npm i -g "cowork-harness@>=2.4.0"
+cowork-harness --version          # MUST report 2.4.x — `npx` can silently serve a stale cache
 ```
 
 - **Static checks + `lint` + `replay`**: token-free, no Docker, no staged agent, no token.
@@ -189,8 +189,13 @@ grade the authored set. So the defensible claim is narrow: **a rubric like "the 
 grades TRUE on a file production would discard.** `remote-delivery.yaml` grades entirely via
 `semantic_matches`, so it is the scenario this actually bites.
 
-Blocked on two upstream `cowork-harness` ship items that land together; this repo is the named first
-validation target. Until they land, do not read a green dogfood as covering script paths.
+**The upstream fix has landed** (cowork-harness 2.4.0: `mcp__workspace__bash` now starts at the bare
+session root at `fidelity: hostloop`, instead of collapsing it into `mnt/outputs`). The gap here is
+now *ours*, not theirs: **every scenario in this suite is `fidelity: container`**, and the tier that
+reproduces production's split is `hostloop`. Closing it means adding a hostloop scenario — which is a
+real decision, not a config change, because `transcript_no_host_path` fails by design off container
+and `no_scratchpad_leak` is container-only. Until such a scenario exists, do not read a green dogfood
+as covering script paths.
 
 ## Notes / landmines
 

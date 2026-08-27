@@ -22,14 +22,14 @@ jobs:
 
       - name: Install cowork-harness (pinned)
         run: |
-          npm i --prefix "$RUNNER_TEMP/ch" cowork-harness@1.19.0
+          npm i --prefix "$RUNNER_TEMP/ch" cowork-harness@2.4.0
           echo "$RUNNER_TEMP/ch/node_modules/.bin" >> "$GITHUB_PATH"
 
       - name: Verify cowork-harness version
         run: |
           V=$(cowork-harness --version | tail -1)
           echo "cowork-harness $V"
-          case "$V" in 1.19.*) ;; *) echo "expected 1.19.x, got $V"; exit 1;; esac
+          case "$V" in 2.4.*) ;; *) echo "expected 2.4.x, got $V"; exit 1;; esac
 
       - name: Lint skill (strict)
         run: |
