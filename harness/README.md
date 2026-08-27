@@ -96,7 +96,7 @@ cowork-harness run harness/scenarios/remote-delivery.yaml  # remote-lane deliver
 
 ## Recording cassettes (the one maintainer step this suite still needs)
 
-The scenarios are **lint-clean but not yet recorded**. `create-skill.yaml` has **no `answers:`
+The scenarios are **lint-clean but not yet recorded** — no committed cassettes. Note that *recorded* and *run* are different things here: `create-skill.yaml` has been **run live and passed twice** (2026-08-27/28, `container`, $1.23 and $1.51), it simply has no cassette. `remote-delivery.yaml` has still never been run. `create-skill.yaml` has **no `answers:`
 block at all** — the Capture Intent interview asks gates whose exact option labels are
 model-decided and reworded every run, so it uses `on_unanswered: llm` instead of scripted labels
 (see "What a live run checks" below). Run it live once to see the real gates before recording the
@@ -170,6 +170,15 @@ scenario file (`record --dry-run`); a human runs it on demand:
 ```bash
 cowork-harness run harness/scenarios/remote-delivery.yaml
 ```
+
+**Verified live 2026-08-27/28.** `create-skill.yaml` passed twice at `container`, so all eight of
+its assertions — including `present_files_called`, the only runtime check we have on the delivery
+contract — are observed rather than aspirational. Its first run **failed**, on the `outputs-delete`
+guard rather than an assertion: the skill was building itself in the shell's working directory and
+keeping a second copy under `outputs/` that it refreshed with `rm -rf` + re-copy. Production denies
+unlink there, so that is an EPERM in production and a silent success in most test setups. Fixed in
+`f5253a3`. That is the argument for the live lane in one sentence: a static check cannot catch a
+text that reads correctly and only misbehaves when an agent acts on it.
 
 ### Known coverage gap: script output paths
 

@@ -41,9 +41,14 @@ assert:
   # (an explicit "no such tool exists" statement) — it would red a correct run and grade identically
   # on a broken one. The gradeable signal on this lane is *where the file ended up and whether that
   # location was communicated*, not whether a tool was invoked.
-  # NOT YET OBSERVED ON A LIVE RUN — this encodes what the delivery rule requires, not a verified
+  # STILL NOT OBSERVED ON A LIVE RUN — this encodes what the delivery rule requires, not a verified
   # pass. A first red is ambiguous between a real regression and an over-strict assertion;
   # investigate before weakening it.
+  #
+  # Note the asymmetry, because it is easy to read the sibling scenario's green as covering this one:
+  # `create-skill.yaml` verified the delivery contract on the LOCAL lane (2026-08-27/28, twice). This
+  # scenario covers the REMOTE lane, where location delivers nothing and `present_files` is not
+  # served — a different contract, still unverified. The local green says nothing about it.
   # COVERAGE GAP, and this scenario is where it bites (harness/README.md § "Known coverage gap:
   # script output paths"): `containedPath` blocks `file_exists`/`user_visible_artifact`/
   # `computer_links_resolve` from ever seeing a stray bash write, so the exposed assertion classes
