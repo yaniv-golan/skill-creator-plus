@@ -17,6 +17,7 @@ harness/
     no-trigger.yaml          # negative control: an unrelated prompt must NOT trigger the skill
     create-skill.yaml        # flagship: "create a skill" triggers + runs clean (LIVE-ONLY, see below)
     remote-delivery.yaml     # lane:remote delivery-contract guard (LIVE-ONLY, see below)
+    shell-cwd-carryover.yaml # PROBE: does shell cwd persist between calls? (answer recorded in-file)
   cassettes/                 # (no committed cassettes — see below; recorded on-demand / locally)
 ```
 
@@ -32,6 +33,10 @@ applies; the resulting cassettes just aren't committed.
 - `no-trigger` — cheap negative control; records + replays cleanly.
 - `create-skill` — non-deterministic (LLM-authored gates) and bakes an un-scannable `.skill` artifact
   into the cassette; live-only by nature.
+- `shell-cwd-carryover` — a **probe, not a gate**: its assertions establish only that it ran and was not
+  normalised, because persistence and independence are both legitimate outcomes and encoding one as
+  "pass" would assert a conclusion nobody had. The measured answer (it persists at `container`, not at
+  `hostloop`) is recorded in the file so it need not be re-purchased. Live-only; never a PR gate.
 - `remote-delivery` — same non-determinism plus a `semantic_matches` LLM-judged assertion (see below);
   **live-only and never a PR gate**. CI only load-checks it via `record --dry-run` in the token-free
   static lane.
