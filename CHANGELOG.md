@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [0.10.0] - 2026-08-27
+## [0.10.0] - 2026-08-28
 
 Path guidance under Cowork was wrong in four places, and one of them re-created the exact failure it was written to prevent. Every claim below was re-verified first-party against Claude Code 2.1.247.
 
