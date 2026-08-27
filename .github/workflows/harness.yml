@@ -63,5 +63,5 @@ jobs:
           if ls harness/cassettes/*.cassette.json >/dev/null 2>&1; then
             cowork-harness replay harness/cassettes
           else
-            echo "No committed cassettes by design (self-cassettes of an actively-developed skill go stale every edit; see harness/README.md). The static checks above are the CI gate; cassettes are recorded on-demand / in the nightly lane."
+            echo "No cassettes found — expected at least no-trigger.cassette.json. If it was removed deliberately, fine; otherwise the replay gate is silently absent. See harness/README.md."
           fi

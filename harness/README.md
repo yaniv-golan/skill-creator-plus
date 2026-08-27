@@ -21,11 +21,19 @@ harness/
   cassettes/                 # (no committed cassettes — see below; recorded on-demand / locally)
 ```
 
-**No cassettes are committed — the CI gate is the static lane, not replay.**
+**One cassette is committed; the other two are live-only — the CI gate is mostly the static lane.**
 A cassette records the skill's *own* behavior, so its staleness hash is tied to the skill's source.
 skill-creator-plus is edited constantly, so a committed cassette goes stale on nearly every PR — and
 re-recording needs Docker + a staged Claude Desktop agent + a token, a wall external contributors
-can't clear. So the committed CI gate (`.github/workflows/harness.yml`) is the **token-free static
+can't clear. `no-trigger` is the exception and is committed: it is a cheap negative control with no
+artifact, and over-triggering is a live risk every time the `description` changes — so a free replay
+gate on every PR is worth its re-record cost. The other two stay live-only for the reasons below.
+
+**What replay does NOT cover, and it is the important half.** Guards (`outputs-delete`, `host-path`)
+run off the live run's scan, which a cassette does not carry — a replay reports them as `—`, not as
+passing. The one real bug this suite has caught was a guard, not an assertion, so replay would have
+shown eight green asserts and missed it. Treat the replay lane as regression cover for *content*,
+and never as a substitute for a live run. So the committed CI gate (`.github/workflows/harness.yml`) is the **token-free static
 lane** (`lint-skill`, `analyze-skill`, scenario `lint`, `record --dry-run --quiet`), which is robust
 to skill edits. Cassettes are
 recorded **on demand / locally** (and in the deferred nightly live lane) — the recipe below still
