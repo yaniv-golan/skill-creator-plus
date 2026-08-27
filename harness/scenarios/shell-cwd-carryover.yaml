@@ -1,0 +1,77 @@
+name: shell-cwd-carryover
+# PROBE, not a regression gate. It exists to answer one question with evidence:
+# does a shell tool's working directory carry from one call to the next?
+#
+# WHY: references/environments.md tells authors to resolve a path once and pass it
+# absolute, and until 2026-08-27 justified that with "each shell call is independent —
+# no cwd carryover". That sentence was sourced from HOST-LOOP artifacts (the
+# host_loop_shell prompt section and the shell tool description) but shipped unscoped.
+# It is false on at least one runtime we ship to — Claude Code's own Bash tool documents
+# "working directory persists between calls" for its main thread — and a critique run at
+# container fidelity reported cwd persisting there too. The guidance has since been
+# reframed to "carryover is UNRELIABLE, not reliably absent", which is correct either
+# way. This scenario is how we find out which way THIS tier actually behaves.
+#
+# READ THE ANSWER FROM `events.jsonl`, NOT FROM THE ASSERTIONS:
+#   cowork-harness trace <run-dir> --view tools
+# The assertions below only establish that the probe RAN and was not normalised. The
+# measurement itself is the second call's stdout.
+#
+# THE TRAP THIS PROMPT IS SHAPED AROUND: a model asked to test cwd behaviour will
+# routinely "helpfully" rewrite the two calls into one (`cd X && pwd`) or make the
+# second path absolute — silently normalising away the thing under test. That defeated
+# this exact probe once already upstream (see harness/README.md § Notes / landmines).
+# Hence the explicit prohibitions, and hence reading the command actually sent rather
+# than trusting the narration.
+#
+# MEASURED 2026-08-27 — the answer, so nobody pays $0.40 to re-derive it. Both runs read from
+# `events.jsonl`, not from the agent's narration; both sent two separate calls with the commands
+# verbatim (no `cd X && pwd` merge, no absolute path in call 2):
+#
+#   container (VM loop,  tool `Bash`)                 pwd -> /sessions/<id>/cwd-probe-dir   PERSISTS
+#   hostloop  (production, tool `mcp__workspace__bash`) pwd -> /sessions/<id>                INDEPENDENT
+#
+# So carryover is lane-dependent, and the tool is not even the same one. This is why
+# references/environments.md says carryover is UNRELIABLE rather than absent, and why the operative
+# rule is "resolve once, pass absolute" — correct on both tiers, and needing no lane knowledge.
+# Both runs also put the shell's base at `/sessions/<id>`, previously an inference.
+#
+# Re-run when: the baseline moves, a tier's shell tool changes, or someone proposes reinstating a
+# `cd`-then-relative sequence anywhere in the shipped guidance.
+#
+# LIVE-ONLY. Never a PR gate — it has no stable pass/fail, by design.
+session: ../sessions/skill.yaml
+fidelity: container            # models the VM loop; run again at hostloop for production's lane
+timeout_ms: 300000
+
+prompt: |
+  I need to measure one thing about your shell tool. Follow this exactly.
+
+  Make EXACTLY TWO separate shell tool calls. Do not combine them.
+
+  Call 1, this command and nothing else:
+    mkdir -p cwd-probe-dir && cd cwd-probe-dir
+
+  Call 2, this command and nothing else:
+    pwd
+
+  Rules that matter more than being helpful here:
+  - Do NOT merge the two calls with && or ; — they must be two separate tool calls.
+  - Do NOT add `cd` to call 2, and do NOT use an absolute path anywhere in call 2.
+  - Do NOT retry, adjust, or "fix" call 2 if its output looks wrong. A surprising
+    result IS the measurement.
+
+  Then tell me, in plain text: the exact output of call 2, and whether it ends in
+  `/cwd-probe-dir`.
+
+assert:
+  # The probe ran at all.
+  - result: success
+  # It was not normalised into one call, and call 2 stayed bare. `questions_count_max: 0`
+  # keeps a clarifying gate from quietly turning this into a different experiment.
+  - questions_count_max: 0
+  # Content signal that the agent reported the measurement rather than narrating around it.
+  - transcript_matches: "cwd-probe-dir"
+  # A tool error would mean the probe failed to execute, not that carryover is absent —
+  # those two look identical in a summary and must not be conflated.
+  - max_tool_errors: 0
