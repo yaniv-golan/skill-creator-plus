@@ -101,4 +101,16 @@ assert:
   # delete the behaviour being measured. Known residual weakness, stated rather than hidden: rubric
   # item 1 ("packaged the skill and produced a .skill file") is an action claim the judge can only
   # read narration about, so a run that says it packaged and did not would grade green on that item.
-  # Fixing it needs a glob-capable existence assertion the harness does not currently offer.
+  # Fixing it needs a glob-capable existence assertion the harness does not currently offer
+  # (requested; see docs/internal/2026-08-28-cowork-harness-feature-requests.md §3).
+  #
+  # CROSS-CHECK, so this reads as a bounded hole rather than an open one: rubric item 1 is the ONLY
+  # unverified half, and it is covered elsewhere. `create-skill.yaml` exercises the same packaging
+  # step on the LOCAL lane and asserts it with EVIDENCE — `present_files_called`, backed by
+  # RunResult.presentedFiles — observed passing there. So "did this skill actually package a .skill"
+  # is answered by the sibling; what this scenario uniquely tests is whether the agent writes it to
+  # a stated, user-reachable location and says where, on a lane where location delivers nothing.
+  #
+  # What the cross-check does NOT cover, and nothing currently does: whether the file reached the
+  # user on the remote lane. That is `delivery_unobservable`, and it is unmeasurable here by design
+  # — not a gap this assertion or the glob key would close.
