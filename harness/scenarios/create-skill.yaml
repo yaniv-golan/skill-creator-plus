@@ -64,15 +64,7 @@ assert:
   # `present_files`, so a correct run calls it. Content-class, evidence-backed
   # (RunResult.presentedFiles); asserts the harness-side delivery record, and names no tool in the
   # skill itself. Valid at `fidelity: container` or `hostloop` (present_files is served at both).
-  # VERIFIED LIVE 2026-08-27/28 — observed passing twice at `container` ($1.23, $1.51). This is no
-  # longer aspirational, so a red here IS a signal rather than an open question about the assertion.
-  #
-  # Worth keeping in view: the FIRST live run FAILED, and not on this assertion. All 8 asserts passed
-  # while the `outputs-delete` guard caught the skill doing `rm -rf mnt/outputs/<dir> && cp -r ...`
-  # to refresh a stale copy — production denies unlink under outputs, so that is an EPERM there and a
-  # silent success in most test setups. The skill built itself in the SHELL's cwd (the session root)
-  # and then had to maintain a second copy in outputs. Fixed in f5253a3; both symptoms cleared
-  # together on the re-run, which is what a root-cause fix looks like. The scenario earned its cost
-  # on its first execution, via a guard rather than an assertion — worth remembering when deciding
-  # whether a live lane is worth paying for.
+  # VERIFIED LIVE at `container` — observed passing, so a red here is a signal, not an open question
+  # about the assertion. Note the suite's first live run passed all eight asserts and still FAILED,
+  # on the `outputs-delete` guard: assertions and guards fail independently, so read both.
   - present_files_called: true
