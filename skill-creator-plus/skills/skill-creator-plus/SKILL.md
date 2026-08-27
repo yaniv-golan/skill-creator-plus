@@ -82,7 +82,7 @@ Check available MCPs - if useful for research (searching docs, finding similar s
 
 ### Write the SKILL.md
 
-**Where the skill directory goes:** somewhere the user can keep it — a location in their project, confirmed with them if unclear. Never inside this plugin's own directory (read-only on a plugin install), and never a scratch directory. In Cowork use a bare relative `<skill-name>/` in your working directory; `references/environments.md` has the mechanism.
+**Where the skill directory goes:** somewhere the user can keep it — a location in their project, confirmed with them if unclear. Never inside this plugin's own directory (read-only on a plugin install), and never a scratch directory. **Build it in one place and never keep a second copy to sync.** Authoring is mostly shell work, and the shell's cwd is not the file tools' — so name the destination once and address it per family: in Cowork that is a bare `<skill-name>/` for file tools and `<abs-workspace>/<skill-name>/` for anything you run in the shell. `references/environments.md` has the mechanism.
 
 Based on the user interview, fill in these components:
 
@@ -202,7 +202,7 @@ A starting point, not the answer. The strongest signal comes later: if 2-3 indep
 
 ### Delivering Files the Skill Produces
 
-This applies no matter which environment you're authoring in — the risk lives in the runtime the *authored skill* will run under, not yours. If the skill you are authoring produces a file for its user, its final step must **write the file to a stated path and then present it** with whatever file-surfacing tool that runtime exposes. A path alone is not delivery on every surface — on ephemeral/remote sessions an unpresented file is silently lost. See `references/environments.md` → *Delivering files to the user*.
+This applies whichever environment you're authoring in — the risk lives in the runtime the *authored skill* runs under, not yours. If the skill produces a file for its user, its final step must **write it to a stated path and then present it** with whatever file-surfacing tool that runtime exposes. A path alone is not delivery everywhere — on ephemeral/remote sessions an unpresented file is silently lost. See `references/environments.md` → *Delivering files to the user*.
 
 ### Test Cases
 
@@ -215,7 +215,7 @@ Per the official guide, effective testing covers three areas:
 2. **Functional tests** — Does the skill produce correct outputs? (valid outputs, API calls succeed, error handling works, edge cases covered)
 3. **Performance comparison** — Does the skill actually improve results vs. baseline? (fewer tool calls, fewer user corrections, lower token usage)
 
-Save test cases to `evals.json` in a **committed sibling** of the skill directory — `<skill-name>-evals/evals.json` — never inside the skill directory itself. The definitions are the durable regression suite (commit them; run in CI if the skill has a repo); an eval file *inside* the skill dir would ship its own answer key to every install. See [Where evals live](references/schemas.md#where-evals-live) for the full layout. Don't write assertions yet — just the prompts. You'll draft assertions in the next step while the runs are in progress.
+Save test cases to `evals.json` in a **committed sibling** of the skill directory — `<skill-name>-evals/evals.json` — never inside the skill directory itself. The definitions are the durable regression suite (commit them; run in CI if the skill has a repo); an eval file inside the skill dir ships to users as dead weight.
 
 ```json
 {
@@ -455,7 +455,7 @@ python -m scripts.package_skill <path/to/skill-folder> [output-dir]
 
 `output-dir` is optional and defaults to the skill folder's parent, which is unwritable on a plugin or marketplace install — pass the destination explicitly, as an absolute path when a script will consume it.
 
-Write the `.skill` file to a path you name in your reply — the workspace. (In Cowork your working directory already *is* the user-visible outputs directory, so a bare filename is correct there; never write it to an unnamed location.) Then present it: scan your available tools for one whose description says it sends or presents files to the user, and call it — the file is not delivered until you do, and stating the path is not a substitute. Only if no such tool exists, the path you already stated is the presentation. See `references/environments.md` → *Delivering files to the user* for why this two-step rule exists and which tool serves which surface. Packaging itself works everywhere Python does — never make it conditional on a presentation tool.
+**Never delete from the outputs directory.** Production denies `unlink`/`rmdir` there until the user approves it, so a "remove the stale copy and re-copy" step — the natural way to sync two directories — fails in production while succeeding in most test setups. Build once rather than staging a copy you have to refresh; if a file must change, overwrite it in place. Write the `.skill` file to a path you name in your reply — the workspace. (In Cowork your working directory already *is* the user-visible outputs directory, so a bare filename is correct there; never write it to an unnamed location.) Then present it: scan your available tools for one whose description says it sends or presents files to the user, and call it — the file is not delivered until you do, and stating the path is not a substitute. Only if no such tool exists, the path you already stated is the presentation. See `references/environments.md` → *Delivering files to the user* for why this two-step rule exists and which tool serves which surface. Packaging itself works everywhere Python does — never make it conditional on a presentation tool.
 
 ---
 
