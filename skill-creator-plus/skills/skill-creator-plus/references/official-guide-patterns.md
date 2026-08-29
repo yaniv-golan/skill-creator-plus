@@ -705,12 +705,29 @@ Save persistent data to ${CLAUDE_PLUGIN_DATA}/history.json.
 
 **Where each token is live**
 
-| | `SKILL.md` body | `allowed-tools` | `references/*.md` at runtime | Bash / sub-agent prompt |
-|---|---|---|---|---|
-| `${CLAUDE_SKILL_DIR}` | ✅ | ✅ | ❌ literal | ❌ empty |
-| `${CLAUDE_PLUGIN_ROOT}` | ✅ | ✅ | ❌ literal | ❌ empty **or another plugin's root** |
-| `${CLAUDE_PLUGIN_DATA}` | ✅ | ✅ | ❌ literal | ❌ empty **or another plugin's data dir** |
-| `${CLAUDE_SESSION_ID}` | ✅ | ❌ **not substituted** | ❌ literal | ❌ empty |
+| | `SKILL.md` body | `allowed-tools` | `commands/*.md` | `references/*.md` at runtime | Bash / sub-agent prompt |
+|---|---|---|---|---|---|
+| `${CLAUDE_SKILL_DIR}` | ✅ | ✅ | ❌ **literal** | ❌ literal | ❌ empty |
+| `${CLAUDE_PLUGIN_ROOT}` | ✅ | ✅ | ✅ | ❌ literal | ❌ empty **or another plugin's root** |
+| `${CLAUDE_PLUGIN_DATA}` | ✅ | ✅ | ✅ *(inferred)* | ❌ literal | ❌ empty **or another plugin's data dir** |
+| `${CLAUDE_SESSION_ID}` | ✅ | ❌ **not substituted** | ✅ *(inferred)* | ❌ literal | ❌ empty |
+
+**The `commands/*.md` column is the trap: the answer is token-specific, not surface-specific.** A
+command *is* a definition surface and substitution *does* happen there — just not for
+`${CLAUDE_SKILL_DIR}`, whose two replacement sites are guarded on an `isSkillMode` flag that both
+command load paths pass as false. So "does substitution happen in commands?" gets a truthful **yes**
+and sends you the wrong way; only the per-token question answers it. Measured with one fixture
+carrying both tokens on both surfaces, reading the delivered text rather than the model's report:
+
+```
+SKILL.md body       SKILL_SKILLDIR=/sessions/…/skills/ctl/scripts/y.py     substituted
+                    SKILL_PLUGINROOT=/sessions/…/cmdprobe/scripts/y.py     substituted
+commands/probe.md   CMD_SKILLDIR=${CLAUDE_SKILL_DIR}/scripts/y.py          LITERAL
+                    CMD_PLUGINROOT=/sessions/…/cmdprobe/scripts/y.py       substituted
+```
+
+The two ✅ marked *(inferred)* follow from the same substitution pass that handles
+`${CLAUDE_PLUGIN_ROOT}` but were not separately measured.
 
 The `allowed-tools` column is a separate substitution pass from the body's, and it does not carry the same set — `${CLAUDE_SESSION_ID}` survives in a body and is passed through untouched in a permission rule.
 
