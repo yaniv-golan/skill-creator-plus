@@ -25,6 +25,12 @@ and pass it along verbatim, including to any sub-agent.
 
 ## B. With a `bin/` launcher (see `assets/plugin-bin-launcher.sh`)
 
+Before pasting this, install the launcher: copy `assets/plugin-bin-launcher.sh` to
+`<plugin root>/bin/<cmd>`, set `NAME="<cmd>"`, `chmod 755`, and commit it executable. Then confirm
+it can see your scripts — `<cmd> --list` must name them. It searches `<plugin root>/scripts` and
+every `<plugin root>/skills/*/scripts`; an empty `--list` means it is pointed at neither, and the
+skill will fail as a bare exit 127 at runtime.
+
 ```markdown
 **Running this skill's scripts.** Prefer the absolute path this file was loaded with:
 
