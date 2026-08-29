@@ -1,0 +1,33 @@
+name: launcher-on-path
+# The mechanism assets/plugin-bin-launcher.sh depends on: Claude Code puts <plugin root>/bin on the
+# Bash tool's PATH, so a bare command resolves without any path crossing from the file tools.
+#
+# This asserts the mechanism directly rather than through a skill, because it is testing the
+# PLATFORM and the TEMPLATE, not the model's judgement. It fails in two useful ways:
+#   - the template regressed (bad root resolution, --list empty, script not found)
+#   - Claude Code stopped putting plugin bin/ on PATH, which would invalidate the whole
+#     optimisation tier in assets/skill-script-invocation.md
+#
+# CONTAINER ONLY, and that is the finding rather than a limitation: measured on this same fixture,
+# the host-loop shell's PATH carries no plugin bin/ at all (5 stock entries). The launcher is on
+# PATH exactly where the read path already works, and absent exactly where it is needed — which is
+# why the stanza demotes it to an optimisation and stanza-split-namespace.yaml asserts the search
+# instead. Do not "fix" this by adding a hostloop copy; it would fail by design.
+session: ../sessions/fixture.yaml
+fidelity: container
+on_unanswered: fail
+
+prompt: |
+  Run exactly these three shell commands and paste the raw output of each, nothing else:
+  (1) command -v wf
+  (2) wf --list
+  (3) wf validate --selftest
+
+assert:
+  - result: success
+  # (1) the bare name resolved INTO the staged plugin's bin — the mechanism itself
+  - tool_result_matches: "widget-fixture/bin/wf"
+  # (2) auto-SUBDIR found scripts under skills/<skill>/scripts, not just <root>/scripts
+  - tool_result_matches: "probe[\\s\\S]*validate"
+  # (3) and running through the launcher actually executes the bundled script
+  - tool_result_contains: "WIDGET_CHECK_RAN args=['--selftest']"
