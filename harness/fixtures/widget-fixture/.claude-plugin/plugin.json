@@ -1,0 +1,5 @@
+{
+  "name": "widget-fixture",
+  "version": "0.1.0",
+  "description": "Fixture plugin exercising the script-invocation stanzas in assets/. Not shipped; harness only."
+}

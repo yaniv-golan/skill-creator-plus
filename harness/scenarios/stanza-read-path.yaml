@@ -1,0 +1,17 @@
+name: stanza-read-path
+# Stanza A of assets/skill-script-invocation.md, exercised end to end: the ${CLAUDE_SKILL_DIR}
+# path is substituted at load, the model hands the resolved absolute path to the shell, and the
+# bundled script actually runs. Container fidelity, where the shell shares the file tools'
+# filesystem so the read path resolves directly and no fallback is needed.
+session: ../sessions/fixture.yaml
+fidelity: container
+on_unanswered: fail
+
+prompt: |
+  Run the widget check
+
+assert:
+  - result: success
+  - skill_triggered: "widget-check"
+  # the script really executed — not merely that the model described running it
+  - tool_result_contains: "WIDGET_CHECK_RAN args=['--selftest']"
