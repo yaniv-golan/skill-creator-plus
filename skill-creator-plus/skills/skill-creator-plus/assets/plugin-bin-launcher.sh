@@ -15,7 +15,7 @@
 # silently runs the wrong version. Use the read path when the shell can see it; use this when it
 # cannot. See assets/skill-script-invocation.md for the stanza that encodes that order.
 #
-# EIGHT RULES, each from a measured failure. Ignore any and this breaks quietly.
+# NINE RULES, each from a measured failure. Ignore any and this breaks quietly.
 #
 #  1. bin/ SITS BESIDE .claude-plugin/plugin.json. Not the repo root, not a source subtree. PATH
 #     receives the plugin root, so a bin/ one level out reaches nobody, and `find . -name bin`
@@ -35,6 +35,9 @@
 #  7. AN EMPTY FIRST ARGUMENT IS NOT "NO ARGUMENTS". Grouped with --help, `cmd "$UNSET"` exits 0
 #     having done nothing, while a typo exits 127 — the near-miss loud, the likelier programmatic
 #     failure silent. Tell them apart by argument COUNT.
+#  9. SET SUBDIR, OR LEAVE IT "auto". A skill's scripts are at <root>/skills/<skill>/scripts,
+#     NOT <root>/scripts. A launcher pinned to the wrong one fails as an empty --list and a bare
+#     127 — measured, by following this template and the stanza verbatim.
 #  8. NEVER RELY ON ${CLAUDE_PLUGIN_ROOT} FOR THIS, and do not debug it by checking for empty.
 #     It is substituted into DEFINITION text (SKILL.md, commands/*.md) at load and arrives
 #     literally in a reference file read at runtime. In a shell it is usually empty — but it can
@@ -51,7 +54,10 @@
 set -euo pipefail
 
 NAME="CHANGEME"          # the command this installs as; must equal this file's basename
-SUBDIR="scripts"         # where the scripts live, relative to the plugin root
+# Where the scripts live, relative to the plugin root. "auto" searches <root>/scripts and then
+# every <root>/skills/*/scripts — which covers both layouts, since a PLUGIN's scripts sit at the
+# root while a SKILL's sit under skills/<skill>/scripts. Set it explicitly to pin one directory.
+SUBDIR="auto"
 MIN_PY="3.8"
 
 # Rule 2: resolve the symlink chain before computing the root.
@@ -63,13 +69,33 @@ while [ -L "$src" ]; do
 done
 ROOT="$(cd -P "$(dirname "$src")/.." && pwd)"
 
+# Rule 9: a skill's scripts are NOT at the plugin root. A plugin's own live at <root>/scripts,
+# a skill's at <root>/skills/<skill>/scripts, and a launcher that only knows the first finds
+# nothing for the second — silently, as an empty --list and a bare 127.
+script_dirs() {
+  if [ "$SUBDIR" != "auto" ]; then printf '%s\n' "$ROOT/$SUBDIR"; return; fi
+  [ -d "$ROOT/scripts" ] && printf '%s\n' "$ROOT/scripts"
+  for d in "$ROOT"/skills/*/scripts; do [ -d "$d" ] && printf '%s\n' "$d"; done
+  return 0
+}
+
 # Entry points only — ask each file rather than maintaining a denylist nothing checks.
 list_scripts() {
-  for f in "$ROOT/$SUBDIR"/*.py; do
-    [ -e "$f" ] || continue
-    grep -q '^if __name__ ==' "$f" || continue
-    basename "$f" .py
+  script_dirs | while IFS= read -r dir; do
+    for f in "$dir"/*.py; do
+      [ -e "$f" ] || continue
+      grep -q '^if __name__ ==' "$f" || continue
+      basename "$f" .py
+    done
   done
+  return 0
+}
+
+find_script() {
+  script_dirs | while IFS= read -r dir; do
+    if [ -f "$dir/$1.py" ]; then printf '%s\n' "$dir/$1.py"; break; fi
+  done
+  return 0
 }
 
 usage() {
@@ -78,7 +104,7 @@ $NAME — run a script shipped with this plugin.
 
 Usage:
   $NAME <script> [args...]   run $SUBDIR/<script>.py (the .py is optional)
-  $NAME --where              print the resolved plugin root
+  $NAME --where              print the resolved plugin root and the script dirs
   $NAME --list               list the scripts available
   $NAME --help
 
@@ -102,7 +128,7 @@ fi
 
 case "$1" in
   -h|--help) usage; exit 0 ;;
-  --where)   printf '%s\n' "$ROOT"; exit 0 ;;
+  --where)   printf '%s\n' "$ROOT"; script_dirs | sed 's/^/  scripts: /'; exit 0 ;;
   --list)    list_scripts; exit 0 ;;
 esac
 
@@ -124,9 +150,11 @@ case "$name" in
     exit 127 ;;
 esac
 
-target="$ROOT/$SUBDIR/$name.py"
-if [ ! -f "$target" ]; then
-  echo "$NAME: no such script '$name'. Available:" >&2
+target="$(find_script "$name")"
+if [ -z "$target" ]; then
+  echo "$NAME: no such script '$name'. Looked in:" >&2
+  script_dirs | sed 's/^/  /' >&2
+  echo "Available:" >&2
   list_scripts | sed 's/^/  /' >&2
   exit 127
 fi
