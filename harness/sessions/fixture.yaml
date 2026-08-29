@@ -1,0 +1,9 @@
+# Session for the assets/ stanza fixtures. Mounts harness/fixtures/widget-fixture — a throwaway
+# plugin built FROM assets/skill-script-invocation.md and assets/plugin-bin-launcher.sh, so these
+# scenarios test the templates we ship, not this repo's own skill.
+model: claude-opus-5
+permission_parity: cowork
+
+plugins:
+  local_plugins: ["../fixtures/widget-fixture"]
+  enabled: ["widget-fixture@local"]

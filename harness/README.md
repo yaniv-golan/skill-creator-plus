@@ -18,8 +18,32 @@ harness/
     create-skill.yaml        # flagship: "create a skill" triggers + runs clean (LIVE-ONLY, see below)
     remote-delivery.yaml     # lane:remote delivery-contract guard (LIVE-ONLY, see below)
     shell-cwd-carryover.yaml # PROBE: does shell cwd persist between calls? (answer recorded in-file)
+    script-path-guidance.yaml# guards the skill's own script-path answer (see its TIER NOTE)
+    stanza-read-path.yaml    # assets/ stanza A end to end, container
+    stanza-split-namespace.yaml # assets/ stanza B in the lane it exists for, hostloop
+  sessions/fixture.yaml      # mounts fixtures/widget-fixture instead of this repo's plugin
+  fixtures/widget-fixture/   # throwaway plugin built FROM assets/ — tests the templates we SHIP
   cassettes/                 # (no committed cassettes — see below; recorded on-demand / locally)
 ```
+
+**`fixtures/widget-fixture/` tests the shipped templates, not this skill.** It is a plugin assembled
+from `assets/skill-script-invocation.md` and `assets/plugin-bin-launcher.sh` exactly as an author
+would, so a defect in those templates fails here. Three already have: a launcher pinned to the wrong
+script directory, an error path killed by `set -e`, and a fallback tier that does not exist in the
+lane it was written for. Its `bin/wf` must stay mode `100755` in the index — `git ls-files -s` — or
+the launcher cannot run once mounted read-only.
+
+**Lane coverage for the `bin/`-on-PATH mechanism**, measured on that one fixture:
+
+| lane | plugin `bin/` on the shell's PATH | read path resolves in the shell |
+|---|---|---|
+| container | **yes** (`/sessions/…/widget-fixture/bin`) | yes — so the launcher is never needed |
+| hostloop  | **no** (5 stock entries) | **no** — so the launcher is exactly what is missing |
+| microvm   | not measured — the lane fails to start here (`env: 'claude': No such file or directory` in the Lima guest) |
+
+That inversion is the finding: the launcher is on PATH where the read path already works, and absent
+where it does not. `stanza-split-namespace.yaml` therefore asserts the *search* recovery, not the
+launcher.
 
 **One cassette is committed; the other two are live-only — the CI gate is mostly the static lane.**
 A cassette records the skill's *own* behavior, so its staleness hash is tied to the skill's source.

@@ -1,0 +1,25 @@
+name: stanza-split-namespace
+# Stanza B of assets/skill-script-invocation.md, in the lane it exists for: Cowork's host loop,
+# where the file tools and the shell are different mounts of the same content. The read path the
+# model was given FAILS there, and the stanza's recovery — locate the file from the shell's side —
+# must carry it. The fixture skill forbids guessing or transforming the path, so the search branch
+# is forced rather than shortcut by an inferred mapping.
+#
+# WHY NOT THE LAUNCHER: measured on this fixture, the host-loop shell's PATH carries no plugin
+# bin/ at all (5 stock entries), while the SAME fixture at container fidelity does get
+# `/sessions/<id>/mnt/.../widget-fixture/bin`. The launcher is on PATH exactly where the read path
+# already works, and absent exactly where it is needed — which is why assets/ demotes it to an
+# optimisation and this scenario asserts the search instead.
+session: ../sessions/fixture.yaml
+fidelity: hostloop
+on_unanswered: fail
+
+assert:
+  - result: success
+  - skill_triggered: "gizmo-probe"
+  # the search actually resolved a path in the SHELL's namespace, not the file tools'
+  - tool_result_matches: "/sessions/[^ ]*gizmo-probe/scripts/probe\\.py"
+  - tool_result_contains: "GIZMO_PROBE_RAN args=['--selftest']"
+
+prompt: |
+  Run the gizmo probe
