@@ -71,7 +71,9 @@ cd skill-creator-plus/skills/skill-creator-plus && python -m unittest discover -
 python -m scripts.aggregate_benchmark <dir> --notes notes.json  # merge analyst notes
 
 # cowork-harness static checks on the shipped skill (token-free, no Docker; needs cowork-harness
-# >= 2.4.0 — see `harness/README.md`)
+# >= 3.0.0 — see `harness/README.md`. 3.0.0 renamed the `l0_plugin_divergence` signal to
+# `l0_host_config_contamination` and added the `allow_host_hooks` scenario key; the loader is a
+# strictObject, so an older CLI hard-errors on a scenario using the new key rather than ignoring it.)
 cowork-harness lint-skill   --strict skill-creator-plus/skills/skill-creator-plus
 cowork-harness analyze-skill --strict skill-creator-plus/skills/skill-creator-plus
 cowork-harness lint --strict --min-severity WARN harness/scenarios/

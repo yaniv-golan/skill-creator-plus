@@ -26,13 +26,25 @@ name: script-path-guidance
 #   cowork-harness chat skill-creator-plus/skills/skill-creator-plus '<question>' \
 #     --fidelity container --model claude-sonnet-5
 #
-# NEVER probe this skill at `--fidelity protocol`. L0 keeps the operator's real
-# CLAUDE_CONFIG_DIR, so every installed plugin is discoverable and the positional argument
-# can be silently inert. Measured 2026-08-29 on run chat/local_bmzb7u6aj2: 79 distinct
-# ~/.claude/plugins paths in the stream, the answer sourced from another installed plugin
-# entirely, and the ONLY skill-creator-plus path present was the installed 0.10.0 cache copy
-# — the working tree passed on the command line was never read. An L0 probe of this skill
-# measures whatever is installed, and says nothing about your edits.
+# ON `--fidelity protocol` (L0), which changed in cowork-harness 3.0.0 and is worth knowing before
+# you hand-probe: it is now usable, and it fails loudly when it is not.
+#
+#   BEFORE 3.0.0 — L0 passed no `--plugin-dir`, so the positional argument was SILENTLY INERT and
+#   the run measured whatever the operator had installed. Measured here 2026-08-29 on run
+#   chat/local_bmzb7u6aj2: 79 distinct ~/.claude/plugins paths in the stream, the answer sourced
+#   from an unrelated installed plugin, and the only skill-creator-plus path present was the
+#   installed 0.10.0 cache copy — the working tree passed on the command line was never read.
+#
+#   FROM 3.0.0 — L0 passes `--plugin-dir`, so the tree you pass is delivered; and with a credential
+#   in the environment (`CLAUDE_CODE_OAUTH_TOKEN`, `ANTHROPIC_API_KEY` or `ANTHROPIC_AUTH_TOKEN`) it
+#   takes a managed config dir. Re-measured after upgrading: skill invoked from the passed tree,
+#   ZERO host plugin paths. WITHOUT a credential it hard-fails `l0_host_config_contamination`
+#   rather than quietly measuring your install.
+#
+# So: export a credential before any L0 probe, and treat a contamination failure as the finding it
+# is rather than something to opt out of. container/microvm remain the safer default and are what
+# this suite pins.
+
 session: ../sessions/skill.yaml
 fidelity: container
 on_unanswered: fail
