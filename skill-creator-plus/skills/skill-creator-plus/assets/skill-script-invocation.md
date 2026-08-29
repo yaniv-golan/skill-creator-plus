@@ -67,3 +67,42 @@ above — so it is an optimisation on this tier, never the tier itself.
 text only, is absent from the Bash tool's contract, and its value is the file-tool-side path — the
 wrong side of the split. `${CLAUDE_SKILL_DIR}` has the same three limits but at least names the
 right directory. Neither survives a shell.
+
+---
+
+## Why the launcher has nine rules
+
+Each came from a failure that was measured, not imagined. They live here rather than in
+`plugin-bin-launcher.sh` because that file gets copied into your repo and this one does not — an
+adopting plugin should carry the rules, not our investigation.
+
+1. **`bin/` beside `.claude-plugin/plugin.json`.** PATH receives the plugin root. In a marketplace
+   repo whose plugin sits in a subdirectory there are two candidate roots and only the inner one
+   counts. A `bin/` elsewhere is usually an ordinary project CLI, correctly placed — this is about
+   which directory PATH gets, not about tidying a repo.
+2. **Resolve symlinks first.** `${BASH_SOURCE[0]}` is the invoking path, so a symlink on PATH makes
+   the computed root the symlink's grandparent — wrong tree, exit 0, no complaint.
+3. **A PATH entry is not evidence the directory exists.** The builder maps every enabled
+   non-builtin plugin to `<root>/bin` with no existence check, so `echo $PATH` reads healthy on the
+   actual failure and "command not found" never means PATH is misconfigured.
+4. **Don't name it after a `clis` key.** On Cowork's org-remote lane a plugin root has a `bin/`
+   **iff** `clis` is declared, and the runtime materialises `bin/<key>` itself as a wrapper shim on
+   its own schedule.
+5. **Commit the exec bit.** The plugin mount is read-only; it cannot be added after install.
+6. **A bare name, never a path.** `"$ROOT/$SUBDIR/$1.py"` with an unchecked argument runs
+   `../../anything`.
+7. **An empty first argument is not "no arguments".** Grouped with `--help`, `cmd "$UNSET"` exits 0
+   having done nothing while a typo exits 127 — the near-miss loud, the likelier failure silent.
+8. **`${CLAUDE_PLUGIN_ROOT}` can be set and wrong.** A plugin's `Setup` / `SessionStart` /
+   `CwdChanged` / `FileChanged` hook may export its own environment into the session, so an
+   unrelated plugin's root lands in your shell and every later Bash call inherits it. Observed:
+   `CLAUDE_PLUGIN_ROOT` naming one plugin beside a `CLAUDE_PLUGIN_DATA` naming another, neither
+   being the plugin whose skill was running.
+
+   **Check it yourself:** `ls ~/.claude/session-env/<session-id>/` — one file per hook, holding the
+   exports your shell inherited. `CLAUDE_ENV_FILE` is *not* set in that shell; it is the path the
+   hook was told to write to, so its absence there is the mechanism working, not evidence against
+   it. This is why "is it empty?" is the wrong first question.
+9. **A skill's scripts are not at the plugin root.** A plugin's own sit at `<root>/scripts`, a
+   skill's at `<root>/skills/<skill>/scripts`. A launcher pinned to the wrong one fails as an empty
+   `--list` and a bare 127.

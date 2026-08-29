@@ -1,72 +1,27 @@
 #!/usr/bin/env bash
 # TEMPLATE — a plugin launcher. Copy to <plugin root>/bin/<name>, set NAME, chmod 755, commit.
 #
-# WHAT IT SOLVES. A skill's instructions need to run `python3 <plugin>/scripts/foo.py`, but the
-# model only knows the path it READ THE INSTRUCTION AT, which is a file-tool path. On some hosts
-# (Cowork's host loop) the shell lives in a different filesystem namespace — not a different
-# working directory, a different mount of the same content at a different absolute path — and no
-# single string is correct for both. Claude Code puts <plugin root>/bin on the BASH TOOL'S PATH,
-# constructed for that shell rather than inherited, so a bare `<name>` resolves in the shell's own
-# namespace and no path crosses the boundary.
+# Runs a script shipped with this plugin as a bare command, so no filesystem path has to travel
+# from the file tools to the shell. Claude Code puts <plugin root>/bin on the Bash tool's PATH.
 #
-# WHERE THIS RANKS. Below the path the instruction was read at, not above it. A launcher on PATH
-# proves *a* working install, not *that* install: with two installs present and the launcher bound
-# to the older one — the ordinary shape of a maintainer's machine — a launcher-first resolver
-# silently runs the wrong version. Use the read path when the shell can see it; use this when it
-# cannot. See assets/skill-script-invocation.md for the stanza that encodes that order.
+# READ FIRST — this is an OPTIMISATION, not a fallback. Measured: at Cowork host-loop, the lane
+# with the namespace split this exists to bridge, the shell's PATH carries no plugin bin/ at all.
+# Gate every use on `command -v <name>` and keep a search branch behind it.
 #
-# NINE RULES, each from a measured failure. Ignore any and this breaks quietly.
+# NINE RULES, each from a measured failure. The evidence for each is in
+# assets/skill-script-invocation.md (§ Why the launcher has nine rules) — kept there rather than
+# here because this file gets copied into your repo and that does not.
 #
-#  1. bin/ SITS BESIDE .claude-plugin/plugin.json. Not the repo root, not a source subtree. PATH
-#     receives the plugin root, so a bin/ one level out reaches nobody, and `find . -name bin`
-#     calls it compliant. Check the sibling, not the name.
-#  2. RESOLVE SYMLINKS FIRST. ${BASH_SOURCE[0]} is the invoking path, not the physical file, so a
-#     symlink on PATH makes the root the symlink's grandparent — wrong tree, exit 0.
-#  3. VERIFY, DON'T TRUST. A PATH entry is advertised whether or not the directory exists; the
-#     builder has no existence check. So `echo $PATH` reads healthy on the actual failure, and
-#     "command not found" never means PATH is misconfigured. Gate on `command -v`, not on PATH.
-#  4. DO NOT NAME IT AFTER A `clis` KEY in plugin.json. On Cowork's org-remote lane a plugin root
-#     has a bin/ IFF `clis` is declared, and the runtime materialises bin/<key> itself as a wrapper
-#     shim on its own schedule. Declaring clis: {foo: ...} means the runtime owns bin/foo.
-#  5. COMMIT THE EXEC BIT (`git ls-files -s` must show 100755). The plugin mount is read-only, so
-#     it cannot be added after install.
-#  6. A BARE NAME, NEVER A PATH. Interpolating an argument into "$ROOT/$SUBDIR/$1.py" lets
-#     `../../x` run a file outside the plugin.
-#  7. AN EMPTY FIRST ARGUMENT IS NOT "NO ARGUMENTS". Grouped with --help, `cmd "$UNSET"` exits 0
-#     having done nothing, while a typo exits 127 — the near-miss loud, the likelier programmatic
-#     failure silent. Tell them apart by argument COUNT.
-#  9. SET SUBDIR, OR LEAVE IT "auto". A skill's scripts are at <root>/skills/<skill>/scripts,
-#     NOT <root>/scripts. A launcher pinned to the wrong one fails as an empty --list and a bare
-#     127 — measured, by following this template and the stanza verbatim.
-#  8. NEVER RELY ON ${CLAUDE_PLUGIN_ROOT} FOR THIS, and do not debug it by checking for empty.
-#     It is substituted into DEFINITION text (SKILL.md, commands/*.md) at load and arrives
-#     literally in a reference file read at runtime. In a shell it is usually empty — but it can
-#     also be SET AND WRONG: a plugin's SessionStart/Setup/CwdChanged/FileChanged hook may export
-#     its own environment via CLAUDE_ENV_FILE, so an unrelated plugin's root lands in the session
-#     env and every later Bash call inherits it. Measured: CLAUDE_PLUGIN_ROOT naming one plugin
-#     beside a CLAUDE_PLUGIN_DATA naming another, neither being the plugin whose skill was running.
-#     Its value is also the file-tool-side path, the wrong side of the split this exists to bridge.
-#
-# SCOPE — READ THIS BEFORE RELYING ON IT. The PATH mechanism is verified for Claude Code's own
-# Bash tool: a bin/ at the plugin root resolves as a bare command there. It is NOT present in
-# Cowork's host-loop workspace shell. Measured 2026-08-29 with this template installed in a
-# harness-staged plugin: that shell's PATH was eight stock entries —
-#   /usr/local/lib/node_modules_global/bin /usr/local/sbin /usr/local/bin /usr/sbin /usr/bin
-#   /sbin /bin /snap/bin
-# — with no plugin bin/ of any kind, so `command -v <name>` found nothing and the skill recovered
-# only by searching the filesystem from the shell's side.
-#
-# That is the lane with the namespace split, i.e. the one this launcher was built to bridge. So it
-# is an OPTIMISATION where PATH happens to carry it, never the fallback a skill depends on. Ship it
-# if you like, gate every use on `command -v`, and keep a search branch behind it. See
-# assets/skill-script-invocation.md, stanza B.
-#
-# Bound on that measurement: the plugin was staged locally by the harness. Whether a plugin synced
-# through the org-remote path gets PATH treatment in that shell is not established either way.
-#
-# Also unverified: the client version that added bare-command bin/ lookup, and whether an AUTHORED
-# launcher survives re-provisioning on the org-remote lane (nobody ships one, so there is no field
-# evidence).
+#  1. bin/ SITS BESIDE .claude-plugin/plugin.json — not the repo root, not a source subtree.
+#  2. RESOLVE SYMLINKS before computing the root; ${BASH_SOURCE[0]} is the invoking path.
+#  3. VERIFY, DON'T TRUST — a PATH entry is advertised whether or not the directory exists.
+#  4. DO NOT NAME IT AFTER A `clis` KEY in plugin.json; the runtime materialises bin/<key> itself.
+#  5. COMMIT THE EXEC BIT (`git ls-files -s` shows 100755); the plugin mount is read-only.
+#  6. A BARE NAME, NEVER A PATH — interpolating an argument allows `../../x`.
+#  7. AN EMPTY FIRST ARGUMENT IS NOT "NO ARGUMENTS" — tell them apart by argument COUNT.
+#  8. NEVER RELY ON ${CLAUDE_PLUGIN_ROOT}, and never debug it by checking whether it is empty.
+#     In a shell it is usually empty but can be SET AND WRONG, naming an unrelated plugin.
+#  9. SET SUBDIR, OR LEAVE IT "auto" — a skill's scripts are under skills/<skill>/scripts.
 
 set -euo pipefail
 
