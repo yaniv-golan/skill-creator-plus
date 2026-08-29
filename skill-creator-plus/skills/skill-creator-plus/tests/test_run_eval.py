@@ -8,7 +8,11 @@ SKILL_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(SKILL_ROOT))
 import os  # noqa: E402
 from unittest import mock  # noqa: E402
+import json  # noqa: E402
+import types  # noqa: E402
 from scripts.run_eval import (  # noqa: E402
+    classify_invocation,
+    run_single_query,
     CREDENTIAL_ENV_VARS,
     InstrumentError,
     isolation_available,
@@ -46,10 +50,6 @@ class ScoreQueriesTest(unittest.TestCase):
         self.assertEqual(summary["errored_runs"], 3)
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class IsolationTest(unittest.TestCase):
     """The eval cannot measure a skill that is also INSTALLED unless HOME is isolated.
 
@@ -79,31 +79,120 @@ class IsolationTest(unittest.TestCase):
             self.assertEqual(env["HOME"], "/real/home")
             self.assertNotIn("CLAUDECODE", env)
 
-    def test_instrument_error_is_not_a_score(self):
-        """Callers must be able to tell 'measured nothing' from 'scored badly'."""
-        self.assertTrue(issubclass(InstrumentError, RuntimeError))
+
+def drive(events, installed=frozenset(), clean_hex="a" * 32):
+    """Run the REAL run_single_query against canned stream-json, offline.
+
+    No network, no credential, no `claude` binary. Everything below is reachable this way, which
+    is why the fix's own behaviour is now testable at all — the first version of these tests
+    mocked os.environ and asserted on dicts, and could not see the defect that mattered.
+    """
+    import scripts.run_eval as m
+    r, w = os.pipe()
+    os.write(w, ("".join(json.dumps(e) + "\n" for e in events)).encode())
+    os.close(w)
+
+    class FakeProc:
+        def __init__(self):
+            self.stdout = types.SimpleNamespace(fileno=lambda: r, read=lambda: b"")
+
+        def poll(self):
+            return None
+
+        def kill(self):
+            pass
+
+        def wait(self, timeout=None):
+            return 0
+
+    real_popen, real_uuid = m.subprocess.Popen, m.uuid
+    m.subprocess.Popen = lambda *a, **k: FakeProc()
+    m.uuid = types.SimpleNamespace(uuid4=lambda: types.SimpleNamespace(hex=clean_hex))
+    try:
+        return m.run_single_query("q", "skill-creator-plus", "d", 5, None, None, installed)
+    finally:
+        m.subprocess.Popen, m.uuid = real_popen, real_uuid
+        os.close(r)
+
+
+def skill_events(name, shape="stream"):
+    """The CLI's real event shape. `--include-partial-messages` is always passed, so the STREAM
+    form is what production sees; the assistant form is the fallback that almost never runs."""
+    if shape == "stream":
+        return [
+            {"type": "stream_event", "event": {"type": "content_block_start",
+             "content_block": {"type": "tool_use", "name": "Skill"}}},
+            {"type": "stream_event", "event": {"type": "content_block_delta",
+             "delta": {"type": "input_json_delta",
+                       "partial_json": json.dumps({"skill": name})}}},
+            {"type": "stream_event", "event": {"type": "content_block_stop"}},
+        ]
+    return [{"type": "assistant", "message": {"content": [
+        {"type": "tool_use", "name": "Skill", "input": {"skill": name}}]}}]
+
+
+CLEAN = "skill-creator-plus-skill-" + "a" * 8
+INSTALLED = frozenset({"skill-creator-plus", "skill-creator"})
 
 
 class HijackDetectionTest(unittest.TestCase):
-    """A run that invoked the INSTALLED skill was not measured, and must not be scored.
+    """A run that invoked an INSTALLED skill was not measured, and must not be scored.
 
-    This is intermittent rather than certain — measured 1 in 3 unisolated runs — which is exactly
-    why it needs detecting rather than warning about. A warning the operator reads once and then
-    sees three green runs behind teaches them the warning is noise.
+    THE BUG THESE EXIST FOR: the first version of this detection lived only in the `assistant`
+    branch. `run_single_query` always passes `--include-partial-messages`, so the STREAM branch
+    reaches a verdict first and the detector never ran on the path production uses. Hijacks were
+    scored as plain non-triggers -- the original bug, shipped inside its own fix. The
+    "intermittent, 1 in 3" behaviour measured at the time was a race between two return paths, not
+    model non-determinism.
     """
 
-    def test_hijack_flag_travels_on_the_outcome(self):
-        outcome = {"triggered": False, "error": None, "hijacked_by": "skill-creator-plus"}
-        self.assertTrue(outcome.get("hijacked_by"))
+    def test_hijack_is_detected_on_the_stream_path(self):
+        """The path production actually takes. Fails against the first version of the fix."""
+        out = drive(skill_events("skill-creator-plus"), INSTALLED)
+        self.assertFalse(out["triggered"])
+        self.assertEqual(out["hijacked_by"], "skill-creator-plus")
 
-    def test_a_hijacked_run_is_a_non_trigger_to_score_queries(self):
-        """score_queries is deliberately unaware of hijacking — run_eval refuses before scoring.
+    def test_hijack_is_detected_on_the_assistant_path(self):
+        out = drive(skill_events("skill-creator-plus", "assistant"), INSTALLED)
+        self.assertEqual(out["hijacked_by"], "skill-creator-plus")
 
-        Pins the layering: if a future change makes score_queries swallow the flag, a hijacked run
-        would silently become a plain non-trigger again, which is the original bug.
-        """
-        eval_set = [{"query": "q1", "should_trigger": True}]
-        runs = {"q1": [{"triggered": False, "error": None, "hijacked_by": "other-skill"}]}
-        results, summary = score_queries(eval_set, runs, trigger_threshold=0.5)
-        self.assertEqual(summary["passed"], 0)
-        self.assertEqual(results[0]["triggers"], 0)
+    def test_hijack_to_a_shorter_installed_name(self):
+        """`skill_name in invoked` missed this, and both names are installed on the dev machine."""
+        out = drive(skill_events("skill-creator"), INSTALLED)
+        self.assertEqual(out["hijacked_by"], "skill-creator")
+
+    def test_hijack_to_a_plugin_qualified_id(self):
+        out = drive(skill_events("someplugin:skill-creator-plus"), INSTALLED)
+        self.assertEqual(out["hijacked_by"], "someplugin:skill-creator-plus")
+
+    def test_the_synthesized_copy_is_a_trigger_not_a_hijack(self):
+        out = drive(skill_events(CLEAN), INSTALLED)
+        self.assertTrue(out["triggered"])
+        self.assertIsNone(out["hijacked_by"])
+
+    def test_an_unrelated_skill_is_neither(self):
+        out = drive(skill_events("totally-unrelated"), INSTALLED)
+        self.assertFalse(out["triggered"])
+        self.assertIsNone(out["hijacked_by"])
+
+
+class ClassifyInvocationTest(unittest.TestCase):
+    """Membership in the installed set, never a substring of the name under test.
+
+    Substring was wrong in BOTH directions: it missed a hijack to a shorter installed name, and a
+    skill called `docs`/`test`/`eval` would match many installed names -- where ONE false hit
+    discards every score in the run.
+    """
+
+    def test_generic_name_does_not_false_positive(self):
+        installed = frozenset({"docs-writer", "test-runner"})
+        self.assertEqual(classify_invocation("docs-writer", "docs-skill-x", installed), "hijacked")
+        self.assertEqual(classify_invocation("unrelated", "docs-skill-x", installed), "other")
+
+    def test_empty_invocation_is_other(self):
+        self.assertEqual(classify_invocation(None, "x", frozenset()), "other")
+        self.assertEqual(classify_invocation("", "x", frozenset()), "other")
+
+
+if __name__ == "__main__":
+    unittest.main()

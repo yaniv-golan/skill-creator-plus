@@ -8,13 +8,14 @@ for a set of queries. Outputs results as JSON.
 import argparse
 import json
 import os
+import re
 import select
 import subprocess
 import sys
 import tempfile
 import time
 import uuid
-from concurrent.futures import ProcessPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 try:
@@ -73,6 +74,43 @@ def _subprocess_env(isolated_home: str | None) -> dict:
     return env
 
 
+
+def _invoked_skill_name(raw_json: str) -> str | None:
+    """Best-effort skill name out of a (possibly truncated) tool-input JSON fragment."""
+    try:
+        v = json.loads(raw_json).get("skill")
+        if isinstance(v, str) and v:
+            return v
+    except (ValueError, AttributeError):
+        pass
+    m = re.search(r'"skill"\s*:\s*"([^"]+)"', raw_json)
+    return m.group(1) if m else None
+
+
+def classify_invocation(invoked: str | None, clean_name: str, installed: frozenset) -> str:
+    """'triggered' | 'hijacked' | 'other' for one Skill invocation.
+
+    Called from BOTH the stream-event and the assistant return paths. The first version of this
+    fix lived only in the assistant branch, which `--include-partial-messages` means is almost
+    never reached — so hijacks were scored as plain non-triggers, i.e. the original bug, on the
+    primary path. One function, two call sites, so they cannot drift apart again.
+
+    'hijacked' is decided by membership in the operator's INSTALLED skills, not by a substring of
+    the name under test. Substring is wrong in both directions: it misses a hijack to a SHORTER
+    installed name (`skill-creator` while testing `skill-creator-plus` — both installed here), and
+    it fires on any installed name containing a generic one like `docs`, `test` or `eval`, where a
+    single false hit discards the whole run's scores.
+    """
+    if not invoked:
+        return "other"
+    if clean_name in invoked:
+        return "triggered"
+    # a plugin-qualified id is `plugin:skill`; compare the last segment too
+    if invoked in installed or invoked.rsplit(":", 1)[-1] in installed:
+        return "hijacked"
+    return "other"
+
+
 def run_single_query(
     query: str,
     skill_name: str,
@@ -80,6 +118,7 @@ def run_single_query(
     timeout: int,
     model: str | None = None,
     isolated_home: str | None = None,
+    installed: frozenset = frozenset(),
 ) -> dict:
     """Run a single query in an ISOLATED throwaway project root.
 
@@ -196,13 +235,21 @@ def run_single_query(
                             if delta.get("type") == "input_json_delta":
                                 accumulated_json += delta.get("partial_json", "")
                                 if clean_name in accumulated_json:
-                                    return {"triggered": True, "error": None}
+                                    return {"triggered": True, "error": None,
+                                            "hijacked_by": None}
 
                         elif se_type in ("content_block_stop", "message_stop"):
                             if pending_tool_name:
-                                return {"triggered": clean_name in accumulated_json, "error": None}
+                                verdict = classify_invocation(
+                                    _invoked_skill_name(accumulated_json), clean_name, installed)
+                                return {
+                                    "triggered": verdict == "triggered",
+                                    "error": None,
+                                    "hijacked_by": (_invoked_skill_name(accumulated_json)
+                                                    if verdict == "hijacked" else None),
+                                }
                             if se_type == "message_stop":
-                                return {"triggered": False, "error": None}
+                                return {"triggered": False, "error": None, "hijacked_by": None}
 
                     # Fallback: full assistant message
                     elif event.get("type") == "assistant":
@@ -213,9 +260,11 @@ def run_single_query(
                             tool_name = content_item.get("name", "")
                             tool_input = content_item.get("input", {})
                             invoked = tool_input.get("skill", "")
-                            if tool_name == "Skill" and clean_name in invoked:
+                            verdict = (classify_invocation(invoked, clean_name, installed)
+                                       if tool_name == "Skill" else "other")
+                            if verdict == "triggered":
                                 triggered = True
-                            elif tool_name == "Skill" and invoked and skill_name in invoked:
+                            elif verdict == "hijacked":
                                 # The model reached for a DIFFERENT skill whose name contains the
                                 # one under test — i.e. the operator's INSTALLED copy, visible
                                 # because HOME was not isolated. Scoring this as "did not trigger"
@@ -340,7 +389,7 @@ def _warn_unisolated(skill_name: str) -> None:
         )
 
 
-def run_canary(skill_name, description, timeout, model, isolated_home) -> dict:
+def run_canary(skill_name, description, timeout, model, isolated_home, installed) -> dict:
     """Prove the detector can fire at all before believing any 'did not trigger'.
 
     A dead detector and a bad description are indistinguishable in a score: both are low numbers
@@ -351,7 +400,7 @@ def run_canary(skill_name, description, timeout, model, isolated_home) -> dict:
     """
     return run_single_query(
         CANARY_QUERY.format(name=f"{skill_name}-skill"),
-        skill_name, description, timeout, model, isolated_home,
+        skill_name, description, timeout, model, isolated_home, installed,
     )
 
 
@@ -363,12 +412,16 @@ def _run_eval_inner(
     eval_set, skill_name, description, num_workers, timeout,
     runs_per_query, trigger_threshold, model, isolated_home,
 ) -> dict:
-    canary = run_canary(skill_name, description, timeout, model, isolated_home)
+    installed = frozenset(installed_skill_names())
+    canary = run_canary(skill_name, description, timeout, model, isolated_home, installed)
     if not canary.get("triggered"):
         raise InstrumentError(
             "CANARY FAILED — the synthesized command did not trigger on a query that names it "
             "outright, so this eval cannot detect a trigger and every score would be noise.\n"
             f"  canary error: {canary.get('error') or 'none (ran clean, simply did not trigger)'}\n"
+            + (f"  the canary was HIJACKED to {canary['hijacked_by']!r} — an installed skill "
+               f"answered instead of the copy under test. That is the cause, not a guess.\n"
+               if canary.get("hijacked_by") else "")
             + (
                 "  HOME was isolated, so an installed skill of the same name is not the cause; "
                 "suspect the CLI, the model, or the detector itself."
@@ -380,7 +433,7 @@ def _run_eval_inner(
         )
 
     hijacked: list[tuple[str, str]] = []
-    with ProcessPoolExecutor(max_workers=num_workers) as executor:
+    with ThreadPoolExecutor(max_workers=num_workers) as executor:
         future_to_info = {}
         for item in eval_set:
             for run_idx in range(runs_per_query):
@@ -392,6 +445,7 @@ def _run_eval_inner(
                     timeout,
                     model,
                     isolated_home,
+                    installed,
                 )
                 future_to_info[future] = (item, run_idx)
 
@@ -426,6 +480,14 @@ def _run_eval_inner(
     return {
         "skill_name": skill_name,
         "description": description,
+        # Provenance of the measurement, not decoration. `isolated: false` means the operator's
+        # installed skills were visible to the model and a hijack was possible; `canary` proves the
+        # detector could fire at all. Both ride in the artifact rather than only on stderr, so a
+        # refactor that drops isolation is visible in every result a user ever looks at — not only
+        # when someone has written the right mock in CI.
+        "isolated": bool(isolated_home),
+        "canary": {"triggered": canary.get("triggered"),
+                   "hijacked_by": canary.get("hijacked_by")},
         "results": results,
         "summary": summary,
     }
