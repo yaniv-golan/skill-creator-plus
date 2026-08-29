@@ -47,9 +47,26 @@
 #     beside a CLAUDE_PLUGIN_DATA naming another, neither being the plugin whose skill was running.
 #     Its value is also the file-tool-side path, the wrong side of the split this exists to bridge.
 #
-# UNVERIFIED, so keep a fallback: the client version that added bare-command bin/ lookup is not
-# established, and whether an AUTHORED launcher survives re-provisioning on the org-remote lane is
-# untested (nobody ships one, so there is no field evidence either way).
+# SCOPE — READ THIS BEFORE RELYING ON IT. The PATH mechanism is verified for Claude Code's own
+# Bash tool: a bin/ at the plugin root resolves as a bare command there. It is NOT present in
+# Cowork's host-loop workspace shell. Measured 2026-08-29 with this template installed in a
+# harness-staged plugin: that shell's PATH was eight stock entries —
+#   /usr/local/lib/node_modules_global/bin /usr/local/sbin /usr/local/bin /usr/sbin /usr/bin
+#   /sbin /bin /snap/bin
+# — with no plugin bin/ of any kind, so `command -v <name>` found nothing and the skill recovered
+# only by searching the filesystem from the shell's side.
+#
+# That is the lane with the namespace split, i.e. the one this launcher was built to bridge. So it
+# is an OPTIMISATION where PATH happens to carry it, never the fallback a skill depends on. Ship it
+# if you like, gate every use on `command -v`, and keep a search branch behind it. See
+# assets/skill-script-invocation.md, stanza B.
+#
+# Bound on that measurement: the plugin was staged locally by the harness. Whether a plugin synced
+# through the org-remote path gets PATH treatment in that shell is not established either way.
+#
+# Also unverified: the client version that added bare-command bin/ lookup, and whether an AUTHORED
+# launcher survives re-provisioning on the org-remote lane (nobody ships one, so there is no field
+# evidence).
 
 set -euo pipefail
 
