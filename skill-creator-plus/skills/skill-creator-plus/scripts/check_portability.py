@@ -36,6 +36,7 @@ Usage:
 import argparse
 import ast
 import json
+import math
 import re
 import sys
 from pathlib import Path
@@ -104,6 +105,22 @@ COMPACTION_CAP_CHARS = COMPACTION_TOKEN_CAP * 4 - COMPACTION_MARKER_CHARS   # 19
 # floor(n/4 + 0.5) > 5000  <=>  n >= 20002. Spelled out rather than written as a literal so the
 # two constants cannot drift apart if the runtime's cap ever moves.
 COMPACTION_TRIGGER_CHARS = 4 * COMPACTION_TOKEN_CAP + 2                     # 20,002
+
+# The COMBINED cap across every skill re-attached in one session (runtime `$1n`, binary-verified
+# 5,000/25,000 across 2.1.222/246/247/251). Its failure mode is categorically worse than the
+# per-skill one and is the reason this rule exists at all:
+#
+#     if (o + F > $1n) { if (!x) w5t(_, ""); continue; }
+#
+# Truncation announces itself — it appends a marker, so an agent can notice the tail is gone and
+# re-read from disk. Blowing the COMBINED cap does not: the skill is written back as the EMPTY
+# STRING and omitted from the attachment entirely. No marker, no entry, nothing to compare
+# against. A running session cannot detect it, which makes authoring time the only place it IS
+# detectable — hence a lint rule for something that never fires on one skill in isolation.
+#
+# Packing is greedy in most-recently-invoked-first order, so `sum > cap` is exact for "at least
+# one skill is dropped" — and the one dropped is the least-recently-invoked, NOT the largest.
+COMBINED_TOKEN_CAP = 25000
 
 SEVERITY_ERROR = "error"
 SEVERITY_WARNING = "warning"
@@ -343,6 +360,74 @@ def check_compaction_budget(skill_md_text):
         f"the budget never consults and reads ~35% high here). To fix, move whole phases into "
         f"references/ rather than trimming prose.",
         "SKILL.md",
+    ))
+    return findings
+
+
+def attached_token_cost(n_chars):
+    """What a SKILL.md of `n_chars` contributes to the combined budget, in the runtime's units.
+
+    The runtime sums `$c(M)` where `M` is the ALREADY-TRUNCATED content, so an over-cap skill
+    costs exactly the per-skill cap and no more: truncation leaves CAP chars plus the 100-char
+    marker, i.e. `TOKEN_CAP * 4` chars exactly, i.e. `TOKEN_CAP` tokens.
+    """
+    if n_chars >= COMPACTION_TRIGGER_CHARS:
+        return COMPACTION_TOKEN_CAP
+    # JS `Math.round` is half-up; Python's round() is banker's rounding and would be wrong here.
+    return math.floor(n_chars / 4 + 0.5)
+
+
+def find_plugin_skill_siblings(skill_path):
+    """Return every `skills/*/SKILL.md` of the plugin containing `skill_path`, or [] if standalone.
+
+    Walks up for `.claude-plugin/plugin.json` rather than guessing from directory names. A skill
+    that is not inside a plugin has no combined budget to blow on its own, so it gets [].
+    """
+    skill_path = Path(skill_path).resolve()
+    for parent in [skill_path, *skill_path.parents]:
+        if (parent / ".claude-plugin" / "plugin.json").is_file():
+            return sorted(parent.glob("skills/*/SKILL.md"))
+    return []
+
+
+def check_combined_compaction_budget(skill_path):
+    """Flag a PLUGIN whose skills cannot all be re-attached after one session compacts.
+
+    Scoped deliberately as a lower bound: the runtime's budget is over the skills INVOKED in a
+    session, across every enabled plugin, not over one plugin's skills. So this fires only on the
+    narrower, fully author-controlled case — every skill in THIS plugin invoked, and nothing else.
+    A session that also invokes skills from other plugins blows the cap sooner, never later.
+    """
+    findings = []
+    sheets = find_plugin_skill_siblings(skill_path)
+    if len(sheets) < 2:
+        return findings
+    costs = []
+    for md in sheets:
+        try:
+            costs.append((md, attached_token_cost(len(md.read_text(encoding="utf-8")))))
+        except OSError:
+            continue
+    total = sum(c for _, c in costs)
+    if total <= COMBINED_TOKEN_CAP:
+        return findings
+    biggest = ", ".join(
+        f"{md.parent.name} ({c:,})"
+        for md, c in sorted(costs, key=lambda mc: -mc[1])[:3]
+    )
+    findings.append(_finding(
+        "compaction-zeroing-risk", SEVERITY_ADVISORY, ["claude-code", "cowork"],
+        f"This plugin's {len(costs)} skills cost {total:,} tokens once re-attached — over the "
+        f"{COMBINED_TOKEN_CAP:,}-token COMBINED cap. If a session invokes all of them and then "
+        f"compacts, at least one is dropped WHOLE: written back as the empty string and omitted "
+        f"from the attachment. Unlike truncation there is no marker and no entry, so a running "
+        f"session cannot detect it or recover — authoring time is the only place this is visible. "
+        f"Eviction is least-recently-invoked-first, so the skill that vanishes is rarely the "
+        f"largest. Costs are POST-truncation, which caps any single skill at "
+        f"{COMPACTION_TOKEN_CAP:,}: largest are {biggest}. To fix, merge or drop skills, or move "
+        f"detail into references/ (read on demand, never counted). Lower bound — skills from "
+        f"other enabled plugins share this same budget.",
+        ".claude-plugin/plugin.json",
     ))
     return findings
 
@@ -590,6 +675,7 @@ def lint_portability(skill_path):
     findings = []
     findings += check_description_length(fields)
     findings += check_compaction_budget(skill_md_text)
+    findings += check_combined_compaction_budget(skill_path)
     findings += check_runtime_constructs(skill_path)
     findings += check_outputs_prefix(skill_path)
     findings += check_thirdparty_imports(skill_path)

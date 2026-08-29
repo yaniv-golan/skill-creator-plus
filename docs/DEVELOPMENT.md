@@ -24,6 +24,17 @@ cd skill-creator-plus/skills/skill-creator-plus && python -m scripts.check_porta
 # `$c(e,t=4){...return Math.round(e.length/t)}`, so the budget is LITERALLY a character gate and
 # `wc -m` has zero conversion error. The 5,000/25,000 caps are binary-verified across
 # 2.1.222/246/247/251).
+# compaction-zeroing-risk (PLUGIN-level, needs >=2 skills: the sum of post-truncation costs over
+# `skills/*/SKILL.md` exceeds the 25,000-token COMBINED cap, so if one session invokes them all and
+# then compacts, at least one is dropped WHOLE — written back as the empty string and omitted, with
+# no marker and no entry. Truncation announces itself; this does not, which is why it is worth a
+# lint rule: a running session cannot detect or recover from it, so author time is the only place
+# it is visible. Post-truncation costs, so any single skill contributes at most 5,000 — 26 small
+# skills trip it as readily as 6 large ones, and eviction is least-recently-invoked-first, so the
+# one that vanishes is rarely the largest. Deliberately a LOWER BOUND: the runtime's budget spans
+# every skill invoked in the session across all enabled plugins, not one plugin's. Reached by
+# walking up from the linted skill to `.claude-plugin/plugin.json`; a standalone or single-skill
+# plugin never fires it, which is why this repo's own baseline stays at 4).
 # --strict gates on warnings/errors only; advisories report but never gate (add --strict-advisories
 # to gate on those too). Exit codes: 0 no gating findings, 1 gated, 2 usage error, 3 path not found.
 # NOTE: CI does NOT run check_portability — `.github/workflows/validate.yml` runs
