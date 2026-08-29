@@ -18,7 +18,7 @@ from pathlib import Path
 try:
     from scripts.generate_report import generate_html
     from scripts.improve_description import improve_description
-    from scripts.run_eval import run_eval
+    from scripts.run_eval import InstrumentError, run_eval
     from scripts.utils import parse_skill_md
 except ImportError:
     sys.exit(
@@ -403,4 +403,11 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except InstrumentError as e:
+        # The optimizer must never tune a description against a dead detector: every candidate
+        # would score equally badly and the "best" one would be whichever noise won. Exit 4
+        # matches run_eval's own code for this condition.
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(4)

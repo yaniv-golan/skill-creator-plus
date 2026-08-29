@@ -27,12 +27,59 @@ except ImportError:
     )
 
 
+# Credential env vars that let a subprocess authenticate WITHOUT the operator's ~/.claude.
+# Isolation is only possible when one is present: a fresh HOME has no credentials file, and the
+# CLI answers "Not logged in" (verified).
+CREDENTIAL_ENV_VARS = ("ANTHROPIC_API_KEY", "CLAUDE_CODE_OAUTH_TOKEN", "ANTHROPIC_AUTH_TOKEN")
+
+# A query no plausible description can miss. Its only job is to prove the DETECTOR is alive: if
+# the synthesized command does not trigger on this, the run measured nothing and every "did not
+# trigger" in the same batch is meaningless rather than informative.
+CANARY_QUERY = "Use the {name} command right now. Invoke it immediately, without asking."
+
+
+def isolation_available() -> bool:
+    """True when a subprocess can authenticate without the operator's ~/.claude."""
+    return any(os.environ.get(v) for v in CREDENTIAL_ENV_VARS)
+
+
+def installed_skill_names() -> set[str]:
+    """Skill/plugin directory names discoverable from the operator's ~/.claude.
+
+    Only used to explain a collision when isolation is unavailable. Best-effort: a name we miss
+    costs a clearer error message, never a wrong score.
+    """
+    names: set[str] = set()
+    home = Path(os.path.expanduser("~")) / ".claude"
+    for pat in ("plugins/cache/*/*/*/skills/*", "skills/*"):
+        for d in home.glob(pat):
+            if d.is_dir():
+                names.add(d.name)
+    return names
+
+
+def _subprocess_env(isolated_home: str | None) -> dict:
+    """Env for a `claude -p` child.
+
+    Removes CLAUDECODE (the guard is for interactive terminal conflicts; programmatic subprocess
+    use is safe) and, when isolating, repoints HOME so the operator's installed plugins and skills
+    are not discoverable. Without that, `claude -p` sees them and the model reaches for the REAL
+    skill of the same name instead of the synthesized copy under test — the detector then scores a
+    correct non-trigger and the whole eval reads as a bad description.
+    """
+    env = {k: v for k, v in os.environ.items() if k != "CLAUDECODE"}
+    if isolated_home:
+        env["HOME"] = isolated_home
+    return env
+
+
 def run_single_query(
     query: str,
     skill_name: str,
     skill_description: str,
     timeout: int,
     model: str | None = None,
+    isolated_home: str | None = None,
 ) -> dict:
     """Run a single query in an ISOLATED throwaway project root.
 
@@ -76,10 +123,7 @@ def run_single_query(
         if model:
             cmd.extend(["--model", model])
 
-        # Remove CLAUDECODE env var to allow nesting claude -p inside a
-        # Claude Code session. The guard is for interactive terminal conflicts;
-        # programmatic subprocess usage is safe.
-        env = {k: v for k, v in os.environ.items() if k != "CLAUDECODE"}
+        env = _subprocess_env(isolated_home)
 
         try:
             process = subprocess.Popen(
@@ -93,6 +137,7 @@ def run_single_query(
             return {"triggered": False, "error": "claude CLI not found on PATH"}
 
         triggered = False
+        hijacked_by = None
         saw_event = False
         was_killed = False
         start_time = time.time()
@@ -167,14 +212,23 @@ def run_single_query(
                                 continue
                             tool_name = content_item.get("name", "")
                             tool_input = content_item.get("input", {})
-                            if tool_name == "Skill" and clean_name in tool_input.get("skill", ""):
+                            invoked = tool_input.get("skill", "")
+                            if tool_name == "Skill" and clean_name in invoked:
                                 triggered = True
+                            elif tool_name == "Skill" and invoked and skill_name in invoked:
+                                # The model reached for a DIFFERENT skill whose name contains the
+                                # one under test — i.e. the operator's INSTALLED copy, visible
+                                # because HOME was not isolated. Scoring this as "did not trigger"
+                                # is technically true and completely misleading: the description
+                                # worked, it just routed to the wrong instance. Record it so the
+                                # run can say "not measured" instead of "scored badly".
+                                hijacked_by = invoked
                             elif tool_name == "Read" and clean_name in tool_input.get("file_path", ""):
                                 triggered = True
-                            return {"triggered": triggered, "error": None}
+                            return {"triggered": triggered, "error": None, "hijacked_by": hijacked_by}
 
                     elif event.get("type") == "result":
-                        return {"triggered": triggered, "error": None}
+                        return {"triggered": triggered, "error": None, "hijacked_by": hijacked_by}
         finally:
             # Clean up process on any exit path (return, exception, timeout)
             if process.poll() is None:
@@ -190,7 +244,7 @@ def run_single_query(
                         "error": f"claude exited with code {rc} before any output"}
             return {"triggered": False,
                     "error": f"timeout after {timeout}s with no output from claude"}
-        return {"triggered": triggered, "error": None}
+        return {"triggered": triggered, "error": None, "hijacked_by": hijacked_by}
 
 
 def score_queries(
@@ -255,7 +309,77 @@ def run_eval(
     trigger_threshold: float = 0.5,
     model: str | None = None,
 ) -> dict:
-    """Run the full eval set and return results."""
+    """Run the full eval set and return results.
+
+    Raises InstrumentError when the canary fails — see `run_canary`.
+    """
+    with tempfile.TemporaryDirectory(prefix="skill-eval-home-") as home_dir:
+        isolated_home = home_dir if isolation_available() else None
+        if isolated_home is None:
+            _warn_unisolated(skill_name)
+        return _run_eval_inner(
+            eval_set, skill_name, description, num_workers, timeout,
+            runs_per_query, trigger_threshold, model, isolated_home,
+        )
+
+
+def _warn_unisolated(skill_name: str) -> None:
+    """Explain the one condition under which this eval silently measures nothing."""
+    collides = skill_name in installed_skill_names()
+    print(
+        f"Warning: no credential in {'/'.join(CREDENTIAL_ENV_VARS)}, so this eval runs against "
+        f"your real ~/.claude and every installed skill is visible to the model.",
+        file=sys.stderr,
+    )
+    if collides:
+        print(
+            f"  '{skill_name}' IS INSTALLED on this machine, so a query MAY invoke the real skill "
+            f"instead of the copy under test. That is intermittent, not certain — when it happens "
+            f"the run is detected and refused rather than scored. Export a credential to isolate.",
+            file=sys.stderr,
+        )
+
+
+def run_canary(skill_name, description, timeout, model, isolated_home) -> dict:
+    """Prove the detector can fire at all before believing any 'did not trigger'.
+
+    A dead detector and a bad description are indistinguishable in a score: both are low numbers
+    with no errors. This was not hypothetical — an eval of this very skill reported 8/24 with all
+    16 positives failing, including a query the description names almost verbatim, because the
+    model kept reaching for the INSTALLED skill of the same name. The run looked like a description
+    problem and was an instrument problem.
+    """
+    return run_single_query(
+        CANARY_QUERY.format(name=f"{skill_name}-skill"),
+        skill_name, description, timeout, model, isolated_home,
+    )
+
+
+class InstrumentError(RuntimeError):
+    """The eval could not measure anything — scores would be noise, so none are reported."""
+
+
+def _run_eval_inner(
+    eval_set, skill_name, description, num_workers, timeout,
+    runs_per_query, trigger_threshold, model, isolated_home,
+) -> dict:
+    canary = run_canary(skill_name, description, timeout, model, isolated_home)
+    if not canary.get("triggered"):
+        raise InstrumentError(
+            "CANARY FAILED — the synthesized command did not trigger on a query that names it "
+            "outright, so this eval cannot detect a trigger and every score would be noise.\n"
+            f"  canary error: {canary.get('error') or 'none (ran clean, simply did not trigger)'}\n"
+            + (
+                "  HOME was isolated, so an installed skill of the same name is not the cause; "
+                "suspect the CLI, the model, or the detector itself."
+                if isolated_home else
+                "  HOME was NOT isolated (no credential in the environment), so the likeliest "
+                "cause is the model reaching for an installed skill instead of the copy under "
+                f"test. Export one of {'/'.join(CREDENTIAL_ENV_VARS)} and re-run."
+            )
+        )
+
+    hijacked: list[tuple[str, str]] = []
     with ProcessPoolExecutor(max_workers=num_workers) as executor:
         future_to_info = {}
         for item in eval_set:
@@ -267,6 +391,7 @@ def run_eval(
                     description,
                     timeout,
                     model,
+                    isolated_home,
                 )
                 future_to_info[future] = (item, run_idx)
 
@@ -281,7 +406,21 @@ def run_eval(
             if outcome.get("error"):
                 print(f"Warning: run errored for query {query[:60]!r}: {outcome['error']}",
                       file=sys.stderr)
+            if outcome.get("hijacked_by"):
+                hijacked.append((query, outcome["hijacked_by"]))
             query_runs.setdefault(query, []).append(outcome)
+
+    if hijacked:
+        # Not a low score — an unmeasured run. The description did its job and the invocation
+        # went to the operator's INSTALLED copy of the same skill, which the detector can only
+        # score as a non-trigger. Refusing is the point: this is the exact failure that made an
+        # earlier eval of this skill report 8/24 and read as a description problem.
+        sample = "\n".join(f"    {q[:60]!r} -> invoked {n!r}" for q, n in hijacked[:3])
+        raise InstrumentError(
+            f"HIJACKED — {len(hijacked)} run(s) invoked an INSTALLED skill instead of the copy "
+            f"under test, so those queries were not measured:\n{sample}\n"
+            f"  Export one of {'/'.join(CREDENTIAL_ENV_VARS)} to isolate HOME and re-run."
+        )
 
     results, summary = score_queries(eval_set, query_runs, trigger_threshold)
     return {
@@ -306,7 +445,9 @@ def main():
             "\n"
             "Exit codes:\n"
             "  0  evaluation completed (regardless of pass rate)\n"
-            "  1  eval-set unreadable, skill not found, or every run errored"
+            "  1  eval-set unreadable, skill not found, or every run errored\n"
+            "  4  INSTRUMENT FAILURE — the canary did not trigger, so nothing was measured\n"
+            "     and no scores are reported (distinct from a low score, which is a finding)"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -334,16 +475,23 @@ def main():
     if args.verbose:
         print(f"Evaluating: {description}", file=sys.stderr)
 
-    output = run_eval(
-        eval_set=eval_set,
-        skill_name=name,
-        description=description,
-        num_workers=args.num_workers,
-        timeout=args.timeout,
-        runs_per_query=args.runs_per_query,
-        trigger_threshold=args.trigger_threshold,
-        model=args.model,
-    )
+    try:
+        output = run_eval(
+            eval_set=eval_set,
+            skill_name=name,
+            description=description,
+            num_workers=args.num_workers,
+            timeout=args.timeout,
+            runs_per_query=args.runs_per_query,
+            trigger_threshold=args.trigger_threshold,
+            model=args.model,
+        )
+    except InstrumentError as e:
+        # Exit 4, distinct from 1: "this eval measured nothing" is a different fact from
+        # "the description scored badly", and a caller that conflates them optimizes against
+        # noise. run_loop.py relies on this code.
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(4)
 
     if args.verbose:
         summary = output["summary"]
