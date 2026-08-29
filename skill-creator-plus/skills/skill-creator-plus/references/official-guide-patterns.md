@@ -605,21 +605,38 @@ Don't include README.md inside the skill folder. All documentation goes in SKILL
 
 **Why the limit is mechanical, not stylistic:** after auto-compaction, Claude re-attaches the most recent invocation of each skill, keeping the **first 5,000 tokens of each** under a **combined 25,000-token** budget, most-recent-first. So everything past ~5,000 tokens in a SKILL.md is the part a compacted session silently loses — and it's the tail, not the part you'd choose to drop. Put the load-bearing instructions early and push detail into `references/`, which is re-read on demand rather than truncated.
 
-**The budget is characters, not tokens — measure it with `wc -m`.** The cap is documented as "5,000 tokens," but the runtime sizes a skill's content with a character heuristic rather than a tokenizer — `Math.round(chars / 4)` (**derived**: the truncator slices to `tokens × 4`, which implies the 4-chars-per-token model, but the size function itself could not be resolved in the bundle). Both figures below are therefore derived arithmetic, not literals you can grep for. The effective per-skill limit is:
+**The budget is characters, not tokens — measure it with `wc -m`.** The cap is documented as "5,000 tokens," but the runtime never tokenizes. It sizes content with `Math.round(chars / 4)` — not a heuristic standing in for a tokenizer, but *the* function the cap is compared against. So `wc -m` has **zero** conversion error, and a tokenizer reading is not merely the wrong unit: it measures a quantity the runtime does not compute.
 
-| Documented | What the runtime actually enforces |
-|---|---|
-| 5,000 tokens per skill | **19,900 characters** (5,000 × 4, minus the 100-char truncation marker — 98 visible characters plus two leading newlines) |
-| 25,000 tokens combined | **100,000 characters** across all invoked skills |
+**Two different numbers, 102 characters apart.** What *triggers* truncation and what *survives* it are not the same figure, and conflating them costs you a 101-character band of false alarms. The runtime returns content untouched while `Math.round(len / 4) <= 5000`; JS `Math.round` is half-up, so 20,001 characters round to 5000 and are left alone, while 20,002 round to 5001 and are cut. What remains after a cut is `5000 × 4` minus the 100-character marker.
+
+| Documented | Truncation fires at | What survives it |
+|---|---|---|
+| 5,000 tokens per skill | **20,002 characters** | **19,900 characters** (+ the 100-char marker = 20,000 exactly) |
+| 25,000 tokens combined | — | **100,000 characters** across all invoked skills |
+
+Author against **19,900**: it is the only figure that leaves nothing on the floor. Reserve 20,002 for tooling that must decide whether a given file is actually at risk.
 
 *Provenance, because these are numbers a reader should be able to re-check rather than trust: the
 5,000 and 25,000 caps are hardcoded literals with no context-window scaling, read first-party from
-the Claude Code bundle and unchanged across **2.1.222, 2.1.246 and 2.1.247** — three builds, three
-different minified binding names, identical values. The character figures are derived from them
-(`cap × 4`, minus the 100-character truncation marker for the per-skill row); neither appears as a
-literal anywhere, so grepping for `19900` will find nothing. The `× 4` divisor is itself derived: it
-follows from the truncator's own arithmetic, but the function that sizes the content could not be
-resolved in the bundle, so treat it as a well-supported inference rather than a verified constant.*
+the Claude Code bundle and unchanged across **2.1.222, 2.1.246, 2.1.247 and 2.1.251** — four builds,
+four different minified binding names, identical values. The character figures are derived from them,
+so grepping for `19900` or `20002` will find nothing. The `÷ 4` is **not** derived: the size function
+resolves in the bundle to*
+
+```js
+function $c(e, t = 4) { if (typeof e !== "string") return 0; return Math.round(e.length / t) }
+```
+
+*…and the truncator that consumes it to*
+
+```js
+function V1n(e, t) { if ($c(e) <= t) return e; let r = t * 4 - $j.length; return e.slice(0, r) + $j }
+```
+
+*A bare-name grep for the estimator returns nothing in builds that alias-mangle the export (2.1.246
+exports it as `m as nNb` and imports it as `nNb as xc`). The technique that works in every layout is
+to read the **consuming** chunk's `import` and follow the alias through the exporting chunk's
+`export` block.*
 
 ```bash
 wc -m SKILL.md          # characters — the unit that matters
@@ -627,7 +644,7 @@ wc -m SKILL.md          # characters — the unit that matters
 # any file containing em-dashes or other multi-byte characters.
 ```
 
-**Do not measure this with a real tokenizer.** `count_tokens` answers a different question, and the two units diverge widely on technical markdown — one file measured for this guide came to 13,388 real tokens against 39,696 characters, roughly 2.95 chars/token rather than 4. It is the *character* figure the compaction budget compares against, so a tokenizer reading is not wrong, just irrelevant here — and on technical markdown (~3 chars/token) relying on it overstates the overage by ~35%, erring toward a false red. Prose-heavy content above 4 chars/token would err the other way — which is the reason to measure characters rather than reason about the ratio at all.
+**Do not measure this with a real tokenizer.** `count_tokens` answers a different question, and the two units diverge widely on technical markdown — one file measured for this guide came to 13,388 real tokens against 39,696 characters, roughly 2.95 chars/token rather than 4. Since the runtime's gate is literally `Math.round(chars / 4)`, a tokenizer reading measures a number that appears nowhere in the decision: on technical markdown (~3 chars/token) it overstates the overage by ~35%, erring toward a false red, and prose-heavy content above 4 chars/token errs the other way. That is the reason to measure characters rather than reason about the ratio at all.
 
 **Two ways a skill loses content for the rest of a session, neither documented publicly. Both are conditional — the condition is stated with each:**
 
@@ -637,6 +654,17 @@ wc -m SKILL.md          # characters — the unit that matters
 **The combined budget is consumed by post-truncation sizes**, so a large skill contributes its *capped* 5,000 tokens to the 25,000 total, not its full length. Read that together with the most-recently-invoked-first ordering, because the two only make sense as a pair: more skills fit than you would guess, so the combined cap bites later and less predictably than the per-skill one — and since eviction is least-recently-invoked-first, **the skill that vanishes is rarely the big one.** An author reasoning about size alone will look in the wrong place when a skill goes missing.
 
 Practical consequence: if a skill exceeds the cap, front-load whatever must survive, and state early in the file that the reader should re-read it from disk if a later section appears to be missing. If a skill is over budget, the fix is to move whole phases into `references/` — not to trim prose, which rarely recovers enough.
+
+**Why "re-read it from disk" is executable — and the one case where it isn't.** That instruction only works if the truncated copy still says *where* the file is, which is not something the author controls. Two mechanics decide it:
+
+1. At load, the runtime prepends a line to the stored content: `Base directory for this skill: <absolute path>`, followed by a blank line.
+2. Truncation is **head-preserving** (`content.slice(0, 19900)`), so that first line survives by construction — a skill cut at 19,900 characters still carries its own absolute location.
+
+The exception is the part worth designing around: **the line is only prepended when the skill owns a directory.** The runtime adds it when the entry has a `skillRoot` (a `SKILL.md` with a folder around it) and passes the content through unmodified otherwise. A single-file `commands/*.md` has no `skillRoot`, so it never gets the line — and a truncated copy of one has no recoverable location at all. Nothing in the truncated text points anywhere, so the recovery instruction is unexecutable no matter how early you put it.
+
+> **Authoring rule: a skill that owns a directory is recoverable; a single-file command is not.** If content is long enough to be truncated, it belongs in a `skills/<name>/SKILL.md`, not a single-file command — even when a command is otherwise the natural shape.
+
+One trap, because it looks like the answer and isn't: the `Path:` field the model is shown for an invoked skill is a **source-qualified identifier** (`plugin:foo:bar`), not a filesystem path. Recovery works through the content's own first line, never through that field.
 
 ---
 
@@ -657,7 +685,7 @@ It runs the command at skill activation time and inlines the output into the ski
 Skills have access to built-in path variables that resolve at runtime:
 
 - **`${CLAUDE_SKILL_DIR}`** — resolves to the skill's own directory. Use this to reference bundled scripts, config files, and reference docs without hardcoding paths.
-- **`${CLAUDE_PLUGIN_ROOT}`** — resolves to the root of the plugin containing this skill. Useful when multiple skills in a plugin share resources.
+- **`${CLAUDE_PLUGIN_ROOT}`** — the root of the plugin containing this skill, substituted **into definition text only**. See the three limits below before using it; two of them fail silently.
 - **`${CLAUDE_PLUGIN_DATA}`** — a stable data directory per plugin that persists across skill upgrades. Use this for any data that should survive version bumps (logs, user config, caches).
 - **`${CLAUDE_SESSION_ID}`** — the current session identifier. Useful for creating session-specific temp files or logs.
 
@@ -666,6 +694,44 @@ Example in SKILL.md:
 Read the API reference at ${CLAUDE_SKILL_DIR}/references/api.md before making any calls.
 Save persistent data to ${CLAUDE_PLUGIN_DATA}/history.json.
 ```
+
+#### Where `${CLAUDE_PLUGIN_ROOT}` is and isn't substituted
+
+"Resolves to the plugin root" is true in exactly one place. Two of the three limits below produce no error at all, which is how a skill ends up silently reading the wrong path.
+
+1. ✅ **Definition text, at load.** A `SKILL.md` body, a command, a hook, an MCP server entry. The runtime rewrites the token before the text reaches the model. This works.
+2. ❌ **Not in a `references/*.md` read at runtime.** Only the definition is rewritten. A reference doc opened with `Read` comes back as bytes from disk, so the token arrives **literally**, as the eleven characters `${CLAUDE_PLUGIN_ROOT}`. Nothing warns you.
+3. ❌ **Not part of the Bash tool's contract.** It is not one of the variables Claude Code exports for Bash. In a shell the token expands to the **empty string** — no error, no unbound-variable failure, just a path that silently loses its prefix and becomes relative.
+
+   Worse than empty, and observed on a real machine while writing this: an installed plugin's `SessionStart` hook can export session environment, and `CLAUDE_PLUGIN_ROOT` can therefore be *set* in Bash while pointing at **a completely different plugin** — here it named one plugin while `CLAUDE_PLUGIN_DATA`, exported alongside it, named another. So a shell reading `$CLAUDE_PLUGIN_ROOT` may get nothing, or may get a confident, wrong, unrelated directory. Never trust it in a shell.
+
+Under Cowork's host-loop the substituted value is a **host** path, which the VM shell cannot resolve either — so even case 1 does not survive being handed to a sandboxed shell.
+
+#### The better answer for anything executable: ship `bin/` and call it bare
+
+Claude Code puts **every enabled non-builtin plugin's `bin/` directory on the Bash tool's PATH**, and the entry is correct for that shell's own namespace in all three lanes — local CLI cache paths, Cowork host-loop mounts, and cloud sync paths. So a scaffolded skill can ship `bin/<name>` and invoke it as a bare command:
+
+```bash
+my-plugin-tool --input foo      # resolved via PATH; no path crosses a namespace boundary
+```
+
+A launcher that needs its own plugin root can recover it from its own location rather than from an injected variable:
+
+```sh
+#!/bin/sh
+PLUGIN_ROOT=$(cd "$(dirname "$0")/.." && pwd)
+exec python3 "$PLUGIN_ROOT/scripts/tool.py" "$@"
+```
+
+This complements the "pass bundled scripts absolute paths" rule rather than replacing it: that rule is right, but it requires the caller to already *have* a correct absolute path, which is exactly what a shell cannot get from `${CLAUDE_PLUGIN_ROOT}`.
+
+**Three caveats, all silent — construct, verify, fall back:**
+
+- **A PATH entry is not evidence the directory exists.** `bin/` is provisioned at sync/install time, not carried in plugin source. Measured while writing this: 35 plugin `bin/` entries on this machine's PATH, **zero** of them present on disk. Check that your command resolves (`command -v`) before relying on it.
+- **The Cowork mount is read-only.** Don't plan to write into `bin/` at runtime.
+- **A plugin path containing shell metacharacters is dropped from PATH silently** — the runtime filters those entries and logs a warning the model never sees. A plugin installed under a path with a `$`, a quote, or a backtick simply has no `bin/` on PATH.
+
+*Version note: the commonly-cited v2.1.91 origin for the PATH behavior is **unverified**. The CHANGELOG embedded in these binaries reaches back only to 2.1.220, so its absence there proves nothing either way.*
 
 ### Argument Substitution
 

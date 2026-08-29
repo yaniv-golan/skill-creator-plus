@@ -11,6 +11,10 @@ from check_portability import (  # noqa: E402
     lint_portability,
     check_thirdparty_imports,
     check_compaction_budget,
+    check_combined_compaction_budget,
+    attached_token_cost,
+    COMBINED_TOKEN_CAP,
+    COMPACTION_TOKEN_CAP,
     check_outputs_prefix,
     _filter_by_target,
     COMPACTION_CAP_CHARS,
@@ -139,6 +143,98 @@ class CompactionBudgetTests(unittest.TestCase):
                          COMPACTION_TRIGGER_CHARS)
         # and what survives is the marker's complement, not the trigger
         self.assertEqual(5000 * 4 - COMPACTION_MARKER_CHARS, COMPACTION_CAP_CHARS)
+
+
+def _plugin(tmp: Path, skill_sizes) -> Path:
+    """Build a plugin dir with one skill per entry in `skill_sizes` (name -> SKILL.md char count).
+
+    Returns the FIRST skill's path -- the rule is reached by linting a member skill, not the
+    plugin, because that is how the CLI is actually invoked.
+    """
+    root = tmp / "plug"
+    (root / ".claude-plugin").mkdir(parents=True)
+    (root / ".claude-plugin" / "plugin.json").write_text('{"name": "plug"}')
+    first = None
+    for name, n in skill_sizes.items():
+        d = root / "skills" / name
+        d.mkdir(parents=True)
+        head = f"---\nname: {name}\ndescription: d\n---\n\n"
+        (d / "SKILL.md").write_text(head + "a" * max(0, n - len(head)))
+        first = first or d
+    return first
+
+
+class CombinedCompactionCapTests(unittest.TestCase):
+    """The combined cap zeroes a skill silently -- author time is the only place it is detectable."""
+
+    def test_cost_is_post_truncation_so_a_huge_skill_is_capped(self):
+        # the runtime sums $c(M) where M is already truncated: CAP chars + a 100-char marker
+        # == TOKEN_CAP*4 chars exactly, so an over-cap skill costs the cap and never more.
+        self.assertEqual(attached_token_cost(500_000), COMPACTION_TOKEN_CAP)
+        self.assertEqual(attached_token_cost(COMPACTION_TRIGGER_CHARS), COMPACTION_TOKEN_CAP)
+        # just under the trigger it is NOT truncated, so it costs its own rounded length --
+        # which is the one input where the cost briefly dips below the cap
+        self.assertEqual(attached_token_cost(COMPACTION_TRIGGER_CHARS - 1), 5000)
+        self.assertEqual(attached_token_cost(4000), 1000)
+        self.assertEqual(attached_token_cost(0), 0)
+
+    def test_half_up_rounding_not_bankers(self):
+        # Python's round(0.5) == 0; JS Math.round(0.5) == 1. Only the latter matches the runtime.
+        self.assertEqual(attached_token_cost(2), 1)
+        self.assertEqual(attached_token_cost(6), 2)
+
+    def test_standalone_skill_is_never_flagged(self):
+        with tempfile.TemporaryDirectory() as td:
+            skill = _skill(Path(td), "name: x\ndescription: d", body="a" * 60_000)
+            self.assertEqual(check_combined_compaction_budget(skill), [])
+
+    def test_single_skill_plugin_is_never_flagged(self):
+        # one skill cannot blow a 25,000-token budget: it is capped at 5,000
+        with tempfile.TemporaryDirectory() as td:
+            skill = _plugin(Path(td), {"only": 400_000})
+            self.assertEqual(check_combined_compaction_budget(skill), [])
+
+    def test_five_over_cap_skills_fit_and_six_do_not(self):
+        """The exact boundary: 5 x 5,000 == 25,000 fits; the sixth is what gets zeroed."""
+        big = 40_000
+        with tempfile.TemporaryDirectory() as td:
+            skill = _plugin(Path(td), {f"s{i}": big for i in range(5)})
+            self.assertEqual(check_combined_compaction_budget(skill), [],
+                             "25,000 is the cap, not one under it -- the runtime uses `>`")
+        with tempfile.TemporaryDirectory() as td:
+            skill = _plugin(Path(td), {f"s{i}": big for i in range(6)})
+            findings = check_combined_compaction_budget(skill)
+            self.assertEqual(len(findings), 1)
+            f = findings[0]
+            self.assertEqual(f["rule"], "compaction-zeroing-risk")
+            self.assertEqual(f["severity"], "advisory")
+            self.assertEqual(f["targets"], ["claude-code", "cowork"])
+            self.assertEqual(f["location"], ".claude-plugin/plugin.json")
+
+    def test_message_names_the_silent_failure_not_just_the_size(self):
+        """A size number alone would send an author to the wrong fix. The message must say that
+        the skill is dropped whole, leaves no marker, and is evicted least-recently-invoked-first.
+        """
+        with tempfile.TemporaryDirectory() as td:
+            skill = _plugin(Path(td), {f"s{i}": 40_000 for i in range(6)})
+            msg = check_combined_compaction_budget(skill)[0]["message"]
+            for phrase in ("dropped WHOLE", "no marker", "least-recently-invoked",
+                           "Lower bound", "references/"):
+                self.assertIn(phrase, msg)
+
+    def test_many_small_skills_also_trip_it(self):
+        """Not just a big-skill problem: 26 skills of 4,000 chars are each well under the
+        per-skill cap and still blow the combined one."""
+        with tempfile.TemporaryDirectory() as td:
+            skill = _plugin(Path(td), {f"s{i}": 4_000 for i in range(26)})
+            self.assertEqual(len(check_combined_compaction_budget(skill)), 1)
+
+    def test_reached_through_the_normal_lint_entry_point(self):
+        with tempfile.TemporaryDirectory() as td:
+            skill = _plugin(Path(td), {f"s{i}": 40_000 for i in range(6)})
+            findings, err = lint_portability(skill)
+            self.assertIsNone(err)
+            self.assertIn("compaction-zeroing-risk", _rules(findings))
 
 
 class RuntimeConstructTests(unittest.TestCase):
