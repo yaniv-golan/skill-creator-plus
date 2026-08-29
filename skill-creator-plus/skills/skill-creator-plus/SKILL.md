@@ -119,16 +119,13 @@ skill-name/
     └── assets/     - Files used in output (templates, icons, fonts)
 ```
 
-**Reaching a bundled script:** in `SKILL.md`, prefix the path with the skill-directory variable — the
-name is `CLAUDE_SKILL_DIR`, written `$` then the name in curly braces, then `/scripts/tool.py`. (This
-paragraph deliberately does not spell the token out: the runtime substitutes it at load, so a SKILL.md
-literally *cannot* show it — copy the exact form from `references/official-guide-patterns.md`, which is
-a reference file and therefore never substituted.) It is a load-time text substitution, replaced with a
-real absolute path before the model sees it, and braced form only. It is **dead everywhere else**:
-literal characters in a `references/*.md`, and the empty string in a shell — nothing exports it. So
-resolve once in `SKILL.md` and pass the absolute string downstream; a reference doc should name
-`scripts/tool.py` and let `SKILL.md` supply the base. There is no skill-relative path resolution — the
-CWD when your script runs is the project working directory.
+**Reaching a bundled script:** the skill-directory variable (`CLAUDE_SKILL_DIR`, braced) is a load-time
+substitution into `SKILL.md` text only — it arrives literally in a `references/*.md` and is the empty
+string in a shell. There is no skill-relative path resolution; CWD is the project working directory.
+**Don't hand-write the stanza** — paste it from `assets/skill-script-invocation.md`, which carries the
+exact token form (a SKILL.md cannot show it: the runtime substitutes it at load). If the authored
+skill's scripts must run under Cowork's host loop, where the shell and file tools are in different
+filesystem namespaces, also copy `assets/plugin-bin-launcher.sh` to `<plugin root>/bin/<name>`.
 
 #### Progressive Disclosure
 
