@@ -709,8 +709,8 @@ Save persistent data to ${CLAUDE_PLUGIN_DATA}/history.json.
 |---|---|---|---|---|---|
 | `${CLAUDE_SKILL_DIR}` | ✅ | ✅ | ❌ **literal** | ❌ literal | ❌ empty |
 | `${CLAUDE_PLUGIN_ROOT}` | ✅ | ✅ | ✅ | ❌ literal | ❌ empty **or another plugin's root** |
-| `${CLAUDE_PLUGIN_DATA}` | ✅ | ✅ | ✅ *(inferred)* | ❌ literal | ❌ empty **or another plugin's data dir** |
-| `${CLAUDE_SESSION_ID}` | ✅ | ❌ **not substituted** | ✅ *(inferred)* | ❌ literal | ❌ empty |
+| `${CLAUDE_PLUGIN_DATA}` | ✅ | ✅ | ✅ | ❌ literal | ❌ empty **or another plugin's data dir** |
+| `${CLAUDE_SESSION_ID}` | ✅ | ❌ **not substituted** | ✅ | ❌ literal | ❌ empty |
 
 **The `commands/*.md` column is the trap: the answer is token-specific, not surface-specific.** A
 command *is* a definition surface and substitution *does* happen there — just not for
@@ -726,8 +726,10 @@ commands/probe.md   CMD_SKILLDIR=${CLAUDE_SKILL_DIR}/scripts/y.py          LITER
                     CMD_PLUGINROOT=/sessions/…/cmdprobe/scripts/y.py       substituted
 ```
 
-The two ✅ marked *(inferred)* follow from the same substitution pass that handles
-`${CLAUDE_PLUGIN_ROOT}` but were not separately measured.
+Every cell in the commands column is measured, not inferred. A second probe put four tokens in one
+command body: `${CLAUDE_PLUGIN_DATA}`, `${CLAUDE_SESSION_ID}` and `${CLAUDE_PROJECT_DIR}` all came
+back substituted, and only `${CLAUDE_SKILL_DIR}` came back literal — the guard is the sole
+difference between them.
 
 The `allowed-tools` column is a separate substitution pass from the body's, and it does not carry the same set — `${CLAUDE_SESSION_ID}` survives in a body and is passed through untouched in a permission rule.
 
