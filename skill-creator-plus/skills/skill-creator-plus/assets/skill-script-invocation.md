@@ -50,6 +50,25 @@ scripts, and still keep the search branch.
 
 ---
 
+## If the skill will be packaged for other hosts
+
+`${CLAUDE_SKILL_DIR}` is Claude-only. `skill-packager` strips it from non-Claude copies where a
+relative path is correct, and treats it as a **build error inside a code block** — deliberately,
+because no rewrite is safe there: stripping `python3 ${CLAUDE_SKILL_DIR}/scripts/validate.py` to a
+relative path does not fail loudly, it succeeds into a *different project's* `scripts/`.
+
+So stanza A will fail that build, and that is the rule working — the author learns at package time
+that a Claude-specific invocation does not port, rather than a user learning at run time. The form
+it asks for instead is to resolve the directory once and pass an absolute path from then on:
+
+```bash
+export SKILL_DIR=/absolute/path/to/your-skill    # on Claude Code, the value the loader prepended
+cd "$SKILL_DIR/scripts" && python3 -m your_package
+```
+
+Keep the quotes. Unquoted, an unset `$SKILL_DIR` word-splits to a bare `cd`, which succeeds into
+`$HOME` and lets an `&&` chain continue from the wrong place.
+
 ## Why this order
 
 The read path ranks **above** everything else, and that is deliberate. The path this file was loaded
