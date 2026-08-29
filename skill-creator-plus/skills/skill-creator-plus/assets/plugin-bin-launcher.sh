@@ -45,6 +45,9 @@
 #     its own environment via CLAUDE_ENV_FILE, so an unrelated plugin's root lands in the session
 #     env and every later Bash call inherits it. Measured: CLAUDE_PLUGIN_ROOT naming one plugin
 #     beside a CLAUDE_PLUGIN_DATA naming another, neither being the plugin whose skill was running.
+#     Check it yourself: ~/.claude/session-env/<session-id>/ holds the exports, one file per hook.
+#     CLAUDE_ENV_FILE is NOT set in the resulting shell — it is the path the hook writes to — so its
+#     absence there is the mechanism working, not evidence against it.
 #     Its value is also the file-tool-side path, the wrong side of the split this exists to bridge.
 #
 # SCOPE — READ THIS BEFORE RELYING ON IT. The PATH mechanism is verified for Claude Code's own
