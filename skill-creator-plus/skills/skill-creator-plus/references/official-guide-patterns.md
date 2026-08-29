@@ -703,9 +703,47 @@ Save persistent data to ${CLAUDE_PLUGIN_DATA}/history.json.
 2. ❌ **Not in a `references/*.md` read at runtime.** Only the definition is rewritten. A reference doc opened with `Read` comes back as bytes from disk, so the token arrives **literally**, as the eleven characters `${CLAUDE_PLUGIN_ROOT}`. Nothing warns you.
 3. ❌ **Not part of the Bash tool's contract.** It is not one of the variables Claude Code exports for Bash. In a shell the token expands to the **empty string** — no error, no unbound-variable failure, just a path that silently loses its prefix and becomes relative.
 
-   Worse than empty, and observed on a real machine while writing this: an installed plugin's `SessionStart` hook can export session environment, and `CLAUDE_PLUGIN_ROOT` can therefore be *set* in Bash while pointing at **a completely different plugin** — here it named one plugin while `CLAUDE_PLUGIN_DATA`, exported alongside it, named another. So a shell reading `$CLAUDE_PLUGIN_ROOT` may get nothing, or may get a confident, wrong, unrelated directory. Never trust it in a shell.
+   Worse than empty, it can be *set* and wrong: `CLAUDE_PLUGIN_ROOT` may be present in a shell while naming **a completely different plugin** than the one whose skill is running — typically alongside a `CLAUDE_PLUGIN_DATA` naming a third.
+
+   The mechanism is `CLAUDE_ENV_FILE`, and it is designed behavior rather than a leak. The hook executor spawns each hook with `CLAUDE_PLUGIN_ROOT` set to **that hook's own** plugin root, and for four events — `Setup`, `SessionStart`, `CwdChanged`, `FileChanged` — also sets `CLAUDE_ENV_FILE`, documented in the CLI's own hook text as *"write bash exports there to apply env to subsequent BashTool commands."* Any such hook that dumps its whole environment therefore writes its own plugin's root into the session env, and every later Bash call inherits it. The scripts are concatenated in a deterministic order (`setup` → `sessionstart` → `cwdchanged` → `filechanged`, then by hook index), so the last export in that concatenation wins — which is some arbitrary *other* plugin, not yours.
+
+   So a shell reading `$CLAUDE_PLUGIN_ROOT` may get nothing, or a confident, wrong, unrelated directory. Never trust it in a shell. The corollary for skill authors is the sharper one: **a variable being set in your shell is not evidence it was set for you.**
+
+   *Lane caveat, because these two facts read as opposites: `CLAUDE_ENV_FILE` is a plain-CLI mechanism. Under Cowork the VM shell is sealed and hook exports do not cross the host/VM boundary, so "don't rely on a hook to export env for your shell commands" remains correct **there**. Neither fact generalizes to the other lane.*
 
 Under Cowork's host-loop the substituted value is a **host** path, which the VM shell cannot resolve either — so even case 1 does not survive being handed to a sandboxed shell.
+
+#### Braced or bare? The same token has three different form rules
+
+There is no single answer, because three separate sites substitute this token and each accepts a different spelling. Getting this wrong fails silently in both directions — a bare token in a SKILL.md body is simply never replaced, and a braced token in an exec-form hook is passed through as literal text.
+
+| Where | bare `$CLAUDE_PLUGIN_ROOT` | braced `${CLAUDE_PLUGIN_ROOT}` |
+|---|---|---|
+| SKILL.md / command **body text** | ❌ never substituted | ✅ substituted |
+| `allowed-tools` permission-rule path prefix | ✅ | ✅ |
+| Hook, **shell form** (no `args`) | ✅ | ✅ |
+| Hook, **exec form** (`args` present) | ❌ not substituted | ✅ |
+| `references/*.md` read at runtime | ❌ | ❌ — read as a file, never loaded as a definition |
+
+The three regexes, from 2.1.251:
+
+```js
+// body text — braced only
+function AG(e, t) { let o = e.replace(/\$\{CLAUDE_PLUGIN_ROOT\}/g, () => t.path); … }
+
+// permission-rule path prefixes — either form
+U = /^(?:\$CLAUDE_PLUGIN_ROOT|\$\{CLAUDE_PLUGIN_ROOT\})\//
+
+// hook commands — the hook's own form decides
+er.replace(hn.args === void 0
+   ? /\$\{CLAUDE_PLUGIN_ROOT\}|\$CLAUDE_PLUGIN_ROOT\b/g   // shell form: either
+   : /\$\{CLAUDE_PLUGIN_ROOT\}/g,                          // exec form: braced only
+   () => xr)
+```
+
+**When in doubt, brace it.** The braced form is accepted at every site; the bare form is accepted at only two of the four. There is no context where bare works and braced doesn't.
+
+*There is no linter rule for this. Both a bare-form rule and a reference-file rule were designed and measured against the installed-plugin corpus; almost every occurrence of the token in a `references/*.md` is documentation **of** the token rather than a use of it, so the rules flag correct explanations of the hazard — including this section. Knowing the table beats scanning for it.*
 
 #### The better answer for anything executable: ship `bin/` and call it bare
 
@@ -727,9 +765,14 @@ This complements the "pass bundled scripts absolute paths" rule rather than repl
 
 **Three caveats, all silent — construct, verify, fall back:**
 
-- **A PATH entry is not evidence the directory exists.** `bin/` is provisioned at sync/install time, not carried in plugin source. Measured while writing this: 35 plugin `bin/` entries on this machine's PATH, **zero** of them present on disk. Check that your command resolves (`command -v`) before relying on it.
-- **The Cowork mount is read-only.** Don't plan to write into `bin/` at runtime.
+- **Put `bin/` at the plugin root** — the directory containing `.claude-plugin/plugin.json`. That is what PATH receives. In a marketplace repo whose plugin lives in a subdirectory there are two candidate roots, and only the inner one counts. (A `bin/` elsewhere in such a repo is usually an ordinary project CLI and is fine where it is; this is about which directory PATH gets, not about tidying a repo.)
+
+- **A PATH entry is not evidence the directory exists.** The builder maps every enabled non-builtin plugin to `<root>/bin` and filters only for shell metacharacters — there is no existence check, so the entry appears whether or not the directory is there. The consequence is a diagnostic that lies: `echo $PATH` shows your plugin listed and looks healthy, so "command not found" never means PATH is misconfigured — it means the file is missing, at the wrong root, or not executable. Check with `command -v`, not by reading PATH.
+
+- **Commit the launcher executable.** The plugin mount is read-only under Cowork, so a missing `+x` bit cannot be repaired at runtime.
 - **A plugin path containing shell metacharacters is dropped from PATH silently** — the runtime filters those entries and logs a warning the model never sees. A plugin installed under a path with a `$`, a quote, or a backtick simply has no `bin/` on PATH.
+
+*Status: verified on the local-install lane — the PATH entry is live (it resolves the moment the directory appears, with no reload) and source directories survive installation unaltered. On Cowork's org-remote lane the runtime writes into that directory too, and the rule is exact: a plugin root has a `bin/` **iff** its manifest declares `clis`, and the file dropped there is named for the declared key. So if you declare `clis: {foo: …}`, the runtime owns `bin/foo` — don't also ship a launcher by that name. Whether an author's differently-named launcher survives alongside the generated one is untested. The affordance appears to have no adopters yet, which is a reason to confirm a first use with `command -v <name>`, not a reason to doubt it.*
 
 *Version note: the commonly-cited v2.1.91 origin for the PATH behavior is **unverified**. The CHANGELOG embedded in these binaries reaches back only to 2.1.220, so its absence there proves nothing either way.*
 
