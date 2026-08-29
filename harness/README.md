@@ -39,11 +39,20 @@ the launcher cannot run once mounted read-only.
 |---|---|---|
 | container | **yes** (`/sessions/…/widget-fixture/bin`) | yes — so the launcher is never needed |
 | hostloop  | **no** (5 stock entries) | **no** — so the launcher is exactly what is missing |
-| microvm   | not measured — the lane fails to start here (`env: 'claude': No such file or directory` in the Lima guest) |
+| microvm   | not measured — upstream harness bug, reported; don't chase it locally (see below) |
 
 That inversion is the finding: the launcher is on PATH where the read path already works, and absent
 where it does not. `stanza-split-namespace.yaml` therefore asserts the *search* recovery, not the
 launcher.
+
+**Why microvm is blank, and why not to debug it here.** The lane dies with `env: 'claude': No such
+file or directory` (exit 127) when Claude Desktop prunes the agent binary a harness baseline pins —
+which it does on update. The other tiers fall back and say so; microvm does not, because it resolves
+the staged binary by a separate path that skips the shared resolver. Root-caused and reported
+upstream 2026-08-29; nothing to fix in this repo, and no scenario here uses the tier. What is lost
+meanwhile is the L2 guest firewall — so **egress-denial behaviour has no local test** while this
+holds. Re-check after a harness upgrade rather than reaching for it when a scenario needs egress
+coverage.
 
 **One cassette is committed; the other two are live-only — the CI gate is mostly the static lane.**
 A cassette records the skill's *own* behavior, so its staleness hash is tied to the skill's source.
