@@ -33,6 +33,15 @@ script directory, an error path killed by `set -e`, and a fallback tier that doe
 lane it was written for. Its `bin/wf` must stay mode `100755` in the index — `git ls-files -s` — or
 the launcher cannot run once mounted read-only.
 
+**Keep the fixture hook-free, in both spellings.** cowork-harness ≥3.0.0 refuses to spawn at
+`protocol` when a staged plugin declares runnable hooks, unless the scenario sets
+`allow_host_hooks: true` — because loading the plugin means the CLI executes those hooks as *native
+host processes*, outside any sandbox. Hooks can be declared two ways, `hooks/hooks.json` **or** a
+`hooks` key in `.claude-plugin/plugin.json`, and checking only the first is how you conclude
+"no hooks" from a partial look — 3.0.0 shipped with the manifest spelling bypassing its own gate
+(fixed upstream in `3c4d5fe`). Verified here: neither the fixture nor this repo's plugin declares
+hooks in either form.
+
 **Lane coverage for the `bin/`-on-PATH mechanism**, measured on that one fixture:
 
 | lane | plugin `bin/` on the shell's PATH | read path resolves in the shell |
