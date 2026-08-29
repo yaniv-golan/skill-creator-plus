@@ -1,0 +1,44 @@
+name: script-path-guidance
+# REGRESSION GUARD for a measured failure, 2026-08-29.
+#
+# A user asks the narrowest possible question about the thing this skill exists to teach:
+# how a SKILL.md reaches its own bundled script. Three probes established the failure:
+#
+#   opus-5    triggers, greps official-guide-patterns.md, correct answer, cites the source
+#   sonnet-5  no Skill invocation, no reads, answers from priors in one turn:
+#               `python scripts/validate.py`   (bare relative path — wrong under Cowork,
+#                                               where the shell starts at the session root)
+#             plus a FABRICATED mechanism, stated as the closing "common gotcha":
+#               "Claude Code resolves skill-relative paths from the skill directory
+#                when it invokes bundled scripts."
+#             That mechanism does not exist. official-guide-patterns.md says the opposite:
+#               "CWD is the project working directory, not ${CLAUDE_SKILL_DIR}."
+#
+# So the failure mode is not silence, it is a confident fabrication in exactly the place the
+# skill exists to correct. This scenario pins all three halves: that the skill is SELECTED,
+# that it reaches the guidance, and that the fabrication is absent.
+#
+# TIER NOTE: the shared session pins claude-opus-5, which PASSED at authoring time — so a
+# green here is a guard against regression, not proof the sonnet gap is closed. Re-run the
+# sonnet lane by hand (`cowork-harness chat ... --model claude-sonnet-5`) when the
+# description changes; a scenario cannot express "must pass at both tiers" in one file.
+session: ../sessions/skill.yaml
+fidelity: container
+on_unanswered: fail
+
+prompt: |
+  I'm building a new skill and it bundles a Python script at scripts/validate.py.
+  In the SKILL.md, what exact line do I write so Claude runs that script?
+  Also, I want to mention the same script in references/usage.md — what do I write there?
+
+assert:
+  - result: success
+  # 1. SELECTION — the failure was the skill never being reached at all.
+  - skill_triggered: "skill-creator-plus"
+  # 2. The answer names the token that actually works in a SKILL.md body.
+  - transcript_contains: "${CLAUDE_SKILL_DIR}"
+  # 3. The fabrication must not reappear. Narrow on purpose: a CORRECT answer legitimately
+  #    says a reference doc names a path "relative to the skill root", so only the invented
+  #    RESOLUTION claim is banned, not that phrasing.
+  - transcript_not_matches: "resolv\\w* +[^.]{0,40}from the skill(?:'s)? +(?:root +)?director"
+  - transcript_not_matches: "(?:cwd|working directory) +is +the +skill"
