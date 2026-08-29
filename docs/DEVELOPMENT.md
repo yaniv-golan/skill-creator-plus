@@ -14,12 +14,16 @@ cd skill-creator-plus/skills/skill-creator-plus && python -m scripts.check_porta
 # a workspace under a relative `outputs/` path nests a second outputs level and hides it),
 # thirdparty-import (allowlisted against Cowork's
 # preinstalled stack), delivery-tool-single-lane, delivery-conditional-deliverable,
-# compaction-truncation-risk (SKILL.md over the 19,900-CHARACTER post-compaction cap — DERIVED
-# arithmetic (5,000 tokens x 4 minus a 100-char marker: 98 visible chars + two leading
-# newlines), not a literal in the bundle; not a
-# heuristic: the runtime's "5,000 token" limit is sized by a character model, DERIVED as
-# Math.round(chars/4) — the 5,000/25,000 constants are binary-verified across 2.1.222/246/247,
-# but the size function itself was not resolved, so treat the divisor as derived).
+# compaction-truncation-risk (SKILL.md large enough to be truncated on re-attachment. TWO
+# constants, 102 chars apart, and conflating them is a 101-char false-positive band: truncation
+# FIRES at 20,002 chars (the runtime returns early while Math.round(len/4) <= 5,000, and JS
+# Math.round is half-up), while what SURVIVES is 19,900 (5,000 x 4 minus a 100-char marker: 98
+# visible chars + two leading newlines). Gate on the trigger, report against the survivor.
+# Neither number is a literal in the bundle — both are derived from constants that are, and the
+# derivation is now complete end to end: the size function resolves to
+# `$c(e,t=4){...return Math.round(e.length/t)}`, so the budget is LITERALLY a character gate and
+# `wc -m` has zero conversion error. The 5,000/25,000 caps are binary-verified across
+# 2.1.222/246/247/251).
 # --strict gates on warnings/errors only; advisories report but never gate (add --strict-advisories
 # to gate on those too). Exit codes: 0 no gating findings, 1 gated, 2 usage error, 3 path not found.
 # NOTE: CI does NOT run check_portability — `.github/workflows/validate.yml` runs
