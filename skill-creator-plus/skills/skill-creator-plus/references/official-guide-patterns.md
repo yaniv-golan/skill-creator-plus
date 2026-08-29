@@ -682,9 +682,17 @@ It runs the command at skill activation time and inlines the output into the ski
 
 ### Path Variables
 
-Skills have access to built-in path variables that resolve at runtime:
+**To reach a bundled script, write `${CLAUDE_SKILL_DIR}/scripts/tool.py` in `SKILL.md`.** It is replaced with a real absolute path before the model sees it, so the model can hand that path straight to Bash. That is the whole answer for most skills; the rest of this section is edge cases, and you can skip to *Argument Substitution* unless you hit one.
 
-- **`${CLAUDE_SKILL_DIR}`** — resolves to the skill's own directory. Use this to reference bundled scripts, config files, and reference docs without hardcoding paths.
+The two that bite in practice: the token is **dead outside `SKILL.md`** — literal characters in a `references/*.md`, empty string in a shell — so a reference doc should name `scripts/tool.py` and let `SKILL.md` supply the base at the point of use. And if you want the model to invoke something as a *command* rather than a path, ship `bin/<name>`.
+
+---
+
+**These are not runtime variables. They are load-time string substitutions into definition text** — a find-and-replace over your `SKILL.md` body and frontmatter before the model sees it. Nothing exports them, so the moment a path leaves that file the token is dead. Read them that way and the limits below are consequences rather than trivia.
+
+The operative rule is the one this guide already applies to workspaces: **resolve once where substitution works, then pass the resolved absolute string explicitly to everything downstream.** A shell, a `references/*.md`, and a sub-agent prompt all need the value, and none of them can re-derive it.
+
+- **`${CLAUDE_SKILL_DIR}`** — the skill's own directory. The right way to reference bundled scripts *from `SKILL.md`*: write `python3 ${CLAUDE_SKILL_DIR}/scripts/tool.py` and the model receives a real absolute path it can then hand to Bash. Braced form only, and it works in the `SKILL.md` body and in `allowed-tools` — nowhere else. In a `references/*.md` it arrives as literal characters; in a shell it expands to the **empty string**. Both fail silently.
 - **`${CLAUDE_PLUGIN_ROOT}`** — the root of the plugin containing this skill, substituted **into definition text only**. See the three limits below before using it; two of them fail silently.
 - **`${CLAUDE_PLUGIN_DATA}`** — a stable data directory per plugin that persists across skill upgrades. Use this for any data that should survive version bumps (logs, user config, caches).
 - **`${CLAUDE_SESSION_ID}`** — the current session identifier. Useful for creating session-specific temp files or logs.
@@ -695,12 +703,33 @@ Read the API reference at ${CLAUDE_SKILL_DIR}/references/api.md before making an
 Save persistent data to ${CLAUDE_PLUGIN_DATA}/history.json.
 ```
 
+**Where each token is live**
+
+| | `SKILL.md` body | `allowed-tools` | `references/*.md` at runtime | Bash / sub-agent prompt |
+|---|---|---|---|---|
+| `${CLAUDE_SKILL_DIR}` | ✅ | ✅ | ❌ literal | ❌ empty |
+| `${CLAUDE_PLUGIN_ROOT}` | ✅ | ✅ | ❌ literal | ❌ empty **or another plugin's root** |
+| `${CLAUDE_PLUGIN_DATA}` | ✅ | ✅ | ❌ literal | ❌ empty **or another plugin's data dir** |
+| `${CLAUDE_SESSION_ID}` | ✅ | ❌ **not substituted** | ❌ literal | ❌ empty |
+
+The `allowed-tools` column is a separate substitution pass from the body's, and it does not carry the same set — `${CLAUDE_SESSION_ID}` survives in a body and is passed through untouched in a permission rule.
+
+**A skill usually carries its own location, but do not rely on it.** The runtime prepends `Base directory for this skill: <absolute path>` as the first line of the loaded content, and truncation is head-preserving, so that line survives *truncation* by construction — if a section was cut, the skill's absolute path is still the first thing in its own context. Three things break it:
+
+- **The combined cap zeroes rather than truncates.** A skill that does not fit the 25,000-token budget has its stored content set to the empty string and is skipped on sight for the rest of the session. There is no first line because there is no content. This is the failure `compaction-zeroing-risk` exists to catch, and it is the one case where an author is told to re-read from disk and has nothing to read *from*.
+- **It is the least-recently-invoked skill that gets zeroed**, since packing is most-recent-first — precisely the skill whose path you would need to recover.
+- **The path may name a directory that no longer exists.** Plugin roots are version-stamped, so an ordinary update leaves the recorded path dangling even when the line itself survives intact.
+
+So treat the base-directory line as a first thing to try, not a guarantee. (It is also absent entirely for a single-file `commands/*.md`, which gets no such line at all.)
+
+For anything the model invokes as a *command* rather than a path, ship `bin/<name>` and call it bare — see below.
+
 #### Where `${CLAUDE_PLUGIN_ROOT}` is and isn't substituted
 
 "Resolves to the plugin root" is true in exactly one place. Two of the three limits below produce no error at all, which is how a skill ends up silently reading the wrong path.
 
 1. ✅ **Definition text, at load.** A `SKILL.md` body, a command, a hook, an MCP server entry. The runtime rewrites the token before the text reaches the model. This works.
-2. ❌ **Not in a `references/*.md` read at runtime.** Only the definition is rewritten. A reference doc opened with `Read` comes back as bytes from disk, so the token arrives **literally**, as the eleven characters `${CLAUDE_PLUGIN_ROOT}`. Nothing warns you.
+2. ❌ **Not in a `references/*.md` read at runtime.** Only the definition is rewritten. A reference doc opened with `Read` comes back as bytes from disk, so the token arrives **literally**, as the characters `${CLAUDE_PLUGIN_ROOT}`. Nothing warns you.
 3. ❌ **Not part of the Bash tool's contract.** It is not one of the variables Claude Code exports for Bash. In a shell the token expands to the **empty string** — no error, no unbound-variable failure, just a path that silently loses its prefix and becomes relative.
 
    Worse than empty, it can be *set* and wrong: `CLAUDE_PLUGIN_ROOT` may be present in a shell while naming **a completely different plugin** than the one whose skill is running — typically alongside a `CLAUDE_PLUGIN_DATA` naming a third.
