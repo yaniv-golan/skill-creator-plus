@@ -1,6 +1,6 @@
 ---
 name: skill-creator-plus
-description: Create, test, evaluate, and iteratively improve Claude skills. Use when users say "create a skill", "make a skill for", "write a SKILL.md", "turn this into a skill", "run evals", "test my skill", "benchmark my skill", "optimize my skill description", "improve triggering", "blind comparison", "A/B test my skill", or want to package a skill for distribution. Also triggers on "skill-creator", editing an existing skill, or reviewing skill quality.
+description: Create, test, evaluate, and improve Claude skills — and answer questions about how skills work. Use for "create a skill", "make a skill for", "write a SKILL.md", "turn this into a skill", "run evals", "test/benchmark my skill", "optimize my skill description", "improve triggering", "A/B test my skill", packaging for distribution, editing an existing skill, or reviewing skill quality. Also for a single narrow question about skill mechanics, however small — referencing a bundled script or reference doc, path variables, frontmatter fields, directory layout, size limits, or what breaks across Claude Code, Claude.ai and Cowork.
 license: MIT
 metadata:
   author: Yaniv Golan
@@ -119,6 +119,17 @@ skill-name/
     └── assets/     - Files used in output (templates, icons, fonts)
 ```
 
+**Reaching a bundled script:** in `SKILL.md`, prefix the path with the skill-directory variable — the
+name is `CLAUDE_SKILL_DIR`, written `$` then the name in curly braces, then `/scripts/tool.py`. (This
+paragraph deliberately does not spell the token out: the runtime substitutes it at load, so a SKILL.md
+literally *cannot* show it — copy the exact form from `references/official-guide-patterns.md`, which is
+a reference file and therefore never substituted.) It is a load-time text substitution, replaced with a
+real absolute path before the model sees it, and braced form only. It is **dead everywhere else**:
+literal characters in a `references/*.md`, and the empty string in a shell — nothing exports it. So
+resolve once in `SKILL.md` and pass the absolute string downstream; a reference doc should name
+`scripts/tool.py` and let `SKILL.md` supply the base. There is no skill-relative path resolution — the
+CWD when your script runs is the project working directory.
+
 #### Progressive Disclosure
 
 Skills use a three-level loading system:
@@ -133,7 +144,7 @@ These word counts are approximate and you can feel free to go longer if needed.
 - Reference files clearly from SKILL.md with guidance on when to read them
 - For large reference files (>300 lines), include a table of contents
 
-For advanced patterns (setup/config, persistent data, on-demand hooks, Dynamic Context Injection, path variables like `${CLAUDE_SKILL_DIR}`, relative markdown links), see `references/official-guide-patterns.md` (Practical Lessons and Advanced Skill Authoring Features sections).
+For advanced patterns (setup/config, persistent data, on-demand hooks, Dynamic Context Injection, path variables such as `CLAUDE_SKILL_DIR`, relative markdown links), see `references/official-guide-patterns.md` (Practical Lessons and Advanced Skill Authoring Features sections).
 
 **Domain organization**: When a skill supports multiple domains/frameworks, organize by variant:
 ```
