@@ -1,3 +1,4 @@
+import math
 import sys
 import tempfile
 import unittest
@@ -13,6 +14,8 @@ from check_portability import (  # noqa: E402
     check_outputs_prefix,
     _filter_by_target,
     COMPACTION_CAP_CHARS,
+    COMPACTION_MARKER_CHARS,
+    COMPACTION_TRIGGER_CHARS,
     DESC_HARD_CAP,
     TARGETS,
 )
@@ -107,10 +110,35 @@ class CompactionBudgetTests(unittest.TestCase):
             self.assertIn("wc -m", f["message"])
             self.assertIn("roughly line", f["message"])
 
-    def test_boundary_exactly_at_cap_is_clean(self):
-        text = "a" * COMPACTION_CAP_CHARS
-        self.assertEqual(check_compaction_budget(text), [])
-        self.assertEqual(len(check_compaction_budget(text + "a")), 1)
+    def test_boundary_is_the_trigger_not_the_survivor(self):
+        """The two constants are 102 chars apart and the gate must use the trigger.
+
+        The runtime leaves content alone while `Math.round(len/4) <= 5000`, and JS `Math.round`
+        is half-up, so 20,001 chars round to 5000 (untouched) and 20,002 round to 5001
+        (truncated). Gating on COMPACTION_CAP_CHARS instead flags the whole 19,901..20,001 band
+        for a truncation that never happens.
+        """
+        # what survives is 19,900 -- but nothing at that length is ever touched
+        self.assertEqual(check_compaction_budget("a" * COMPACTION_CAP_CHARS), [])
+        for n in (COMPACTION_CAP_CHARS + 1, 20000, COMPACTION_TRIGGER_CHARS - 1):
+            self.assertEqual(check_compaction_budget("a" * n), [],
+                             f"{n} chars is below the trigger; the runtime never truncates it")
+        self.assertEqual(len(check_compaction_budget("a" * COMPACTION_TRIGGER_CHARS)), 1)
+
+    def test_trigger_matches_the_runtime_round_half_up(self):
+        """Re-derive the trigger from the runtime's own gate rather than trusting the literal.
+
+        Runtime: `if ($c(e) <= t) return e` with `$c = Math.round(len/4)` and `t = 5000`.
+        Python's round() is banker's rounding, so half-up is spelled out explicitly.
+        """
+        def truncates(n):
+            return math.floor(n / 4 + 0.5) > 5000          # JS Math.round is half-up
+        self.assertFalse(truncates(COMPACTION_TRIGGER_CHARS - 1))
+        self.assertTrue(truncates(COMPACTION_TRIGGER_CHARS))
+        self.assertEqual(min(n for n in range(19000, 21000) if truncates(n)),
+                         COMPACTION_TRIGGER_CHARS)
+        # and what survives is the marker's complement, not the trigger
+        self.assertEqual(5000 * 4 - COMPACTION_MARKER_CHARS, COMPACTION_CAP_CHARS)
 
 
 class RuntimeConstructTests(unittest.TestCase):

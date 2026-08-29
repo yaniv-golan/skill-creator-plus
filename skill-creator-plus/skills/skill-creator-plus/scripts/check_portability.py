@@ -77,18 +77,33 @@ COWORK_PREINSTALLED = frozenset({
 # cannot see the newlines at all. Re-verified byte-exact in 2.1.247. The per-skill cap (5,000) and the combined cross-skill cap (25,000) are
 # hardcoded with no context-window scaling — verified first-party in 2.1.222 (Nvy/$vy), 2.1.246
 # (V3o/K3o) and 2.1.247 (YJo/ZJo): three builds, three minified namings, identical values.
-# The size function itself is DERIVED, not confirmed: the truncator's `t*4` implies a
-# 4-chars-per-token model consistent with Math.round(chars/4), but the estimator could not be
-# resolved in the bundle. That does not affect this check, which gates on characters.
-# A tokenizer reading is the wrong unit — it measures something the budget never consults, and on
-# technical markdown (~3 chars/token) reads ~35% HIGHER than the runtime's own chars/4,
-# overstating the overage. Prose-heavy content at >4 chars/token would invert that.
+# The size function is RESOLVED, not inferred: `function $c(e,t=4){if(typeof e!=="string")return 0;
+# return Math.round(e.length/t)}` — read out of 2.1.251 by following the truncator chunk's
+# `import{$c,...}from"/$bunfs/root/chunk-raebvt7y.js"` to that chunk's bare `export{$c,...}` block.
+# A bare-name grep can miss it in builds that alias-mangle the export (2.1.246); following the
+# consuming chunk's import through the exporting chunk's export block works in both layouts.
+# So the budget is LITERALLY a character gate — `wc -m` has zero conversion error. A tokenizer
+# reading is not merely the wrong unit; it measures a quantity the runtime never computes, and on
+# technical markdown (~3 chars/token) reads ~35% HIGHER than chars/4, overstating the overage.
 # Truncation is destructive in the common case: the shortened text is written back to the registry,
 # so a second compaction cannot recover the tail. That write-back is CONDITIONAL — it is skipped
 # when the skill's content is already present in the conversation body, and a skill already carried
 # as an attachment is not re-attached, truncated or zeroed at all. The size finding holds on every
 # branch, which is why this rule is advisory on length alone.
-COMPACTION_CAP_CHARS = 19900
+COMPACTION_TOKEN_CAP = 5000        # runtime `N1n`, the per-skill cap `$c(text)` is compared to
+COMPACTION_MARKER_CHARS = 100      # `\n\n` + 98 visible chars of the truncation marker
+COMPACTION_CAP_CHARS = COMPACTION_TOKEN_CAP * 4 - COMPACTION_MARKER_CHARS   # 19,900
+
+# What TRIGGERS truncation is a different quantity from what SURVIVES it, and they are 102 chars
+# apart. The runtime returns the content untouched when `$c(text) <= 5000`, i.e. when
+# `Math.round(len/4) <= 5000`. JS `Math.round` is half-up, so:
+#     len 20,001 -> 5000.25 -> 5000  -> untouched
+#     len 20,002 -> 5000.50 -> 5001  -> TRUNCATED
+# Gating on COMPACTION_CAP_CHARS (19,900) therefore flags 19,901..20,001 as at-risk when the
+# runtime never touches them. Gate on the trigger; report against the survivor.
+# floor(n/4 + 0.5) > 5000  <=>  n >= 20002. Spelled out rather than written as a literal so the
+# two constants cannot drift apart if the runtime's cap ever moves.
+COMPACTION_TRIGGER_CHARS = 4 * COMPACTION_TOKEN_CAP + 2                     # 20,002
 
 SEVERITY_ERROR = "error"
 SEVERITY_WARNING = "warning"
@@ -304,12 +319,16 @@ def _iter_clauses(text):
 def check_compaction_budget(skill_md_text):
     """Flag a SKILL.md whose tail will be dropped when a session auto-compacts.
 
-    Exact, not heuristic: the cap is a hardcoded character count in the runtime, so this is a
-    straight length comparison — no tokenizer, no estimate, no divisor to tune.
+    Exact, not heuristic: the runtime's size function is `Math.round(chars/4)` and the cap it is
+    compared against is a hardcoded 5,000, so the whole budget reduces to a character comparison —
+    no tokenizer, no estimate, no divisor to tune.
+
+    Two constants, deliberately: truncation FIRES at COMPACTION_TRIGGER_CHARS (20,002) and what
+    SURVIVES it is COMPACTION_CAP_CHARS (19,900), the rest replaced by a 100-character marker.
     """
     findings = []
     n = len(skill_md_text)
-    if n <= COMPACTION_CAP_CHARS:
+    if n < COMPACTION_TRIGGER_CHARS:
         return findings
     cut_line = skill_md_text[:COMPACTION_CAP_CHARS].count("\n") + 1
     findings.append(_finding(
