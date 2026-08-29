@@ -20,8 +20,19 @@ name: script-path-guidance
 #
 # TIER NOTE: the shared session pins claude-opus-5, which PASSED at authoring time — so a
 # green here is a guard against regression, not proof the sonnet gap is closed. Re-run the
-# sonnet lane by hand (`cowork-harness chat ... --model claude-sonnet-5`) when the
-# description changes; a scenario cannot express "must pass at both tiers" in one file.
+# sonnet lane by hand when the description changes; a scenario cannot express "must pass at
+# both tiers" in one file. Pass BOTH flags — the fidelity is not optional:
+#
+#   cowork-harness chat skill-creator-plus/skills/skill-creator-plus '<question>' \
+#     --fidelity container --model claude-sonnet-5
+#
+# NEVER probe this skill at `--fidelity protocol`. L0 keeps the operator's real
+# CLAUDE_CONFIG_DIR, so every installed plugin is discoverable and the positional argument
+# can be silently inert. Measured 2026-08-29 on run chat/local_bmzb7u6aj2: 79 distinct
+# ~/.claude/plugins paths in the stream, the answer sourced from another installed plugin
+# entirely, and the ONLY skill-creator-plus path present was the installed 0.10.0 cache copy
+# — the working tree passed on the command line was never read. An L0 probe of this skill
+# measures whatever is installed, and says nothing about your edits.
 session: ../sessions/skill.yaml
 fidelity: container
 on_unanswered: fail
