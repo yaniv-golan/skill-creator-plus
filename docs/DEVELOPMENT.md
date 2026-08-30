@@ -70,6 +70,15 @@ cd skill-creator-plus/skills/skill-creator-plus && python -m unittest discover -
 # Merge analyst notes into a benchmark result
 python -m scripts.aggregate_benchmark <dir> --notes notes.json  # merge analyst notes
 
+# Trigger eval / description optimizer. EXPORT A CREDENTIAL FIRST — with ANTHROPIC_API_KEY,
+# CLAUDE_CODE_OAUTH_TOKEN or ANTHROPIC_AUTH_TOKEN in the environment, run_eval isolates HOME so the
+# `claude -p` children cannot see your installed plugins. Without one it runs against your real
+# ~/.claude, and a skill you have INSTALLED under the name being tested may answer instead of the
+# synthesized copy — the detector scores that as "did not trigger" and the whole eval reads as a bad
+# description. The run refuses rather than scoring when it detects this, but isolation avoids it.
+# Check `isolated` and `canary` in the output JSON; exit 4 means INSTRUMENT FAILURE (nothing was
+# measured), which is a different fact from a low score and must not be treated as one.
+
 # cowork-harness static checks on the shipped skill (token-free, no Docker; needs cowork-harness
 # >= 3.0.0 — see `harness/README.md`. 3.0.0 renamed the `l0_plugin_divergence` signal to
 # `l0_host_config_contamination` and added the `allow_host_hooks` scenario key; the loader is a
