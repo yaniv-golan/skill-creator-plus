@@ -89,6 +89,11 @@ cowork-harness lint --strict --min-severity WARN harness/scenarios/
 # `lint` only WARNS on an unknown key, so a scenario that lints clean can still be unloadable;
 # this runs the real loader (no token, no Docker, writes nothing) to prove the suite actually loads.
 cowork-harness record harness/scenarios/ --dry-run --quiet
+# CI also runs this one, and omitting it locally is how a stale cassette reaches a PR: a cassette
+# records the SKILL's behaviour, so its staleness hash is tied to the skill's source and ANY edit
+# under skills/ invalidates it. Re-record with:
+#   cowork-harness record harness/scenarios/no-trigger.yaml --out harness/cassettes/no-trigger.cassette.json
+cowork-harness verify-cassettes harness/cassettes --allow-empty
 ```
 
 ## cowork-harness dogfood suite (`harness/`)
