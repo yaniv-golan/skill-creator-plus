@@ -30,7 +30,11 @@ harness/
 from `assets/skill-script-invocation.md` and `assets/plugin-bin-launcher.sh` exactly as an author
 would, so a defect in those templates fails here. Three already have: a launcher pinned to the wrong
 script directory, an error path killed by `set -e`, and a fallback tier that does not exist in the
-lane it was written for. Its `bin/wf` must stay mode `100755` in the index — `git ls-files -s` — or
+lane it was written for. Attribution matters and is easy to overstate — only the third was found by
+a harness RUN. The first two were found by exercising the fixture in a shell, after the harness
+refused to stage it until it was committed. "The harness caught it" and "the harness made me build
+something worth exercising" are different claims; this fixture earned the second one twice and the
+first one once. Its `bin/wf` must stay mode `100755` in the index — `git ls-files -s` — or
 the launcher cannot run once mounted read-only.
 
 **Keep the fixture hook-free, in both spellings.** cowork-harness ≥3.0.0 refuses to spawn at

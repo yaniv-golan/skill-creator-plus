@@ -43,8 +43,11 @@ carry a negative control — the guard was deliberately broken and confirmed to 
   the only place it is detectable.
 - **`assets/skill-script-invocation.md` and `assets/plugin-bin-launcher.sh`** — paste-in wording for
   how an authored skill reaches its own scripts, and a `bin/` launcher template. Both are tested by
-  committed harness scenarios built *from* them, which have already caught three defects invisible to
-  review.
+  committed harness scenarios built *from* them. Building a fixture out of the templates and running
+  it surfaced three defects that two review passes had missed — a launcher pointed at the wrong
+  script directory, an error path silenced by `set -euo pipefail`, and a fallback tier that does not
+  exist in the lane it was written for. Only the third was found *by* the harness; the first two were
+  found by exercising a fixture the harness had required be committed before it would stage it.
 - **Harness fixture and scenarios for the shipped templates**, plus a guard on the skill's own
   script-path answer.
 
