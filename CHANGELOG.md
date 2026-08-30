@@ -2,6 +2,67 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.11.0] - 2026-08-30
+
+Two shipped mechanisms were measured and found not to work: the trigger eval could not measure a
+skill that was also installed, and the skill's own script-path guidance was unreachable at the
+moment it was needed. Both were found by running the thing rather than reading it, and both fixes
+carry a negative control — the guard was deliberately broken and confirmed to fail.
+
+### Fixed
+- **The trigger eval could not measure a skill that was also installed.** `run_eval` synthesizes a
+  uniquely-named copy, but `claude -p` also sees every plugin under `~/.claude`. When the skill under
+  test is one of them the model reaches for the *real* one, and the detector — matching the synthetic
+  name — correctly scores that as "did not trigger". Measured on this repo's own skill: **8/24, with
+  all 16 positives failing**, including a query the description names almost verbatim. That is the
+  advertised "optimize my skill description" capability returning noise in its likeliest use. Now:
+  `HOME` is isolated when a credential is in the environment, a canary proves the detector can fire
+  before any score is reported, and a run that invoked an installed skill is refused rather than
+  scored. `isolated` and `canary` ride in the output JSON, so a regression is visible in every
+  artifact rather than only in CI. Exit **4** distinguishes "measured nothing" from "scored badly" —
+  conflating them would let the optimizer tune against noise.
+- **The script-path guidance never reached the user asking for it.** A harness probe of the exact
+  question — *how does a SKILL.md run its bundled script* — showed the skill was not selected on
+  Sonnet, which answered from priors with a bare relative path plus a **fabricated** resolution
+  mechanism this skill's own reference contradicts. The description now puts single narrow mechanics
+  questions in scope, and the answer is in the always-loaded body rather than behind a
+  cross-reference. Verified after the change at both model tiers.
+- **`${CLAUDE_PLUGIN_ROOT}` in a shell is not merely empty — it can be set and wrong.** A plugin's
+  `Setup`/`SessionStart`/`CwdChanged`/`FileChanged` hook can export its environment through
+  `CLAUDE_ENV_FILE`, so an unrelated plugin's root lands in the session env and every later Bash call
+  inherits it. Checking whether it is empty therefore returns clean on the real failure. Inspect
+  `~/.claude/session-env/<session-id>/` to see whose exports are in your shell.
+- **The compaction rule flagged files the runtime never truncates.** Truncation fires at 20,002
+  characters (`Math.round(len/4) > 5000`, half-up), while 19,900 is what *survives* it. Gating on the
+  survivor flagged a 101-character band for a truncation that never happens.
+
+### Added
+- **`compaction-zeroing-risk`**, a plugin-level lint rule. Over the 25,000-token combined cap a skill
+  is not truncated but **zeroed** — written back as the empty string, with no marker and no entry —
+  and stays dropped for the session. Truncation announces itself; this does not, so authoring time is
+  the only place it is detectable.
+- **`assets/skill-script-invocation.md` and `assets/plugin-bin-launcher.sh`** — paste-in wording for
+  how an authored skill reaches its own scripts, and a `bin/` launcher template. Both are tested by
+  committed harness scenarios built *from* them, which have already caught three defects invisible to
+  review.
+- **Harness fixture and scenarios for the shipped templates**, plus a guard on the skill's own
+  script-path answer.
+
+### Changed
+- **Path Variables is reframed as load-time substitution, answer first.** These are not runtime
+  variables; nothing exports them. The per-token liveness table is now fully measured, including the
+  trap that the answer is **token-specific, not surface-specific**: a `commands/*.md` substitutes
+  `${CLAUDE_PLUGIN_ROOT}`, `${CLAUDE_PLUGIN_DATA}`, `${CLAUDE_PROJECT_DIR}` and
+  `${CLAUDE_SESSION_ID}` but **not** `${CLAUDE_SKILL_DIR}`. Asking "does substitution happen in
+  commands?" returns a truthful yes and sends you the wrong way.
+- **The `bin/`-on-PATH pattern is an optimisation, not a fallback.** Measured: the plugin `bin/` is on
+  PATH at `container` and `microvm` — the lanes where the read path already works — and absent at
+  `hostloop`, the one lane with the namespace split it exists to bridge. The stanza therefore ranks
+  the path-as-read first and a filesystem search second.
+- **cowork-harness floor raised to 3.0.0**, which renames `l0_plugin_divergence` to
+  `l0_host_config_contamination` and adds `allow_host_hooks`. The loader is a `strictObject`, so an
+  older CLI hard-errors rather than ignoring a new key.
+
 ## [0.10.0] - 2026-08-28
 
 Path guidance under Cowork was wrong in four places, and one of them re-created the exact failure it was written to prevent. Every claim below was re-verified first-party against Claude Code 2.1.247.
@@ -34,7 +95,7 @@ Path guidance under Cowork was wrong in four places, and one of them re-created 
 - **The Claude-specific frontmatter mechanism moved out of `SKILL.md` into `references/official-guide-patterns.md`.** `when_to_use`, `allowed-tools`, `disallowed-tools` and `shell` keep their *rules* in `SKILL.md`; the explanation behind them — that `allowed-tools` grants rather than prompts, that the real gate is workspace trust accepted once per folder, and that Cowork shows `when_to_use` in only one of two listings — now lives in the reference. If you went to `SKILL.md` for the workspace-trust explanation, it is one file over. This is the compaction budget doing its job: rules in the capped file, mechanism in the uncapped one.
 - **The SKILL.md size rule now states the metric that actually binds: characters, not lines.** The guidance led with "keep it under 500 lines" — a heuristic that cannot protect a character budget, and this repo was its own counterexample: 496 lines (passing the rule it teaches) at 2.07x the limit it documented in its own lint rule. Every skill authored with the tool inherited the wrong metric, and the packaging checklist repeated it. Now `wc -m` against 19,900 characters, with the line count dropped rather than demoted.
 - **The post-compaction cap is re-verified at 19,900 characters and now documented as derived arithmetic.** The value is unchanged; what changed is that it is no longer presented as a literal you could grep for. It is `5,000 tokens × 4` minus a 100-character truncation marker — 98 visible characters plus two leading newlines, a detail that makes the marker easy to mis-measure as 98 and the cap as 19,902. The 5,000 and 25,000 constants are unchanged across 2.1.222, 2.1.246 and 2.1.247: three builds, three minified namings, identical values.
-- **The chars-per-token divisor is documented as derived, not binary-verified.** The truncator's `× 4` implies the model, but the size function itself could not be resolved. The character budget, which is what the linter gates on, is unaffected.
+- **The chars-per-token divisor is documented as derived, not binary-verified.** *(Superseded in 0.11.0: the size function was located — `Math.round(e.length/t)` with `t=4` — so the budget is literally a character gate.)* The truncator's `× 4` implies the model, but the size function itself could not be resolved. The character budget, which is what the linter gates on, is unaffected.
 - **The combined 25,000-token budget is consumed by post-truncation sizes**, so a large skill contributes its capped 5,000 tokens rather than its full length. Read with the most-recently-invoked-first ordering, this explains a counter-intuitive outcome: the skill that vanishes is rarely the big one.
 - **`references/environments.md` no longer identifies the session scratchpad as `CLAUDE_CODE_TMPDIR` / `CLAUDE_TMPDIR`.** That variable is real — a per-uid temp-directory override defaulting to `/tmp` — but it is not the scratchpad. The guidance is now stated by outcome: a deliverable goes to a bare filename or an absolute outputs path, and anywhere else is a temporary file by definition.
 - **`harness/README.md` now states what replay does not cover.** Guards (`outputs-delete`, `host-path`) run off the live run's scan, which a cassette does not carry — a replay reports them as `—`, not as passing. The one real bug this suite has caught was a guard rather than an assertion, so a replay would have shown eight green asserts and missed it. The replay lane is regression cover for content, never a substitute for a live run.
