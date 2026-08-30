@@ -2,6 +2,39 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Added
+- **Cowork loses *words* the same way it loses files, and the Cowork guidance only covered files.**
+  A terminal renders a Bash result inline under the call that produced it, so a script's stdout is on
+  the reader's screen. Cowork renders tool calls as collapsed cards — *"ran 4 commands"* and none of
+  their output — so the only channel the reader reads as prose is assistant text. A skill can compute
+  its progress correctly, print it correctly, and deliver it to the model and to nobody else; many go
+  further and forbid the one channel the reader does read, on the premise that the reader has already
+  seen the tool output. That premise is terminal-only. `references/environments.md` now carries this
+  as the counterpart to the existing file-delivery bullet, with the fix that costs nothing from the
+  anti-fabrication guarantee — **the model may speak in the future tense; only a script may speak in
+  the past tense** — since a past-tense claim is fakeable by a model that skipped the stage and a
+  future-tense one is not. Includes the two traps that make the naive version fail ("repeat the lines
+  worth repeating" reintroduces exactly the editorial judgement the design removes; a marker prefix
+  is an injection surface wherever model-authored text is interpolated, so sanitize at ingest rather
+  than at emission) and the batching constraint that makes mid-phase narration structurally
+  impossible — one assistant message can carry many `tool_use` blocks and the floor returns only when
+  every result in the batch does, so a phase built as one parallel dispatch cannot narrate from
+  inside itself.
+
+  **No linter rule ships for this, and that is a measurement rather than an omission.** The four
+  recognisable phrasings of the bad premise return **zero** true positives across 411 installed
+  `SKILL.md` files: three match nothing, and the fourth's five hits are two skills using "don't
+  restate" for something else entirely — a verification-methodology instruction, and a list of
+  prohibition phrasings offered as an example of *bad* skill writing. Same bar that kept the general
+  relative-`outputs/` case out of `check_portability.py`. The rarity of the symptom text is itself
+  the finding: skills in this shape are not suppressing narration deliberately, they never considered
+  the channel, which is a guidance problem rather than a lint problem. *(The grep was re-derived here
+  against a positive control after three earlier attempts returned all-zeros for instrument reasons —
+  BSD `xargs -a` does not exist and zsh does not word-split `$(cat …)` assigned to a variable — each
+  of which would have read as confirmation.)*
+
 ## [0.11.0] - 2026-08-30
 
 Two shipped mechanisms were measured and found not to work: the trigger eval could not measure a
