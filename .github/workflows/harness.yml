@@ -22,7 +22,7 @@ jobs:
 
       - name: Install cowork-harness (pinned)
         run: |
-          npm i --prefix "$RUNNER_TEMP/ch" cowork-harness@2.4.0
+          npm i --prefix "$RUNNER_TEMP/ch" cowork-harness@3.0.0
           echo "$RUNNER_TEMP/ch/node_modules/.bin" >> "$GITHUB_PATH"
 
       - name: Verify cowork-harness version
