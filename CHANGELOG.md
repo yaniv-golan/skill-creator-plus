@@ -59,6 +59,10 @@ carry a negative control — the guard was deliberately broken and confirmed to 
   PATH at `container` and `microvm` — the lanes where the read path already works — and absent at
   `hostloop`, the one lane with the namespace split it exists to bridge. The stanza therefore ranks
   the path-as-read first and a filesystem search second.
+- **`README.md` corrected where it had gone stale**, not extended: the runtime-docs claims now cite
+  2.1.251 rather than 2.1.222, and the compaction description says what is actually enforced — a
+  CHARACTER gate, and *two* ways to lose content, since it previously described only truncation and
+  not the combined cap that zeroes a skill outright.
 - **cowork-harness floor raised to 3.0.0**, which renames `l0_plugin_divergence` to
   `l0_host_config_contamination` and adds `allow_host_hooks`. The loader is a `strictObject`, so an
   older CLI hard-errors rather than ignoring a new key.
