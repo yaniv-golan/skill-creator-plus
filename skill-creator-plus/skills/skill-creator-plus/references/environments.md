@@ -115,6 +115,52 @@ If you're in Cowork, the main things to know are:
   architecture overview (help center) describes the remote lane's session as sandboxed and
   ephemeral, which is why the write alone does not deliver there.)*
 
+- **Delivering words to the user — a script's stdout is not delivery for text.** The bullet above is
+  the file case; this is its exact counterpart for prose, and it is lost the same silent way. In a
+  terminal a Bash result renders inline under the call that produced it, so what a script prints is
+  on the reader's screen. Cowork renders tool calls as **collapsed cards** — the reader sees *"ran 4
+  commands"* and none of their output — so the only channel they read as prose is assistant text. A
+  skill that computes its progress correctly, prints it correctly, and says nothing in its own voice
+  has delivered that progress to the model and to nobody else. Worse, skills often *forbid* the one
+  channel the reader does read, on the premise that the reader has already seen the tool output.
+  **That premise is terminal-only.** Don't author it, and strip it out of a skill you are updating.
+  Author as if nothing in the runtime will notice the silence and prompt you out of it.
+
+  **Split on tense — the fix costs nothing from the anti-fabrication guarantee.** *The model may
+  speak in the future tense; only a script may speak in the past tense.* A past-tense claim ("84
+  clusters became 35 families") is the fakeable one — a model that skipped a stage describes having
+  run it exactly as convincingly as one that ran it — so a script must produce it, counted from
+  files at print time. A future-tense claim ("next I group what they connected") cannot be faked by
+  announcing an intention: announce-then-skip leaves the next boundary line missing. The mechanism
+  is a marker prefix on the reader-facing lines a script emits, plus one instruction — *repeat every
+  marked line verbatim, marker stripped, nothing added, author nothing in between.* Mark **new**
+  lines rather than retrofitting the marker onto existing operator output, which carries absolute
+  paths and internal ids. Two traps worth inheriting rather than rediscovering: "repeat the lines
+  worth repeating" hands the model exactly the editorial judgement the design exists to remove; and
+  a marker is an **injection surface** wherever model-authored text is interpolated into a marked
+  line — a sub-agent label containing a newline plus a forged marker is relayed with a script's
+  authority — so sanitize where the value *enters*, not where the line is emitted, or the emitter's
+  own byte-identity checks will flag every sanitized label as invented.
+
+  **Don't design for mid-phase updates; they do not exist.** One assistant message can carry several
+  `tool_use` blocks, and the model regains the floor only when *every* result in that batch returns.
+  A phase implemented as one parallel dispatch is therefore structurally incapable of narrating from
+  inside itself — text can appear before the batch or after all of it, nowhere in between — and
+  finer granularity is bought only by splitting the batch and paying the wall-clock. So put the line
+  at the phase **boundary**, and have the line before a long batch say how long the silence will be:
+  predicted silence is a different experience from unexplained silence. *(This constrains where a
+  line can go, not how often skills speak — most messages carry a single tool call. It is the
+  fan-out phases that sit in the batched tail, which is exactly where the silences are longest.)*
+
+  *(No linter rule covers this, and that is a measurement rather than an omission. The four
+  recognisable phrasings of the bad premise return **zero** true positives across 411 installed
+  `SKILL.md` files: three match nothing at all, and the fourth's five hits are two skills using
+  "don't restate" for something else — a verification-methodology instruction, and a list of
+  prohibition phrasings offered as an example of *bad* skill writing. Same bar that kept the general
+  relative-`outputs/` case out of the linter. The symptom text being this rare is itself the finding:
+  skills in this shape are not suppressing narration deliberately, they never considered the
+  channel — which is a guidance problem, not a lint problem.)*
+
 - Description optimization (`run_loop.py` / `run_eval.py`) should work in Cowork just fine since it uses `claude -p` via subprocess, not a browser, but please save it until you've fully finished making the skill and the user agrees it's in good shape.
 - **Updating an existing skill**: The user might be asking you to update an existing skill, not create a new one. Follow the update guidance in the claude.ai section above — **except its `/tmp` staging steps**, which do not apply here: under Cowork's shell `/tmp` is VM-private and reaches neither the user nor your file tools. Stage in the workspace instead.
 
