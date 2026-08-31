@@ -109,8 +109,8 @@ maintainer CI, not part of the user-facing skill workflow. Full instructions: `h
   Desktop agent binary + a token — a maintainer step, not CI. Run `cowork-harness doctor --tier
   container` first.
 - **Install caveat:** `npx cowork-harness@<ver>` can silently serve a stale cached CLI. Verify
-  `cowork-harness --version` reports **2.4.x** (write-back detector landed in 1.1.0; the
-  `verify-cassettes` claude.com handshake fix landed in 1.2.0); the CI job pins `cowork-harness@2.4.0`
+  `cowork-harness --version` reports **3.0.x** (write-back detector landed in 1.1.0; the
+  `verify-cassettes` claude.com handshake fix landed in 1.2.0); the CI job pins `cowork-harness@3.0.0`
   in an isolated prefix and asserts the version.
 
 ### Cassette privacy policy (public repo — BLOCKING)
