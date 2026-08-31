@@ -9,14 +9,16 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 [![Claude Code Plugin](https://img.shields.io/badge/Claude_Code-plugin-F97316)](https://docs.anthropic.com/en/docs/agents-and-tools/claude-code/plugins)
 
-The skill that builds skills. Write a draft, run evals against a baseline, review results in an interactive viewer, improve, and repeat — until your skill actually works. Based on Anthropic's official [`skill-creator`](https://github.com/anthropics/claude-plugins-official) plugin, with bug fixes and best practices baked in.
+The skill that builds skills. Draft one and ship it in a single pass, or run evals against a baseline and iterate until it measurably works — targeting Claude Code, Claude.ai or Cowork, whose runtimes differ in ways that silently break skills. You can also just ask it how skills work. Based on Anthropic's official [`skill-creator`](https://github.com/anthropics/claude-plugins-official) plugin, with bug fixes and best practices baked in.
 
 | | Official `skill-creator` | `skill-creator-plus` |
 |---|---|---|
 | Best practices guide | — | 620+ line Anthropic patterns reference |
 | Script vs. Instruct guidance | — | Decision framework for when to bundle scripts vs. use instructions |
-| Cross-host portability | — | Validates full [agentskills.io](https://agentskills.io/specification) spec + Claude-specific fields |
-| Claude Code runtime docs | — | 2.1.251 listing budget + per-skill degradation order, permission semantics, truncation caps, live-reload behavior |
+| Structure validation | — | Frontmatter, naming and length caps against the [agentskills.io](https://agentskills.io/specification) spec |
+| Cross-runtime linting | — | 12 rules for what breaks on Claude.ai and Cowork — subagents, `claude` CLI, display, third-party imports, file delivery, compaction |
+| Cowork authoring guidance | — | Where the workspace must live, the tool/shell path split, the two-step delivery rule |
+| Claude Code runtime docs | — | Listing budget + per-skill degradation order, permission semantics, truncation caps, live-reload behavior |
 | Eval viewer in Cowork | Silent fail on submit | Copyable JSON textarea (fixed) |
 | Description optimizer | Requires separate `ANTHROPIC_API_KEY`; drifts toward 1,024-char bloat | Uses your existing `claude` session; length-aware selection + plateau early-stop |
 | Benchmarking script | Silent empty results | Fixed directory handling |
@@ -28,13 +30,10 @@ The skill that builds skills. Write a draft, run evals against a baseline, revie
 Anthropic ships a `skill-creator` plugin. It's good, but several parts are broken or missing:
 
 - **Best practices guide included** — 620+ lines of patterns, structural templates, troubleshooting guide, and checklists extracted from Anthropic's [Complete Guide to Building Skills for Claude](https://resources.anthropic.com/hubfs/The-Complete-Guide-to-Building-Skill-for-Claude.pdf) and Thariq's [Lessons from Building Claude Code Skills](https://x.com/trq212/status/2024574133011673516). Includes a "Script vs. Instruct" decision framework for when to bundle pre-made scripts vs. keep logic as instructions — covering context window efficiency, reliability, and auditability. The built-in doesn't ship any of this.
-- **Cross-host portability** — skills produced here validate against the full [agentskills.io](https://agentskills.io/specification) cross-host spec so they run on Claude, Gemini CLI, Cursor, OpenCode, and other hosts. Claude-specific fields (`when_to_use`, `model`, `paths`, `hooks`, etc.) are supported but flagged as optional extensions, never load-bearing.
-- **Claude Code runtime docs** — documents the 2.1.251 mechanics most skill authors hit the hard way, each one verified against the shipping binary rather than inherited from a blog post: the shared listing budget (`contextWindow × 4 × skillListingBudgetFraction` — ~8 KB at 200 K, ~40 KB at 1 M) and the fact that overflow drops descriptions **per skill, least-recently-used first**, so full and name-only entries coexist; the 1,536-char per-entry default; that `allowed-tools` **grants** permission rather than requesting it, gated once per folder by workspace trust; the compaction budget, which is a CHARACTER gate rather than the documented token one (`Math.round(chars/4)`, so `wc -m` has zero conversion error) and which loses content two different ways — truncation keeps the first 19,900 characters and leaves a marker, while the combined cross-skill cap **zeroes** a skill outright with no marker and no entry; gitignore-syntax `paths:` matching (the docs say "glob" — they're wrong); and chokidar depth-2 live-reload. Where the public docs and the binary disagree, this says so and shows which one shipped.
-- **Eval viewer actually works in Cowork** — the built-in silently fails: you write feedback, click "Submit All Reviews", it says "saved" — but nothing reaches Claude. This version reliably shows copyable JSON you can paste back.
-- **Description optimizer doesn't bloat or crash** — the built-in calls the Anthropic SDK directly, requiring a separate `ANTHROPIC_API_KEY` most users don't have, and drifts toward 1,024-char descriptions that make a skill a top contributor to Claude's shared listing budget — and the first to lose its description when that budget overflows. This version uses `claude -p` (just works with your existing session), plus length-aware tie-break-shortest selection, plateau early-stop, and a tunable target length so descriptions stay tight.
-- **Benchmarking script fixed** — the built-in's aggregation script silently produces empty results due to undocumented directory structure requirements. Fixed and tested.
+- **A skill that works here can break there, silently** — Claude.ai has no subagents and no `claude` CLI; Cowork has no display and a finite preinstalled Python stack; file delivery differs per surface. Structure validation can't see any of that, so there are two checks: `quick_validate` for structure, and a 12-rule portability linter for runtime assumptions — including the two ways compaction loses a skill. Both are stdlib-only, because they have to run inside the sandboxes they lint.
+- **Claude Code runtime docs** — the mechanics most skill authors hit the hard way, read out of the shipping binary rather than inherited from a blog post: the shared listing budget (`contextWindow × 4 × skillListingBudgetFraction`) and the fact that overflow drops descriptions **per skill, least-recently-used first**, so full and name-only entries coexist; that `allowed-tools` **grants** permission rather than requesting it; the compaction budget, which is a CHARACTER gate rather than the documented token one, and which loses content two different ways — truncation keeps the first 19,900 characters and leaves a marker, while the combined cross-skill cap **zeroes** a skill outright with no marker and no entry; gitignore-syntax `paths:` matching (the docs say "glob" — they're wrong); and chokidar depth-2 live-reload. Verified against Claude Code 2.1.222–2.1.251. Where the public docs and the binary disagree, this says so and shows which one shipped.
 
-See the [CHANGELOG](CHANGELOG.md) for the full list of fixes.
+The eval viewer, description optimizer and benchmarking fixes are in the table above; see the [CHANGELOG](CHANGELOG.md) for the full list.
 
 ## Quick Start
 
@@ -51,26 +50,51 @@ Then just ask:
 /skill-creator-plus:skill-creator-plus Create a skill that reviews pull requests for security issues
 ```
 
-The skill takes it from there — intent capture, drafting, test cases, evaluation, and iteration.
+The skill takes it from there — intent capture, drafting, test cases, and delivery.
+
+You can also just ask it a question. Mechanics are in scope on their own — frontmatter fields, path variables, size limits, directory layout, or what breaks across runtimes — however small the question.
 
 > **Note:** If you also have Anthropic's built-in `skill-creator` installed, Claude may pick that one instead. Either uninstall the built-in, or use `/skill-creator-plus:skill-creator-plus` to invoke this version explicitly.
 
 ## How It Works
 
-### 1. Create
-Captures your intent through structured questions, researches existing patterns, then writes a SKILL.md with metadata, instructions, and test cases.
+There are two routes, and the fast one is a real route rather than a shortcut.
 
-### 2. Evaluate
-Spawns parallel runs (with-skill and baseline) on test prompts. While runs execute, drafts quantitative assertions. Grades results via the grader agent and shows them in an interactive browser-based viewer.
+### Route 1 — a working skill now
 
-### 3. Improve
-Analyzes evaluation results, identifies weaknesses, and rewrites the skill. Each iteration is benchmarked against the previous version.
+For when you want the skill itself, not an eval report:
 
-### 4. Compare
-For rigorous validation, runs blind A/B comparison: the comparator agent scores two outputs without knowing which skill produced them, then the analyzer agent unblinds and explains the differences.
+1. **Draft** — captures your intent through structured questions, researches existing patterns, then writes a SKILL.md with metadata, instructions and test cases.
+2. **Smoke-test every bundled script** — directly, on synthetic input with the problems planted: malformed rows, wrong delimiter, unusual encoding, empty and header-only files, a missing file. A script that only ever ran on clean input is untested.
+3. **Validate** — `quick_validate` for structure, then `check_portability` for the runtime you're targeting.
+4. **Package and deliver.**
 
-### 5. Optimize Description
-Generates trigger/non-trigger test queries, runs an optimization loop with train/test split, and selects the best-performing description.
+Steps 2 and 3 *are* the verification when you skip evals. Shipping without eval evidence is fine; shipping with nothing exercised is not.
+
+### Route 2 — evidence it works
+
+For when you need to show the skill helps:
+
+1. **Evaluate** — spawns parallel runs (with-skill and baseline) on test prompts. While runs execute, drafts quantitative assertions. Grades results via the grader agent and shows them in an interactive viewer, so you form your own opinion before anything is rewritten.
+2. **Improve** — analyzes results, identifies weaknesses, rewrites the skill. Each iteration is benchmarked against the previous version.
+
+Then repeat. Order is flexible, and an existing draft can join at step 1.
+
+### Optional depth
+
+- **Blind A/B comparison** — the comparator agent scores two outputs without knowing which skill produced them; the analyzer agent then unblinds and explains the differences.
+- **Description optimization** — generates trigger and non-trigger queries, runs an optimization loop with a train/test split, and selects the best-performing description. A description is what decides whether your skill is ever invoked at all.
+
+## Authoring for Cowork
+
+Cowork breaks assumptions that hold everywhere else, and it breaks them *quietly* — the write succeeds, the tool reports success, and the file is somewhere nobody will look. The skill knows about:
+
+- **Where the workspace must live.** The skill directory is a read-only plugin mount, so the workspace can't sit beside it. The agent falls back to the session scratchpad — which on the remote lane is reclaimed at session end, destroying the skill it just built.
+- **File tools and the shell don't share a working directory.** No single relative path is correct for both, so the identifier and the base have to stay apart.
+- **Writing a file is not delivering it.** On the remote lane a file written and never presented through a tool is silently lost. Delivery is two steps, always taught in order.
+- **A script's stdout is not delivery for text, either.** Tool-call output is collapsed in the Cowork transcript, so anything the user actually needs to read has to be said, not printed.
+
+Parts of this are authoring guidance rather than verified behavior, and the guidance says which is which. See [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) for the linter's flags, rule ids and exit codes.
 
 ## Installation
 
@@ -125,6 +149,14 @@ Or from within a Claude Code session:
 
 ```
 /skill-creator-plus:skill-creator-plus Do a blind A/B comparison between the old and new version of my skill
+```
+
+```
+/skill-creator-plus:skill-creator-plus Check whether my skill will work in Cowork
+```
+
+```
+/skill-creator-plus:skill-creator-plus What happens to my skill when the context gets compacted?
 ```
 
 ## Badge

@@ -10,4 +10,5 @@ Original license: Apache License 2.0
 
 Components from the original work include the core workflow, evaluation
 agents (grader, comparator, analyzer), eval viewer, and Python scripts.
-See the README for a summary of changes made in this derivative work.
+See the README and CHANGELOG.md for a summary of changes made in this
+derivative work.
