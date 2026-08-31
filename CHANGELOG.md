@@ -35,6 +35,42 @@ All notable changes to this project will be documented in this file.
   BSD `xargs -a` does not exist and zsh does not word-split `$(cat …)` assigned to a variable — each
   of which would have read as confirmation.)*
 
+### Fixed
+- **The README's own invocation never worked.** Every `/skill-creator-plus ...` example was not a
+  valid invocation: the plugin ships no `commands/` directory and `plugin.json` declares no
+  `commands` key, so the only invocable surface is the skill, which resolves as
+  `/skill-creator-plus:skill-creator-plus`. Five sites were example prompts; the sixth was the note
+  telling a user who *also* has Anthropic's built-in installed to "use `/skill-creator-plus` to
+  invoke this version explicitly" — disambiguation advice handed to exactly the reader who needs it,
+  which silently did nothing while the built-in kept winning.
+- **A third copy of the cowork-harness version was still pinned to 2.4.** `docs/DEVELOPMENT.md` told
+  a maintainer to verify the CLI reports `2.4.x` and claimed CI pins `@2.4.0`, while the same file
+  says `>= 3.0.0` and `harness.yml` asserts `3.0.*` at runtime. Same class as the two version-pin
+  breaks fixed during 0.11.0 — a version recorded in more places than the bump touches.
+
+### Changed
+- **The README was reframed away from fork-differentiation.** Its spine was what the built-in gets
+  wrong — 48% of the document's text before a reader learned what this *is*. Accurate when the delta
+  was the product; the repo has since grown a 12-rule cross-runtime linter, 166 lines of Cowork
+  authoring guidance and runtime mechanics read out of shipping binaries, none of which appeared
+  anywhere. The comparison table stays (the built-in ships in the marketplace most users have already
+  added, so it earns its position); the three prose bullets that merely restated a table row are gone.
+  "How It Works" claimed a mandatory five-stage pipeline and now documents the two real routes — the
+  one-pass path that `SKILL.md` already defines as first-class, and the eval loop — with A/B
+  comparison and description optimization as optional depth.
+- **Two overclaims corrected in the surviving bullets.** "Validates the *full* agentskills.io spec
+  *so they run on* Claude, Gemini CLI, Cursor, OpenCode" described `quick_validate`, whose own
+  argparse says "frontmatter, naming, length caps" — structure validation is not full-spec
+  validation and does not make a skill run anywhere. And "documents the **2.1.251** mechanics …
+  verified against the shipping binary" carried a stale label inside the one claim whose whole
+  argument is *verified, not inherited*: three of four version labels in `official-guide-patterns.md`
+  say 2.1.222, and only the listing-budget constants span to 2.1.251. Now stated as 2.1.222–2.1.251.
+  The "620+ lines" figure was deliberately **not** raised to the file's actual 1,044 — that sentence
+  credits Anthropic's guide and Thariq's post, but ~290 of those lines are this repo's own binary
+  research, credited separately.
+- **`NOTICE` now points at the CHANGELOG as well as the README** for the Apache-2.0 §4(b) change
+  summary, so the pointer does not depend on which README bullets survive a future edit.
+
 ## [0.11.0] - 2026-08-30
 
 Two shipped mechanisms were measured and found not to work: the trigger eval could not measure a
