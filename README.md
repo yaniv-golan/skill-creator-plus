@@ -48,12 +48,12 @@ claude plugin install skill-creator-plus@skill-creator-plus-marketplace
 Then just ask:
 
 ```
-/skill-creator-plus Create a skill that reviews pull requests for security issues
+/skill-creator-plus:skill-creator-plus Create a skill that reviews pull requests for security issues
 ```
 
 The skill takes it from there — intent capture, drafting, test cases, evaluation, and iteration.
 
-> **Note:** If you also have Anthropic's built-in `skill-creator` installed, Claude may pick that one instead. Either uninstall the built-in, or use `/skill-creator-plus` to invoke this version explicitly.
+> **Note:** If you also have Anthropic's built-in `skill-creator` installed, Claude may pick that one instead. Either uninstall the built-in, or use `/skill-creator-plus:skill-creator-plus` to invoke this version explicitly.
 
 ## How It Works
 
@@ -112,19 +112,19 @@ Or from within a Claude Code session:
 ## Usage Examples
 
 ```
-/skill-creator-plus Create a skill that reviews pull requests for security issues
+/skill-creator-plus:skill-creator-plus Create a skill that reviews pull requests for security issues
 ```
 
 ```
-/skill-creator-plus Run evals on my skill and show me the results
+/skill-creator-plus:skill-creator-plus Run evals on my skill and show me the results
 ```
 
 ```
-/skill-creator-plus Optimize my skill's description for better triggering
+/skill-creator-plus:skill-creator-plus Optimize my skill's description for better triggering
 ```
 
 ```
-/skill-creator-plus Do a blind A/B comparison between the old and new version of my skill
+/skill-creator-plus:skill-creator-plus Do a blind A/B comparison between the old and new version of my skill
 ```
 
 ## Badge
