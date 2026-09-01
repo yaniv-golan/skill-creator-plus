@@ -80,14 +80,17 @@ python -m scripts.aggregate_benchmark <dir> --notes notes.json  # merge analyst 
 # measured), which is a different fact from a low score and must not be treated as one.
 
 # cowork-harness static checks on the shipped skill (token-free, no Docker; needs cowork-harness
-# >= 3.0.0 — see `harness/README.md`. 3.0.0 renamed the `l0_plugin_divergence` signal to
+# >= 3.2.0 — see `harness/README.md`. 3.0.0 renamed the `l0_plugin_divergence` signal to
 # `l0_host_config_contamination` and added the `allow_host_hooks` scenario key; the loader is a
 # strictObject, so an older CLI hard-errors on a scenario using the new key rather than ignoring it.)
 cowork-harness lint-skill   --strict skill-creator-plus/skills/skill-creator-plus
 cowork-harness analyze-skill --strict skill-creator-plus/skills/skill-creator-plus
 cowork-harness lint --strict --min-severity WARN harness/scenarios/
-# `lint` only WARNS on an unknown key, so a scenario that lints clean can still be unloadable;
+# `lint` only WARNS on an UNKNOWN KEY, so a scenario that lints clean can still be unloadable;
 # this runs the real loader (no token, no Docker, writes nothing) to prove the suite actually loads.
+# Since 3.2.0 lint is the STRICTER check for one class — an invalid enum value (`fidelity: bogus`,
+# `result: succes`, `decide: allowe`) is an ERROR, where it used to lint clean and fail at load.
+# The directory arm is NOT recursive and reports a `prompt:`-less file as *skipped*, not broken.
 cowork-harness record harness/scenarios/ --dry-run --quiet
 # CI also runs this one, and omitting it locally is how a stale cassette reaches a PR: a cassette
 # records the SKILL's behaviour, so its staleness hash is tied to the skill's source and ANY edit
@@ -109,8 +112,8 @@ maintainer CI, not part of the user-facing skill workflow. Full instructions: `h
   Desktop agent binary + a token — a maintainer step, not CI. Run `cowork-harness doctor --tier
   container` first.
 - **Install caveat:** `npx cowork-harness@<ver>` can silently serve a stale cached CLI. Verify
-  `cowork-harness --version` reports **3.0.x** (write-back detector landed in 1.1.0; the
-  `verify-cassettes` claude.com handshake fix landed in 1.2.0); the CI job pins `cowork-harness@3.0.0`
+  `cowork-harness --version` reports **3.2.x** (write-back detector landed in 1.1.0; the
+  `verify-cassettes` claude.com handshake fix landed in 1.2.0); the CI job pins `cowork-harness@3.2.0`
   in an isolated prefix and asserts the version.
 
 ### Cassette privacy policy (public repo — BLOCKING)
