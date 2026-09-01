@@ -2,57 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [0.12.0] - 2026-09-01
 
-### Changed
-- **[cowork-harness](https://github.com/yaniv-golan/cowork-harness) pin 3.0.0 → 3.2.0** across CI,
-  `docs/DEVELOPMENT.md`, `harness/README.md`, `CLAUDE.md`, the two scenarios that state the pin, and
-  the shipped `references/environments.md`. Ten sites, and the sweep is the point: two of them still
-  said **2.4.0** and two more said **1.19.0 "is what this repo pins"** — stale by two majors and
-  missed by all three previous bumps, because each bump moved the sites it remembered. The floor the
-  0.11.0 entry below claimed to have raised was therefore never fully raised; it is now. The scoped
-  check is a grep over floor/pin claims in those files, NOT a repo-wide one: roughly a dozen other
-  hits are accurate upstream *provenance* ("microvm was dead here until 3.0.0", "the upstream fix
-  landed in 2.4.0") and rewriting those to a uniform number would turn true history into a false pin.
-- **The shipped floor's "what this floor carries" prose was rewritten around the model pin**, not the
-  lint rule. 3.1.0 warns when nothing pins `model:`, and the reason matters more than the warning:
-  the agent selects part of its **system prompt** by model capability, so an unpinned session moves
-  the instructions a skill is tested against, not merely answer quality. It becomes an error in the
-  next major. `references/environments.md` teaches only `lint-skill` / `analyze-skill`, and **neither
-  gained anything in 3.0.1/3.1.0/3.2.0** — so 3.2.0's `enum-value-invalid` is named there as tier-2
-  material and explained where scenario authoring actually lives.
-- **`lint` is no longer uniformly the lenient check, and the note saying so was wrong in three files.**
-  From 3.2.0 an invalid enum value (`fidelity: bogus`, `result: succes`, `answers[].decide: allowe`)
-  is an ERROR covering all eleven enum locations, where it used to lint clean and then fail at load.
-  Unknown keys stay a warning, which is why the `record --dry-run` loader pass is still the real gate.
-  Also newly recorded: that directory arm is **not recursive** (a scenario in a subdirectory is
-  silently unchecked) and reports a `prompt:`-less file as *skipped* rather than broken.
-- **`harness/README.md` states the host-inventory refusal's full predicate.** It is a conjunction —
-  host-inheriting tier **and** repo-visible destination **and** nothing there yet — so an existing
-  cassette is exempt and re-recording one is never refused; and the destination judged is `--out` if
-  given, else the default path relative to the **current working directory**, so previewing from
-  another directory can return the opposite verdict. The README also said to redirect `--out` outside
-  the repo, which is not a fix: a cassette stores its session and scenario references relative to its
-  own directory and one written outside the tree can never resolve them again.
-
-### Added
-- **`staleness.hash_ignore` excludes `tests/` and `eval-viewer/` from the cassette staleness hash** —
-  12 of 37 files that the agent never reads during a run, so excluding them costs no detection and
-  removes 12 ways to force a re-record. Globs match each **mount root**-relative path, and the mount
-  is the plugin directory: a bare `tests/**` silently matches nothing. That was the first spelling
-  tried here, and the hash still listed all 37 files — verified with `COWORK_HARNESS_DEBUG_SKILLHASH=1`
-  rather than assumed from the config parsing cleanly.
-  `references/**` is **deliberately not** excluded, even though both stale-cassette recurrences in
-  this repo were references edits and excluding them is what would actually stop the re-record tax.
-  References are delivered to the model once the skill is invoked, and the key is session-level, so it
-  would silently cover any future cassette recorded from an invoked run. A hash that stops noticing
-  real drift converts "the check passed" into "the check did not run", which is the failure this
-  suite exists to prevent.
-- **`harness/README.md` says who can clear the staleness gate.** `verify-cassettes` runs
-  unconditionally in CI including on fork PRs, and the only cure for a stale cassette is a re-record
-  needing Docker + a staged agent + a token. An outside contributor tripping it cannot clear it; the
-  maintainer re-records. The README named that wall for *recording* and never for the gate.
-
+The cowork-harness floor 0.11.0 claimed to have raised was only half-raised — two of its version
+sites were still two majors behind, which is the third time a pin bump has moved the sites it
+remembered rather than the sites that exist. This release finishes that sweep and adopts 3.2.0,
+and reframes a README whose spine was still a comparison against the plugin it forked from.
 ### Added
 - **Cowork loses *words* the same way it loses files, and the Cowork guidance only covered files.**
   A terminal renders a Bash result inline under the call that produced it, so a script's stdout is on
@@ -84,18 +39,33 @@ All notable changes to this project will be documented in this file.
   BSD `xargs -a` does not exist and zsh does not word-split `$(cat …)` assigned to a variable — each
   of which would have read as confirmation.)*
 
-### Fixed
-- **The README's own invocation never worked.** Every `/skill-creator-plus ...` example was not a
-  valid invocation: the plugin ships no `commands/` directory and `plugin.json` declares no
-  `commands` key, so the only invocable surface is the skill, which resolves as
-  `/skill-creator-plus:skill-creator-plus`. Five sites were example prompts; the sixth was the note
-  telling a user who *also* has Anthropic's built-in installed to "use `/skill-creator-plus` to
-  invoke this version explicitly" — disambiguation advice handed to exactly the reader who needs it,
-  which silently did nothing while the built-in kept winning.
-- **A third copy of the cowork-harness version was still pinned to 2.4.** `docs/DEVELOPMENT.md` told
-  a maintainer to verify the CLI reports `2.4.x` and claimed CI pins `@2.4.0`, while the same file
-  says `>= 3.0.0` and `harness.yml` asserts `3.0.*` at runtime. Same class as the two version-pin
-  breaks fixed during 0.11.0 — a version recorded in more places than the bump touches.
+- **The README documents Cowork authoring, and the portability linter, for the first time.** A new
+  **Authoring for Cowork** section names the four assumptions Cowork breaks quietly — where the
+  workspace must live (the skill dir is a read-only plugin mount, and the session scratchpad is
+  reclaimed at session end on the remote lane), that file tools and the shell do not share a working
+  directory, that writing a file is not delivering it, and that a script's stdout is not delivery for
+  text either — and says which parts are authoring guidance rather than verified behavior. The
+  comparison table gains rows for the 12-rule cross-runtime linter and for that guidance, and splits
+  the old portability row into a narrower **Structure validation**. Two usage examples were added for
+  the question-answering route 0.11.0 put in scope.
+
+- **`staleness.hash_ignore` excludes `tests/` and `eval-viewer/` from the cassette staleness hash** —
+  12 of 37 files that the agent never reads during a run, so excluding them costs no detection and
+  removes 12 ways to force a re-record. Globs match each **mount root**-relative path, and the mount
+  is the plugin directory: a bare `tests/**` silently matches nothing. That was the first spelling
+  tried here, and the hash still listed all 37 files — verified with `COWORK_HARNESS_DEBUG_SKILLHASH=1`
+  rather than assumed from the config parsing cleanly.
+  `references/**` is **deliberately not** excluded, even though both stale-cassette recurrences in
+  this repo were references edits and excluding them is what would actually stop the re-record tax.
+  References are delivered to the model once the skill is invoked, and the key is session-level, so it
+  would silently cover any future cassette recorded from an invoked run. A hash that stops noticing
+  real drift converts "the check passed" into "the check did not run", which is the failure this
+  suite exists to prevent.
+
+- **`harness/README.md` says who can clear the staleness gate.** `verify-cassettes` runs
+  unconditionally in CI including on fork PRs, and the only cure for a stale cassette is a re-record
+  needing Docker + a staged agent + a token. An outside contributor tripping it cannot clear it; the
+  maintainer re-records. The README named that wall for *recording* and never for the gate.
 
 ### Changed
 - **The README was reframed away from fork-differentiation.** Its spine was what the built-in gets
@@ -107,6 +77,7 @@ All notable changes to this project will be documented in this file.
   "How It Works" claimed a mandatory five-stage pipeline and now documents the two real routes — the
   one-pass path that `SKILL.md` already defines as first-class, and the eval loop — with A/B
   comparison and description optimization as optional depth.
+
 - **Two overclaims corrected in the surviving bullets.** "Validates the *full* agentskills.io spec
   *so they run on* Claude, Gemini CLI, Cursor, OpenCode" described `quick_validate`, whose own
   argparse says "frontmatter, naming, length caps" — structure validation is not full-spec
@@ -117,6 +88,7 @@ All notable changes to this project will be documented in this file.
   The "620+ lines" figure was deliberately **not** raised to the file's actual 1,044 — that sentence
   credits Anthropic's guide and Thariq's post, but ~290 of those lines are this repo's own binary
   research, credited separately.
+
 - **Three runtime claims in the reframed README were wrong or overstated, and are corrected.**
   Compressing `references/environments.md` into a single bullet dropped the hedges the source
   carried. "Cowork has no display" is stale and was always too broad — Cowork shipped a built-in
@@ -130,8 +102,57 @@ All notable changes to this project will be documented in this file.
   claude.ai's documented constraint is *varying* network access. And "Claude.ai has no subagents"
   keeps the right product name but is this repo's own operational claim rather than a documented
   one, so it now states the consequence the skill acts on — parallel eval runs collapse to serial.
+
 - **`NOTICE` now points at the CHANGELOG as well as the README** for the Apache-2.0 §4(b) change
   summary, so the pointer does not depend on which README bullets survive a future edit.
+
+- **The shipped floor's "what this floor carries" prose was rewritten around the model pin**, not the
+  lint rule. 3.1.0 warns when nothing pins `model:`, and the reason matters more than the warning:
+  the agent selects part of its **system prompt** by model capability, so an unpinned session moves
+  the instructions a skill is tested against, not merely answer quality. It becomes an error in the
+  next major. `references/environments.md` teaches only `lint-skill` / `analyze-skill`, and **neither
+  gained anything in 3.0.1/3.1.0/3.2.0** — so 3.2.0's `enum-value-invalid` is named there as tier-2
+  material and explained where scenario authoring actually lives.
+
+- **[cowork-harness](https://github.com/yaniv-golan/cowork-harness) pin 3.0.0 → 3.2.0** across CI,
+  `docs/DEVELOPMENT.md`, `harness/README.md`, the two scenarios that state the pin, and the shipped
+  `references/environments.md` (plus the maintainer's gitignored `CLAUDE.md`). **Twelve** sites,
+  eleven of them tracked, and the sweep is the point: two of them still
+  said **2.4.0** and two more said **1.19.0 "is what this repo pins"** — stale by two majors and
+  missed by all three previous bumps, because each bump moved the sites it remembered. The floor the
+  0.11.0 entry below claimed to have raised was therefore never fully raised; it is now. The scoped
+  check is a grep over floor/pin claims in those files, NOT a repo-wide one: roughly a dozen other
+  hits are accurate upstream *provenance* ("microvm was dead here until 3.0.0", "the upstream fix
+  landed in 2.4.0") and rewriting those to a uniform number would turn true history into a false pin.
+
+- **`lint` is no longer uniformly the lenient check, and the note saying so was wrong in three files.**
+  From 3.2.0 an invalid enum value (`fidelity: bogus`, `result: succes`, `answers[].decide: allowe`)
+  is an ERROR covering all eleven enum locations, where it used to lint clean and then fail at load.
+  Unknown keys stay a warning, which is why the `record --dry-run` loader pass is still the real gate.
+  Also newly recorded: that directory arm is **not recursive** (a scenario in a subdirectory is
+  silently unchecked) and reports a `prompt:`-less file as *skipped* rather than broken.
+
+- **`harness/README.md` states the host-inventory refusal's full predicate.** It is a conjunction —
+  host-inheriting tier **and** repo-visible destination **and** nothing there yet — so an existing
+  cassette is exempt and re-recording one is never refused; and the destination judged is `--out` if
+  given, else the default path relative to the **current working directory**, so previewing from
+  another directory can return the opposite verdict. The README also said to redirect `--out` outside
+  the repo, which is not a fix: a cassette stores its session and scenario references relative to its
+  own directory and one written outside the tree can never resolve them again.
+
+### Fixed
+- **The README's own invocation never worked.** Every `/skill-creator-plus ...` example was not a
+  valid invocation: the plugin ships no `commands/` directory and `plugin.json` declares no
+  `commands` key, so the only invocable surface is the skill, which resolves as
+  `/skill-creator-plus:skill-creator-plus`. Five sites were example prompts; the sixth was the note
+  telling a user who *also* has Anthropic's built-in installed to "use `/skill-creator-plus` to
+  invoke this version explicitly" — disambiguation advice handed to exactly the reader who needs it,
+  which silently did nothing while the built-in kept winning.
+
+- **A third copy of the cowork-harness version was still pinned to 2.4.** `docs/DEVELOPMENT.md` told
+  a maintainer to verify the CLI reports `2.4.x` and claimed CI pins `@2.4.0`, while the same file
+  says `>= 3.0.0` and `harness.yml` asserts `3.0.*` at runtime. Same class as the two version-pin
+  breaks fixed during 0.11.0 — a version recorded in more places than the bump touches.
 
 ## [0.11.0] - 2026-08-30
 
