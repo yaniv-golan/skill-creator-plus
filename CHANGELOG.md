@@ -68,6 +68,19 @@ All notable changes to this project will be documented in this file.
   The "620+ lines" figure was deliberately **not** raised to the file's actual 1,044 — that sentence
   credits Anthropic's guide and Thariq's post, but ~290 of those lines are this repo's own binary
   research, credited separately.
+- **Three runtime claims in the reframed README were wrong or overstated, and are corrected.**
+  Compressing `references/environments.md` into a single bullet dropped the hedges the source
+  carried. "Cowork has no display" is stale and was always too broad — Cowork shipped a built-in
+  browser side panel in Aug 2026, computer use runs in Cowork on Claude Desktop, and
+  `environments.md` itself notes desktop Cowork renders self-contained HTML in the sidebar; the only
+  true claim is that the agent cannot serve a local HTTP server and open it, which is why the eval
+  viewer needs `--static`. "A finite preinstalled Python stack" flattened a conditional into a hard
+  limit — an outside import costs an install on *every run* and egress is org-configurable, so a
+  locked-down org can deny it; that phrasing had actually borrowed the **Claude API's** constraint
+  ("no network access, no runtime package installation") for a surface it does not describe, since
+  claude.ai's documented constraint is *varying* network access. And "Claude.ai has no subagents"
+  keeps the right product name but is this repo's own operational claim rather than a documented
+  one, so it now states the consequence the skill acts on — parallel eval runs collapse to serial.
 - **`NOTICE` now points at the CHANGELOG as well as the README** for the Apache-2.0 §4(b) change
   summary, so the pointer does not depend on which README bullets survive a future edit.
 
