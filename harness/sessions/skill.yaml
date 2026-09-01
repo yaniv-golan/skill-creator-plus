@@ -5,6 +5,23 @@
 model: claude-opus-5
 permission_parity: cowork          # allow unscripted tool calls (Cowork-like)
 
+# Cassette staleness covers the mounted plugin tree — 37 files today, and ANY edit to one of them
+# re-stales every cassette recorded against this session, curable only by a re-record (Docker +
+# staged agent + token). These two directories are never read by the agent during a run, so
+# excluding them costs no detection: 12 of the 37 files stop being a re-record trigger.
+# DELIBERATELY NOT ignored: `references/**`. Both stale-cassette recurrences here were references
+# edits, so ignoring them is what would actually stop the re-record tax — and it is exactly the
+# wrong trade. References ARE delivered to the model once the skill is invoked; this key is
+# session-level, so it would silently cover any future cassette recorded from an invoked run, and
+# a hash that stops noticing real drift turns "the check passed" into "the check did not run".
+staleness:
+  hash_ignore:
+    # Globs match each MOUNT ROOT-relative path. The mount is the plugin dir, so these must be
+    # spelled from there — a bare "tests/**" silently matches nothing (verified: the hash still
+    # listed all 37 files). Confirm with COWORK_HARNESS_DEBUG_SKILLHASH=1.
+    - "skills/skill-creator-plus/tests/**"
+    - "skills/skill-creator-plus/eval-viewer/**"
+
 plugins:
   # The plugin root is repo-root skill-creator-plus/ (holds .claude-plugin/plugin.json).
   # Paths resolve relative to THIS file (harness/sessions/).

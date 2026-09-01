@@ -16,7 +16,7 @@ name: remote-delivery
 # non-deterministic LLM-authored gates, and a binary .skill artifact). CI only load-checks this file
 # via `record --dry-run`; a human runs it on demand. Never gate a PR on it.
 #
-# NEEDS cowork-harness >= 1.14.0 for `lane:` (>= 1.19.0 is what this repo pins). On an older CLI
+# NEEDS cowork-harness >= 1.14.0 for `lane:` (>= 3.2.0 is what this repo pins). On an older CLI
 # this scenario does not load at all — it is NOT silently treated as `lane: local`.
 session: ../sessions/skill.yaml
 lane: remote                   # the delivery contract under test

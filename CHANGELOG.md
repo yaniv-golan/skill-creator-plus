@@ -4,6 +4,55 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Changed
+- **[cowork-harness](https://github.com/yaniv-golan/cowork-harness) pin 3.0.0 → 3.2.0** across CI,
+  `docs/DEVELOPMENT.md`, `harness/README.md`, `CLAUDE.md`, the two scenarios that state the pin, and
+  the shipped `references/environments.md`. Ten sites, and the sweep is the point: two of them still
+  said **2.4.0** and two more said **1.19.0 "is what this repo pins"** — stale by two majors and
+  missed by all three previous bumps, because each bump moved the sites it remembered. The floor the
+  0.11.0 entry below claimed to have raised was therefore never fully raised; it is now. The scoped
+  check is a grep over floor/pin claims in those files, NOT a repo-wide one: roughly a dozen other
+  hits are accurate upstream *provenance* ("microvm was dead here until 3.0.0", "the upstream fix
+  landed in 2.4.0") and rewriting those to a uniform number would turn true history into a false pin.
+- **The shipped floor's "what this floor carries" prose was rewritten around the model pin**, not the
+  lint rule. 3.1.0 warns when nothing pins `model:`, and the reason matters more than the warning:
+  the agent selects part of its **system prompt** by model capability, so an unpinned session moves
+  the instructions a skill is tested against, not merely answer quality. It becomes an error in the
+  next major. `references/environments.md` teaches only `lint-skill` / `analyze-skill`, and **neither
+  gained anything in 3.0.1/3.1.0/3.2.0** — so 3.2.0's `enum-value-invalid` is named there as tier-2
+  material and explained where scenario authoring actually lives.
+- **`lint` is no longer uniformly the lenient check, and the note saying so was wrong in three files.**
+  From 3.2.0 an invalid enum value (`fidelity: bogus`, `result: succes`, `answers[].decide: allowe`)
+  is an ERROR covering all eleven enum locations, where it used to lint clean and then fail at load.
+  Unknown keys stay a warning, which is why the `record --dry-run` loader pass is still the real gate.
+  Also newly recorded: that directory arm is **not recursive** (a scenario in a subdirectory is
+  silently unchecked) and reports a `prompt:`-less file as *skipped* rather than broken.
+- **`harness/README.md` states the host-inventory refusal's full predicate.** It is a conjunction —
+  host-inheriting tier **and** repo-visible destination **and** nothing there yet — so an existing
+  cassette is exempt and re-recording one is never refused; and the destination judged is `--out` if
+  given, else the default path relative to the **current working directory**, so previewing from
+  another directory can return the opposite verdict. The README also said to redirect `--out` outside
+  the repo, which is not a fix: a cassette stores its session and scenario references relative to its
+  own directory and one written outside the tree can never resolve them again.
+
+### Added
+- **`staleness.hash_ignore` excludes `tests/` and `eval-viewer/` from the cassette staleness hash** —
+  12 of 37 files that the agent never reads during a run, so excluding them costs no detection and
+  removes 12 ways to force a re-record. Globs match each **mount root**-relative path, and the mount
+  is the plugin directory: a bare `tests/**` silently matches nothing. That was the first spelling
+  tried here, and the hash still listed all 37 files — verified with `COWORK_HARNESS_DEBUG_SKILLHASH=1`
+  rather than assumed from the config parsing cleanly.
+  `references/**` is **deliberately not** excluded, even though both stale-cassette recurrences in
+  this repo were references edits and excluding them is what would actually stop the re-record tax.
+  References are delivered to the model once the skill is invoked, and the key is session-level, so it
+  would silently cover any future cassette recorded from an invoked run. A hash that stops noticing
+  real drift converts "the check passed" into "the check did not run", which is the failure this
+  suite exists to prevent.
+- **`harness/README.md` says who can clear the staleness gate.** `verify-cassettes` runs
+  unconditionally in CI including on fork PRs, and the only cure for a stale cassette is a re-record
+  needing Docker + a staged agent + a token. An outside contributor tripping it cannot clear it; the
+  maintainer re-records. The README named that wall for *recording* and never for the gate.
+
 ### Added
 - **Cowork loses *words* the same way it loses files, and the Cowork guidance only covered files.**
   A terminal renders a Bash result inline under the call that produced it, so a script's stdout is on
@@ -148,7 +197,8 @@ carry a negative control — the guard was deliberately broken and confirmed to 
   2.1.251 rather than 2.1.222, and the compaction description says what is actually enforced — a
   CHARACTER gate, and *two* ways to lose content, since it previously described only truncation and
   not the combined cap that zeroes a skill outright.
-- **cowork-harness floor raised to 3.0.0**, which renames `l0_plugin_divergence` to
+- **cowork-harness floor raised to 3.0.0** (only partly — see 0.12.0: `harness/README.md` and the
+  shipped `references/environments.md` were left on 2.4.0), which renames `l0_plugin_divergence` to
   `l0_host_config_contamination` and adds `allow_host_hooks`. The loader is a `strictObject`, so an
   older CLI hard-errors rather than ignoring a new key.
 

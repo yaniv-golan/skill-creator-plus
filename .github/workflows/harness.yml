@@ -22,14 +22,15 @@ jobs:
 
       - name: Install cowork-harness (pinned)
         run: |
-          npm i --prefix "$RUNNER_TEMP/ch" cowork-harness@3.0.0
+          npm i --prefix "$RUNNER_TEMP/ch" cowork-harness@3.2.0
           echo "$RUNNER_TEMP/ch/node_modules/.bin" >> "$GITHUB_PATH"
 
       - name: Verify cowork-harness version
         run: |
           V=$(cowork-harness --version | tail -1)
           echo "cowork-harness $V"
-          case "$V" in 3.0.*) ;; *) echo "expected 3.0.x, got $V"; exit 1;; esac
+          # The pin lives TWICE in this job — the npm install above and this assert. Move both.
+          case "$V" in 3.2.*) ;; *) echo "expected 3.2.x, got $V"; exit 1;; esac
 
       - name: Lint skill (strict)
         run: |
@@ -48,9 +49,13 @@ jobs:
 
       - name: Load-check scenarios (token-free)
         run: |
-          # `lint` only WARNS on an unknown key, so a scenario that lints clean can still be
-          # unloadable — a green lint is not evidence the suite runs. This runs the real loader
-          # with no token and no Docker, and writes nothing. cowork-harness >= 1.16.0.
+          # `lint` only WARNS on an UNKNOWN KEY, so a scenario that lints clean can still be
+          # unloadable — a green lint is not evidence the suite runs. (Since 3.2.0 lint IS the
+          # stricter check for one class: an invalid ENUM value is an ERROR. Unknown keys stay a
+          # warning, so this loader pass is still the gate.) No token, no Docker, writes nothing.
+          # LIMITS of the directory arm: it is NOT recursive (a scenario in a subdirectory is
+          # silently unchecked), and a `prompt:`-less file reports as *skipped*, not broken.
+          # cowork-harness >= 1.16.0.
           cowork-harness record harness/scenarios/ --dry-run --quiet
 
       - name: Verify + replay cassettes (if any)

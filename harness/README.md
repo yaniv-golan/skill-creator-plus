@@ -99,20 +99,34 @@ applies; the resulting cassettes just aren't committed.
 `cowork-harness` is a separate npm CLI (the Claude plugin ships only the skill, not the built CLI):
 
 ```bash
-npm i -g "cowork-harness@>=2.4.0"
-cowork-harness --version          # MUST report 2.4.x — `npx` can silently serve a stale cache
+npm i -g "cowork-harness@>=3.2.0"
+cowork-harness --version          # MUST report 3.2.x — `npx` can silently serve a stale cache
 ```
 
 - **Static checks + `lint` + `replay`**: token-free, no Docker, no staged agent, no token.
+- **Who can clear the staleness gate.** `verify-cassettes` runs unconditionally in CI, including on
+  pull requests from forks, and a stale cassette is curable ONLY by re-recording — which needs the
+  Docker + staged-agent + token setup below. So an outside contributor who edits anything under
+  `skills/` that feeds the staleness hash gets a red gate they cannot clear themselves. That is
+  expected: the maintainer re-records, the contributor does not. `staleness.hash_ignore` in
+  `harness/sessions/skill.yaml` keeps `tests/` and `eval-viewer/` edits out of the hash so the
+  common contributions do not trip it at all.
 - **Live `run` / `record`** (`container` fidelity): needs Docker **and** a staged Claude Desktop
   agent binary (or `COWORK_AGENT_BINARY`) **and** an Anthropic/OAuth token. Run
   `cowork-harness doctor --tier container` to check.
 - **If you ever add a host-inheriting scenario** (`protocol` / `hostloop`, or `cowork` resolving to
   hostloop), note two 1.18+ behaviours that do not affect today's suite — every scenario here is
   `fidelity: container`, which is tier-gated out of both. First, `record` **refuses before spending**
-  to write such a recording into a repo-visible path, and `harness/cassettes/` *is* repo-visible here
-  (it holds a tracked `.gitkeep`); use `--out` outside the repo, or override deliberately with
-  `--allow-host-inventory-fixture`. Second, `verify-cassettes` gains a `host-inventory` finding class
+  to write such a recording into a repo-visible path. 3.2.0 states the refusal predicate where the
+  refusal is explained rather than as an aside ~130 lines away, and it is a conjunction of three
+  things: a host-inheriting tier **and** a repo-visible destination **and** nothing there yet — so an
+  existing cassette is exempt and re-recording one is never refused. `harness/cassettes/` *is*
+  repo-visible here (it holds a tracked `.gitkeep`). The destination judged is `--out` if given, else
+  the default path **relative to the current working directory**, so previewing from a different
+  directory asks about a different destination and can return the opposite verdict. Override
+  deliberately with `--allow-host-inventory-fixture`; redirecting `--out` outside the repo is NOT a
+  fix — the cassette stores its session/scenario references relative to its own directory, so one
+  written outside the tree can never resolve them again. Second, `verify-cassettes` gains a `host-inventory` finding class
   that flags the recording machine's own MCP servers, agents, account fields and installed skill names
   frozen into the cassette — a real disclosure risk for a public repo, and not something `grep` or the
   text scanner can see.
