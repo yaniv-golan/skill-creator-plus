@@ -377,17 +377,27 @@ def attached_token_cost(n_chars):
     return math.floor(n_chars / 4 + 0.5)
 
 
-def find_plugin_skill_siblings(skill_path):
-    """Return every `skills/*/SKILL.md` of the plugin containing `skill_path`, or [] if standalone.
+def find_plugin_root(skill_path):
+    """Return the plugin root containing `skill_path`, or None if the skill is standalone.
 
-    Walks up for `.claude-plugin/plugin.json` rather than guessing from directory names. A skill
-    that is not inside a plugin has no combined budget to blow on its own, so it gets [].
+    Walks up for `.claude-plugin/plugin.json` rather than guessing from directory names. In a
+    marketplace repo whose plugin lives in a subdirectory there are two candidate roots and only
+    the inner one is the plugin — the nearest ancestor with a manifest, which is what this returns.
     """
     skill_path = Path(skill_path).resolve()
     for parent in [skill_path, *skill_path.parents]:
         if (parent / ".claude-plugin" / "plugin.json").is_file():
-            return sorted(parent.glob("skills/*/SKILL.md"))
-    return []
+            return parent
+    return None
+
+
+def find_plugin_skill_siblings(skill_path):
+    """Return every `skills/*/SKILL.md` of the plugin containing `skill_path`, or [] if standalone.
+
+    A skill that is not inside a plugin has no combined budget to blow on its own, so it gets [].
+    """
+    root = find_plugin_root(skill_path)
+    return sorted(root.glob("skills/*/SKILL.md")) if root else []
 
 
 def check_combined_compaction_budget(skill_path):
@@ -428,6 +438,58 @@ def check_combined_compaction_budget(skill_path):
         f"detail into references/ (read on demand, never counted). Lower bound — skills from "
         f"other enabled plugins share this same budget.",
         ".claude-plugin/plugin.json",
+    ))
+    return findings
+
+
+def check_plugin_bin_directory(skill_path):
+    """Flag a PLUGIN that ships a top-level `bin/` — undistributable through org settings.
+
+    Not a degradation: claude.ai rejects the plugin outright, by marketplace sync and by direct
+    upload alike, with a message beginning `Plugin contains a top-level bin/ directory`. The stated
+    reason is that those entries are added to PATH on the CLI but never appear on the admin
+    approval surface. `claude plugin validate` does NOT warn (measured on 2.1.252 against a plugin
+    carrying a `bin/` entry: `validate .` and `validate . --strict` reported only an unrelated
+    `author` warning), so the pre-flight gate authors are told to run is green on a plugin that
+    cannot be published. That is what makes this worth a lint rule rather than a doc line.
+
+    Scoped to `claude-ai` because the restriction is lane-specific and NOT a deprecation: a
+    top-level `bin/` is entirely correct for a plugin installed from GitHub or the local CLI, where
+    it is on the Bash tool's PATH. So this is a WARNING, gating only under `--strict`.
+
+    Fires on the plugin root only — the directory holding `.claude-plugin/plugin.json`. A `bin/`
+    anywhere else (a repo root above the plugin, a skill's own subtree) is not what intake reads.
+    An existent-but-empty `bin/` does not fire: git cannot commit one, so it never ships.
+    """
+    findings = []
+    root = find_plugin_root(skill_path)
+    if root is None:
+        return findings
+    bin_dir = root / "bin"
+    if not bin_dir.is_dir():
+        return findings
+    try:
+        entries = sorted(p.name for p in bin_dir.iterdir())
+    except OSError:
+        return findings
+    if not entries:
+        return findings
+    shown = ", ".join(f"bin/{n}" for n in entries[:3])
+    more = f" (+{len(entries) - 3} more)" if len(entries) > 3 else ""
+    findings.append(_finding(
+        "plugin-bin-directory", SEVERITY_WARNING, ["claude-ai"],
+        f"This plugin ships a top-level bin/ directory ({shown}{more}), which makes it "
+        f"UNDISTRIBUTABLE through claude.ai organization settings — org marketplace sync and "
+        f"direct upload both reject it with a message beginning `Plugin contains a top-level bin/ "
+        f"directory`, because those entries reach the CLI's PATH without appearing on the admin "
+        f"approval surface. `claude plugin validate --strict` does not warn about this, so a green "
+        f"pre-flight does not clear it. The restriction is lane-specific, not a deprecation: "
+        f"GitHub and local-CLI installs are unaffected, so ignore this if the plugin is CLI-only. "
+        f"Otherwise move the executables to scripts/. Reference them as "
+        f"${{CLAUDE_PLUGIN_ROOT}}/scripts/<name> from a hook or mcpServers config, where that "
+        f"token IS substituted; from a skill that shells out it expands to the empty string, so "
+        f"use the read-path-then-search stanza in assets/skill-script-invocation.md instead.",
+        "bin/",
     ))
     return findings
 
@@ -676,6 +738,7 @@ def lint_portability(skill_path):
     findings += check_description_length(fields)
     findings += check_compaction_budget(skill_md_text)
     findings += check_combined_compaction_budget(skill_path)
+    findings += check_plugin_bin_directory(skill_path)
     findings += check_runtime_constructs(skill_path)
     findings += check_outputs_prefix(skill_path)
     findings += check_thirdparty_imports(skill_path)

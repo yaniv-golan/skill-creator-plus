@@ -2,6 +2,51 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.13.0] - 2026-09-01
+
+### Added
+- **`plugin-bin-directory`, a plugin-level lint rule (warning, `--target claude-ai`).** It walks up
+  to `.claude-plugin/plugin.json` and fires when that root holds a non-empty `bin/`. It exists
+  because nothing else local catches this: `claude plugin validate`, even `--strict`, passes a
+  plugin carrying one, and the Desktop-side failure is the generic "Marketplace sync failed. Check
+  the repository URL and try again" with the real message only in the renderer log. Deliberately a
+  warning on ONE target rather than an error: a top-level `bin/` is correct and useful for a
+  GitHub/local-CLI plugin, so this is lane-specific advice, not a deprecation. It does not fire on
+  a standalone skill, on a `bin/` inside the skill, on a `bin/` at the *outer* root of a
+  marketplace repo (only the directory beside the manifest is what intake reads), or on an empty
+  one — git cannot commit an empty directory, so it never ships. This repo's own baseline is
+  unchanged at 4 findings.
+
+### Changed
+- **The `bin/`-on-PATH pattern now carries the lane restriction that makes it unpublishable.** The
+  guidance recommended shipping `<plugin root>/bin/<name>` without saying that a top-level `bin/`
+  causes claude.ai to reject the plugin from **organization distribution outright** — marketplace
+  sync and direct upload alike, with a message beginning `Plugin contains a top-level bin/
+  directory`, because those entries reach the CLI's PATH without appearing on the admin approval
+  surface. Confirmed against the official marketplace docs, which scope the rule to org
+  distribution: GitHub and local CLI installs are unaffected. The recommendation is therefore
+  CLI-lane only, and every place this repo makes it now says so — `SKILL.md`,
+  `references/official-guide-patterns.md`, `assets/skill-script-invocation.md`, and the template's
+  own header, so an adopting repo carries the caveat with the file. Each site now also says what to
+  ship *instead*, split by what does the invoking: the read-path-then-search stanza for a skill that
+  shells out (no `bin/`, no PATH, every lane), `${CLAUDE_PLUGIN_ROOT}/scripts/<name>` for a hook or
+  `mcpServers` entry (a definition-text surface, where the token really is substituted), and a
+  `commands/*.md` wrapper for something the user types. Declaring `clis` is explicitly *not* offered
+  as a substitute — the runtime does materialise `bin/<key>` itself on Cowork's org-remote lane, but
+  whether that clears claude.ai intake is untested here. `harness/fixtures/widget-fixture/bin/wf`,
+  which is a copy of the template, was re-synced so the two headers stay byte-identical.
+- **`claude plugin validate` does not gate this, measured rather than assumed.** On 2.1.252, a
+  plugin carrying `bin/binprobe` passes both `validate .` and `validate . --strict`, reporting only
+  an unrelated `author` warning. The pre-flight gate authors are told to run returns green on a
+  plugin that cannot be distributed, and the admin-side error is generic ("Marketplace sync failed.
+  Check the repository URL and try again") with the real message only in the renderer log — so the
+  caveat has to live in the guidance, since nothing local surfaces it.
+- **The docs' own substitute is recorded as narrower than it reads.** "Keep executables in
+  `scripts/` and reference them as `${CLAUDE_PLUGIN_ROOT}/scripts/<name>`" holds for hooks and MCP
+  server configs, where the token is substituted; a skill that shells out gets the empty string,
+  which this guide already measured. For that case the portable answer stays the
+  read-path-then-search resolver, not the documented one.
+
 ## [0.12.0] - 2026-09-01
 
 The cowork-harness floor 0.11.0 claimed to have raised was only half-raised — two of its version

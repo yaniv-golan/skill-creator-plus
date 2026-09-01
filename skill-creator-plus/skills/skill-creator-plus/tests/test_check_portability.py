@@ -12,6 +12,8 @@ from check_portability import (  # noqa: E402
     check_thirdparty_imports,
     check_compaction_budget,
     check_combined_compaction_budget,
+    check_plugin_bin_directory,
+    find_plugin_root,
     attached_token_cost,
     COMBINED_TOKEN_CAP,
     COMPACTION_TOKEN_CAP,
@@ -235,6 +237,117 @@ class CombinedCompactionCapTests(unittest.TestCase):
             findings, err = lint_portability(skill)
             self.assertIsNone(err)
             self.assertIn("compaction-zeroing-risk", _rules(findings))
+
+
+class PluginBinDirectoryTests(unittest.TestCase):
+    """A top-level bin/ is fatal to org distribution and invisible to every local gate.
+
+    `claude plugin validate` passes a plugin carrying one (measured, 2.1.252 -- only an unrelated
+    `author` warning), and the admin-side UI error is generic ("Marketplace sync failed. Check the
+    repository URL and try again"), with the real message only in the renderer log. So the finding
+    has to come from here or from nowhere.
+    """
+
+    @staticmethod
+    def _with_bin(tmp: Path, entries=("tool",), where="root"):
+        skill = _plugin(tmp, {"only": 500})
+        root = skill.parent.parent                 # skills/only -> skills -> plugin root
+        base = {"root": root,
+                "skill": skill,
+                "above": root.parent}[where]
+        (base / "bin").mkdir(parents=True, exist_ok=True)
+        for e in entries:
+            (base / "bin" / e).write_text("#!/bin/sh\nexit 0\n")
+        return skill
+
+    def test_top_level_bin_is_flagged(self):
+        with tempfile.TemporaryDirectory() as td:
+            skill = self._with_bin(Path(td))
+            findings = check_plugin_bin_directory(skill)
+            self.assertEqual(len(findings), 1)
+            f = findings[0]
+            self.assertEqual(f["rule"], "plugin-bin-directory")
+            self.assertEqual(f["severity"], "warning")
+            self.assertEqual(f["targets"], ["claude-ai"], "the rule is lane-specific, not global")
+            self.assertEqual(f["location"], "bin/")
+            self.assertIn("bin/tool", f["message"])
+
+    def test_message_carries_what_no_local_gate_says(self):
+        """A bare 'you have a bin/' would read as style advice. It must say the plugin is
+        rejected, that `plugin validate` will not warn, that CLI-only plugins are fine, and
+        where to go instead -- including that the documented substitute needs a hook/mcpServers
+        config and is empty in a shell."""
+        with tempfile.TemporaryDirectory() as td:
+            msg = check_plugin_bin_directory(self._with_bin(Path(td)))[0]["message"]
+            for phrase in ("UNDISTRIBUTABLE", "organization settings",
+                           "Plugin contains a top-level bin/ directory",
+                           "does not warn", "lane-specific, not a deprecation",
+                           "GitHub and local-CLI installs are unaffected",
+                           "scripts/", "mcpServers", "empty string",
+                           "assets/skill-script-invocation.md"):
+                self.assertIn(phrase, msg)
+
+    def test_entry_list_is_truncated_with_a_count(self):
+        with tempfile.TemporaryDirectory() as td:
+            skill = self._with_bin(Path(td), entries=("a", "b", "c", "d", "e"))
+            msg = check_plugin_bin_directory(skill)[0]["message"]
+            self.assertIn("bin/a, bin/b, bin/c (+2 more)", msg)
+
+    def test_standalone_skill_is_never_flagged(self):
+        """No plugin.json anywhere above means nothing is being distributed as a plugin."""
+        with tempfile.TemporaryDirectory() as td:
+            skill = _skill(Path(td), "name: x\ndescription: d")
+            (skill / "bin").mkdir()
+            (skill / "bin" / "tool").write_text("x")
+            self.assertEqual(check_plugin_bin_directory(skill), [])
+
+    def test_plugin_without_bin_is_clean(self):
+        with tempfile.TemporaryDirectory() as td:
+            self.assertEqual(check_plugin_bin_directory(_plugin(Path(td), {"only": 500})), [])
+
+    def test_empty_bin_dir_does_not_fire(self):
+        """git cannot commit an empty directory, so an empty bin/ never reaches intake."""
+        with tempfile.TemporaryDirectory() as td:
+            skill = _plugin(Path(td), {"only": 500})
+            (skill.parent.parent / "bin").mkdir()
+            self.assertEqual(check_plugin_bin_directory(skill), [])
+
+    def test_bin_inside_the_skill_is_not_the_plugin_root(self):
+        """Only the directory beside .claude-plugin/plugin.json is what intake reads."""
+        with tempfile.TemporaryDirectory() as td:
+            skill = self._with_bin(Path(td), where="skill")
+            self.assertEqual(check_plugin_bin_directory(skill), [])
+
+    def test_bin_above_the_plugin_is_not_the_plugin_root(self):
+        """A marketplace repo has two candidate roots; a bin/ at the OUTER one is an ordinary
+        project CLI, correctly placed, and must not be flagged."""
+        with tempfile.TemporaryDirectory() as td:
+            skill = self._with_bin(Path(td), where="above")
+            self.assertEqual(check_plugin_bin_directory(skill), [])
+
+    def test_nearest_manifest_wins(self):
+        with tempfile.TemporaryDirectory() as td:
+            skill = _plugin(Path(td), {"only": 500})
+            root = skill.parent.parent
+            self.assertEqual(find_plugin_root(skill), root.resolve())
+
+    def test_reached_through_the_normal_lint_entry_point(self):
+        with tempfile.TemporaryDirectory() as td:
+            skill = self._with_bin(Path(td))
+            findings, err = lint_portability(skill)
+            self.assertIsNone(err)
+            self.assertIn("plugin-bin-directory", _rules(findings))
+
+    def test_only_reported_for_the_claude_ai_target(self):
+        """Filtering matters here: the same tree is correct on the CLI lane and broken on the
+        hosted one, so a claude-code run must stay silent about it."""
+        with tempfile.TemporaryDirectory() as td:
+            findings, _ = lint_portability(self._with_bin(Path(td)))
+            self.assertIn("plugin-bin-directory", _rules(_filter_by_target(findings, "claude-ai")))
+            self.assertNotIn("plugin-bin-directory",
+                             _rules(_filter_by_target(findings, "claude-code")))
+            self.assertNotIn("plugin-bin-directory",
+                             _rules(_filter_by_target(findings, "cowork")))
 
 
 class RuntimeConstructTests(unittest.TestCase):

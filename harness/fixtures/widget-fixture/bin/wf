@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
-# TEMPLATE — a plugin launcher. Copy to <plugin root>/bin/<name>, set NAME, chmod 755, commit.
+# TEMPLATE — a plugin launcher for a CLI-INSTALLED plugin. Copy to <plugin root>/bin/<name>, set
+# NAME, chmod 755, commit. If the plugin may be distributed through claude.ai organization
+# settings, do not ship this file at all — see READ FIRST (2) below.
 #
 # Runs a script shipped with this plugin as a bare command, so no filesystem path has to travel
 # from the file tools to the shell. Claude Code puts <plugin root>/bin on the Bash tool's PATH.
@@ -7,6 +9,13 @@
 # READ FIRST — this is an OPTIMISATION, not a fallback. Measured: at Cowork host-loop, the lane
 # with the namespace split this exists to bridge, the shell's PATH carries no plugin bin/ at all.
 # Gate every use on `command -v <name>` and keep a search branch behind it.
+#
+# READ FIRST (2) — LANE RESTRICTION. A top-level bin/ makes the plugin UNDISTRIBUTABLE through
+# claude.ai organization settings: marketplace sync and direct upload both reject it with a message
+# beginning "Plugin contains a top-level bin/ directory". `claude plugin validate --strict` does NOT
+# warn (measured, 2.1.252), so a green pre-flight proves nothing here. GitHub and local CLI installs
+# are unaffected. If this plugin might ever be published through an organization, DO NOT SHIP THIS
+# FILE — the read-path-then-search stanza in assets/skill-script-invocation.md needs no launcher.
 #
 # NINE RULES, each from a measured failure. The evidence for each is in
 # assets/skill-script-invocation.md (§ Why the launcher has nine rules) — kept there rather than

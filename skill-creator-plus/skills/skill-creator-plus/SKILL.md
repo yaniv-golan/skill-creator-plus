@@ -4,7 +4,7 @@ description: Create, test, evaluate, and improve Claude skills — and answer qu
 license: MIT
 metadata:
   author: Yaniv Golan
-  version: "0.12.0"
+  version: "0.13.0"
 ---
 
 # Skill Creator
@@ -125,7 +125,9 @@ string in a shell. There is no skill-relative path resolution; CWD is the projec
 **Don't hand-write the stanza** — paste it from `assets/skill-script-invocation.md`, which carries the
 exact token form (a SKILL.md cannot show it: the runtime substitutes it at load). If the authored
 skill's scripts must run under Cowork's host loop, where the shell and file tools are in different
-filesystem namespaces, also copy `assets/plugin-bin-launcher.sh` to `<plugin root>/bin/<name>`.
+filesystem namespaces, `assets/plugin-bin-launcher.sh` may be copied to `<plugin root>/bin/<name>` —
+**for CLI-installed plugins only.** A top-level `bin/` makes a plugin unpublishable through claude.ai
+organization settings, and `claude plugin validate` does not warn; the stanza works without it.
 
 #### Progressive Disclosure
 

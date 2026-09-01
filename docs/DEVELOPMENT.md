@@ -14,6 +14,16 @@ cd skill-creator-plus/skills/skill-creator-plus && python -m scripts.check_porta
 # a workspace under a relative `outputs/` path nests a second outputs level and hides it),
 # thirdparty-import (allowlisted against Cowork's
 # preinstalled stack), delivery-tool-single-lane, delivery-conditional-deliverable,
+# plugin-bin-directory (PLUGIN-level, claude-ai-only: the plugin root — the dir holding
+# `.claude-plugin/plugin.json` — has a non-empty `bin/`, which claude.ai rejects OUTRIGHT from
+# organization distribution, by marketplace sync and by direct upload alike. LANE-SPECIFIC, not a
+# deprecation: a top-level bin/ is correct and useful for a GitHub/local-CLI plugin, which is why
+# it is a warning on one target rather than an error. Worth a rule because NOTHING ELSE LOCAL
+# CATCHES IT — `claude plugin validate`, even --strict, passes a plugin carrying one (measured,
+# 2.1.252), and the Desktop-side error is the generic "Marketplace sync failed. Check the
+# repository URL and try again", with the real message only in the renderer log
+# ~/Library/Logs/Claude/claude.ai-web.log. Does not fire on a standalone skill, on a bin/ inside
+# the skill, on a bin/ above the plugin root in a marketplace repo, or on an empty one),
 # compaction-truncation-risk (SKILL.md large enough to be truncated on re-attachment. TWO
 # constants, 102 chars apart, and conflating them is a 101-char false-positive band: truncation
 # FIRES at 20,002 chars (the runtime returns early while Math.round(len/4) <= 5,000, and JS

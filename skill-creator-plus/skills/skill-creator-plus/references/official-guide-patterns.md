@@ -684,7 +684,7 @@ It runs the command at skill activation time and inlines the output into the ski
 
 **To reach a bundled script, write `${CLAUDE_SKILL_DIR}/scripts/tool.py` in `SKILL.md`.** It is replaced with a real absolute path before the model sees it, so the model can hand that path straight to Bash. That is the whole answer for most skills; the rest of this section is edge cases, and you can skip to *Argument Substitution* unless you hit one.
 
-The two that bite in practice: the token is **dead outside `SKILL.md`** — literal characters in a `references/*.md`, empty string in a shell — so a reference doc should name `scripts/tool.py` and let `SKILL.md` supply the base at the point of use. And if you want the model to invoke something as a *command* rather than a path, ship `bin/<name>`.
+The two that bite in practice: the token is **dead outside `SKILL.md`** — literal characters in a `references/*.md`, empty string in a shell — so a reference doc should name `scripts/tool.py` and let `SKILL.md` supply the base at the point of use. And if you want the model to invoke something as a *command* rather than a path, ship `bin/<name>` — but only for a CLI-installed plugin, since a top-level `bin/` makes a plugin unpublishable through claude.ai organization settings.
 
 ---
 
@@ -741,7 +741,7 @@ The `allowed-tools` column is a separate substitution pass from the body's, and 
 
 So treat the base-directory line as a first thing to try, not a guarantee. (It is also absent entirely for a single-file `commands/*.md`, which gets no such line at all.)
 
-For anything the model invokes as a *command* rather than a path, ship `bin/<name>` and call it bare — see below.
+For anything the model invokes as a *command* rather than a path, ship `bin/<name>` and call it bare — on the CLI lane only; a top-level `bin/` is rejected outright by claude.ai organization distribution. See below for that restriction and for what to ship instead.
 
 #### Where `${CLAUDE_PLUGIN_ROOT}` is and isn't substituted
 
@@ -793,9 +793,54 @@ er.replace(hn.args === void 0
 
 *There is no linter rule for this. Both a bare-form rule and a reference-file rule were designed and measured against the installed-plugin corpus; almost every occurrence of the token in a `references/*.md` is documentation **of** the token rather than a use of it, so the rules flag correct explanations of the hazard — including this section. Knowing the table beats scanning for it.*
 
-#### The better answer for anything executable: ship `bin/` and call it bare
+#### For anything executable, ship `bin/` and call it bare — on the CLI lane only
 
-Claude Code puts **every enabled non-builtin plugin's `bin/` directory on the Bash tool's PATH**, and the entry is correct for that shell's own namespace in all three lanes — local CLI cache paths, Cowork host-loop mounts, and cloud sync paths. So a scaffolded skill can ship `bin/<name>` and invoke it as a bare command:
+**Lane restriction first, because it is fatal rather than degrading.** A plugin with a top-level
+`bin/` **cannot be distributed through claude.ai organization settings at all.** Org marketplace
+sync rejects that plugin (and syncs the rest of the marketplace); a direct upload under
+*Organization settings → Plugins* is rejected with the same message, which begins `Plugin contains
+a top-level bin/ directory`. The stated reason is that `bin/` entries are added to PATH on the CLI
+but are not shown on the admin approval surface. The official marketplace docs scope the rule to
+org distribution — GitHub and local CLI installs are unaffected — so this is a CLI-lane
+optimisation, not a portable one. If the plugin might ever be published through an organization,
+do not ship a top-level `bin/`.
+
+**What to ship instead**, by what is doing the invoking:
+
+- **A skill that shells out** — the case this guide is mostly about. Use the read path, then a
+  filesystem search: write `python3 ${CLAUDE_SKILL_DIR}/scripts/<name>` in the `SKILL.md` body and
+  fall back to locating the file from the shell's side when the two are different mounts. That is
+  stanza A/B of `assets/skill-script-invocation.md`, it needs no `bin/` and no PATH, and it is the
+  form this repo's own harness scenarios exercise. The launcher was only ever an optimisation on
+  top of it.
+- **A hook, or an `mcpServers` entry** — `${CLAUDE_PLUGIN_ROOT}/scripts/<name>`, exactly as the
+  docs say. The substitute is correct *here*, because these are definition-text surfaces where the
+  token really is substituted.
+- **Something the user types** — a `commands/*.md` slash command wrapping the script. The rejection
+  message itself names hooks, commands and `mcpServers` as the sanctioned entry points.
+- **Not a substitute: declaring `clis`.** On Cowork's org-remote lane the runtime materialises
+  `bin/<key>` itself (see *Status* below) — but whether declaring `clis` clears claude.ai intake is
+  untested here, so don't plan a distribution around it.
+
+Two traps around that restriction:
+
+- **`claude plugin validate` does not catch it.** Measured on 2.1.252 against a plugin carrying
+  `bin/binprobe`: both `validate .` and `validate . --strict` reported only the unrelated `author`
+  warning. The usual pre-flight gate returns green on a plugin that cannot be distributed, and the
+  admin-side UI error is unhelpful too — Claude Desktop shows a generic "Marketplace sync failed.
+  Check the repository URL and try again," with the real message only in the renderer log
+  (`~/Library/Logs/Claude/claude.ai-web.log`, grep `MARKETPLACE_ERROR`). The one local gate is this
+  skill's own linter: `python -m scripts.check_portability <skill> --target claude-ai` carries
+  `plugin-bin-directory` (warning), which walks up to `.claude-plugin/plugin.json` and fires when
+  that root holds a non-empty `bin/`.
+- **The documented substitute is narrower than it reads.** The docs say to keep executables in
+  `scripts/` and reference them as `${CLAUDE_PLUGIN_ROOT}/scripts/<name>`. That substitution happens
+  in *definition text* — hooks, MCP server configs, a `SKILL.md` body — which is exactly the table
+  above; a skill that shells out gets the empty string. Where a skill invokes a script from a shell
+  rather than from a hooks/`mcpServers` config, the portable answer is the read-path-then-search
+  resolver in `assets/skill-script-invocation.md`, not the documented one.
+
+With that established: Claude Code puts **every enabled non-builtin plugin's `bin/` directory on the Bash tool's PATH**, and the entry is correct for that shell's own namespace in all three lanes — local CLI cache paths, Cowork host-loop mounts, and cloud sync paths. So a scaffolded skill can ship `bin/<name>` and invoke it as a bare command:
 
 ```bash
 my-plugin-tool --input foo      # resolved via PATH; no path crosses a namespace boundary

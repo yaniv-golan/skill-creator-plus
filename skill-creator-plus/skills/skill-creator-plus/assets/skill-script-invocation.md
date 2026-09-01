@@ -48,6 +48,15 @@ stock entries with **no plugin `bin/` at all**, so `command -v` found nothing an
 recovered. Install it as described in the launcher's header, confirm `<cmd> --list` names your
 scripts, and still keep the search branch.
 
+**And it costs the org-distribution lane outright.** A plugin with a top-level `bin/` is rejected by
+claude.ai organization settings — both marketplace sync and direct upload — with a message beginning
+`Plugin contains a top-level bin/ directory`, because those entries reach the CLI's PATH without
+appearing on the admin approval surface. The rule is scoped to org distribution; GitHub and local
+CLI installs are unaffected. `claude plugin validate --strict` does **not** warn about it (measured,
+2.1.252), so the usual pre-flight gate is green on a plugin that cannot be published. If this plugin
+might ever go out through an organization, ship no launcher: stanza B's read path plus search is the
+whole answer without one.
+
 ---
 
 ## If the skill will be packaged for other hosts
@@ -94,6 +103,10 @@ right directory. Neither survives a shell.
 Each came from a failure that was measured, not imagined. They live here rather than in
 `plugin-bin-launcher.sh` because that file gets copied into your repo and this one does not — an
 adopting plugin should carry the rules, not our investigation.
+
+Rule 0 is the one above: don't ship the launcher at all if the plugin may be distributed through
+claude.ai organization settings, since a top-level `bin/` makes it unpublishable there and no local
+validator says so.
 
 1. **`bin/` beside `.claude-plugin/plugin.json`.** PATH receives the plugin root. In a marketplace
    repo whose plugin sits in a subdirectory there are two candidate roots and only the inner one
