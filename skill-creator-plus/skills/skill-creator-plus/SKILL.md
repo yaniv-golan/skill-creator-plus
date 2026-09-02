@@ -1,6 +1,6 @@
 ---
 name: skill-creator-plus
-description: Create, test, evaluate, and improve Claude skills — and answer questions about how skills work. Use for "create a skill", "make a skill for", "write a SKILL.md", "turn this into a skill", "run evals", "test/benchmark my skill", "optimize my skill description", "improve triggering", "A/B test my skill", "blind comparison", packaging for distribution, editing an existing skill, or reviewing skill quality. Also for a single narrow question about skill mechanics, however small — referencing a bundled script or reference doc, path variables, frontmatter fields, directory layout, size limits, or what breaks across Claude Code, Claude.ai and Cowork.
+description: Create, test, evaluate, and improve Claude skills — and answer questions about how skills work. Use for "create a skill", "make a skill for", "write a SKILL.md", "turn this into a skill", "run evals", "test/benchmark my skill", "optimize my skill description", "improve triggering", "A/B test my skill", "blind comparison", packaging for distribution, editing an existing skill, or reviewing skill quality. Also for a single narrow question about skill mechanics, however small — referencing a bundled script or reference doc, path variables, frontmatter fields, directory layout, size limits, sub-agent dispatch and how data passes between steps, or what breaks across Claude Code, Claude.ai and Cowork.
 license: MIT
 metadata:
   author: Yaniv Golan
