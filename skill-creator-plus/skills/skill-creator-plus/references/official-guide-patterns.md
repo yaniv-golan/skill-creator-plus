@@ -16,10 +16,12 @@ Read this reference when designing or reviewing skills — it contains the canon
 4. [Success Criteria](#success-criteria)
 5. [Five Skill Patterns](#five-skill-patterns)
 6. [Instructions Best Practices](#instructions-best-practices)
-7. [Practical Lessons from Anthropic's Internal Use](#practical-lessons)
+7. [Practical Lessons from Anthropic's Internal Use](#practical-lessons-from-anthropics-internal-use)
 8. [Technical Rules](#technical-rules)
-9. [Troubleshooting Guide](#troubleshooting-guide)
-10. [Quick Checklist](#quick-checklist)
+9. [Advanced Skill Authoring Features](#advanced-skill-authoring-features)
+10. [Runtime Mechanics & Gotchas (Claude Code)](#runtime-mechanics--gotchas-claude-code)
+11. [Troubleshooting Guide](#troubleshooting-guide)
+12. [Quick Checklist](#quick-checklist)
 
 ---
 
