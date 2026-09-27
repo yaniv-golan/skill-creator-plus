@@ -751,8 +751,9 @@ class OutputsPrefixTests(unittest.TestCase):
         was a REAL BUG, not correct text.
 
         An earlier version of this suite asserted it "is_clean", which certified a live defect:
-        the line goes verbatim to a sub-agent whose file-tool cwd IS the outputs directory, so
-        the path doubles to `outputs/outputs/...` and lands outside the eval run directory. The
+        the line goes verbatim to a sub-agent, and a relative path never reaches the eval run
+        directory in Cowork: on older local Desktop the file-tool cwd was the outputs directory, so
+        it doubled to `outputs/outputs/...`; on Desktop 2.7032.0+ the file tools refuse it. The
         shipped SKILL.md now uses an explicit absolute placeholder instead.
 
         The miss is recorded rather than fixed. Covering the general class needs a predicate that
@@ -782,8 +783,10 @@ class OutputsPrefixTests(unittest.TestCase):
     def test_absolute_mnt_outputs_is_clean(self):
         self.assertEqual(self._fires("Under the shell it is `/sessions/<id>/mnt/outputs/my-skill-workspace/`.\n"), [])
 
-    def test_the_correct_answer_is_clean(self):
-        self.assertEqual(self._fires("Use a bare relative path -- `<skill-name>-workspace/`.\n"), [])
+    def test_bare_workspace_name_is_not_this_rules_concern(self):
+        # A bare workspace name is a different (lane-dependent) question -- correct in the CLI,
+        # refused by Cowork's file tools from Desktop 2.7032.0. This rule only owns `outputs/`.
+        self.assertEqual(self._fires("Name it `<skill-name>-workspace/`.\n"), [])
 
     def test_workspace_placeholder_subdir_is_clean(self):
         self.assertEqual(self._fires("Snapshot to `<workspace>/skill-snapshot/`.\n"), [])
@@ -887,8 +890,11 @@ class SelfLintTests(unittest.TestCase):
         surviving = skill_md[:COMPACTION_CAP_CHARS]
         for fact, why in [
             ("<abs-workspace>", "the shell/sub-agent path placeholder is never defined"),
-            ("**file tools** already sit", "the cwd claim reads as unqualified, which is the bug"),
-            ("Your **shell** does not", "the shell-vs-file-tool split is lost"),
+            ("**file tools** need the absolute outputs path",
+             "the file-tool path form is lost, and a bare path is what gets refused"),
+            ("Your **shell** may spell that directory differently",
+             "the shell-vs-file-tool split is lost"),
+            ("give sub-agents both, labelled", "sub-agents get one form and misuse it"),
             # The one-pass route's verification doctrine. Both sentences were ported INLINE rather
             # than cross-referenced, because the eval-section text they came from sits past the cut
             # -- a pointer into it would dangle in exactly the compacted session this guards.

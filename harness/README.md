@@ -99,8 +99,8 @@ applies; the resulting cassettes just aren't committed.
 `cowork-harness` is a separate npm CLI (the Claude plugin ships only the skill, not the built CLI):
 
 ```bash
-npm i -g "cowork-harness@>=3.2.0"
-cowork-harness --version          # MUST report 3.2.x — `npx` can silently serve a stale cache
+npm i -g "cowork-harness@>=3.10.0"   # needs Node >= 22
+cowork-harness --version          # MUST report 3.10.x — `npx` can silently serve a stale cache
 ```
 
 - **Static checks + `lint` + `replay`**: token-free, no Docker, no staged agent, no token.
@@ -249,7 +249,8 @@ than clean. Guards matter as much as assertions: a run can pass every assert and
 
 **A green run here does not certify that a bundled script's output reached the user.** In production
 under host-loop Cowork, `mcp__workspace__bash` starts at the session root `/sessions/<id>`, while the
-file tools start in the outputs directory — so a relative path written by a *script* lands somewhere
+file tools take the outputs directory (as their cwd before Desktop 2.7032.0; from 2.7032.0 their cwd is
+`/var/empty` and they refuse relative paths) — so a relative path written by a *script* lands somewhere
 neither the user nor the file tools can reach, silently. No harness tier reproduces that split.
 Measured, one run per tier (2026-08-27), `printf 'RELMARK\n' > rel.txt; pwd; readlink -f rel.txt`:
 

@@ -2,6 +2,81 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.14.0] - 2026-09-27
+
+### Fixed
+- **Files now reach the user on every Cowork runtime.** This skill told the model to create the
+  user's new skill directory and the eval workspace with a bare relative path. On the default cloud
+  Cowork VM that write "succeeds" into the container's home directory, outside outputs, and never
+  reaches the user (observed in one probe); the Claude app's chat runtime refuses it. On local
+  Cowork from Claude Desktop 2.7032.0, whose file tools now run from a private, deny-listed folder,
+  the write is refused, and the skill failed at its first step. Under the VM loop that locked-down
+  orgs use, both tool families address outputs as `/sessions/<id>/mnt/outputs/` (inferred from the
+  spawn code). `SKILL.md`,
+  `references/environments.md` and the agent instructions now use the absolute outputs path the
+  surface's instructions name — never the "Primary working directory" — which is correct on every
+  lane and every Desktop release.
+- **One workspace placeholder was serving two path spellings.** `<abs-workspace>` was used both in
+  main-thread shell commands and as the sub-agents' file-tool write target, and on local host-loop
+  Cowork those are different strings (the shell sees `/sessions/<id>/mnt/outputs/…`; the file tools
+  refuse any `/sessions/` path). The executor and baseline dispatch templates now carry both forms
+  as a labelled pair, resolved once and copied verbatim; `<abs-workspace>` is the shell form only;
+  `agents/grader.md`, `analyzer.md` and `comparator.md` say which form is which. Packaging hands
+  `package_skill.py` the shell form and states the file-tool form to the user.
+- **The skill-listing budget figures were wrong for current models.** The budget is
+  `contextWindow × charsPerToken × skillListingBudgetFraction`, with 3 chars/token on models newer
+  than the 4.6 generation (4 before): about 30,000 characters at 1M context, 6,000 at 200K, 8,000 on
+  Haiku 4.5 — not 40,000 / 8,000. Packing is first-fit and continues past a miss, so a long
+  description can lose to a shorter, lower-ranked one; the guidance now also says to put trigger
+  words in the skill's name.
+
+### Changed
+- **Environment routing is by capability, not product name.** The Claude app's chat and Cowork
+  modes have merged, and a conversation that starts on the chat runtime can gain a Cowork workspace
+  mid-conversation, so "on Claude.ai" / "in Cowork" no longer tells the model what it can do.
+  `SKILL.md` now routes from the tool list and instructions — no sub-agent tool, no `claude` CLI, no
+  display, an outputs directory named for the user's files, device tools for a connected desktop —
+  and says to re-check (and re-read the outputs path) if the tools change. An outputs directory no
+  longer implies sub-agents: the chat runtime names the same `/mnt/user-data/outputs` as cloud Cowork.
+  The "Claude.ai-specific" section is now *Without sub-agents*; the Cowork section is now
+  *Outputs-directory sessions* and leads with the cloud VM as the default lane. In a cloud session
+  connected to the user's desktop, a path on the user's computer is documented as an argument to the
+  device file tools only — a file-tool write to it reports success but lands in the cloud
+  container — and a file reaches the user's folder by writing it to outputs and committing it with
+  the device tool.
+- **Reviewing results without a display now delivers the viewer.** *Without sub-agents* used to
+  say: skip the browser reviewer, present results inline, and "tell them where" an output file is.
+  It now generates the static viewer and delivers it (and any output file) by the two-step delivery
+  rule, falling back to inline presentation only if no file can be delivered — a stated path alone
+  is not delivery on every surface. Packaging there points to the same rule.
+- **Delivery facts scoped by lane.** "A surfacing tool can only present files under outputs,
+  uploads or a connected folder" is now stated for local Cowork only; an uploaded file is found from
+  the message that announced it (its location differs by lane) and is a place to read from, not to
+  present from. Local Cowork does not appear to load a connected folder's `.claude/skills` at all.
+- **`outputs-prefix-relative` explains the failure per lane.** The rule fires on the same text as
+  before; its message now says a relative `outputs/…` workspace nests on older local Desktop, is
+  refused on 2.7032.0+, and is lost in cloud Cowork, and gives the two-form fix instead of "use a
+  bare relative path".
+- **Lane-scoped guidance.** `context: fork` output is relayed as the fork's final message only and
+  rewritten by the main model (links and caveats often do not survive); a skill-usage hook on
+  `Skill` misses typed `/skill` invocations; the `/careful` matcher is `Bash|mcp__workspace__bash`,
+  and a missing PreToolUse hook script blocks every call it matches on the Linux lanes, where
+  `/bin/sh` is `dash` (not on local host-loop, which runs hooks on the Mac); a folder granted to
+  cloud Cowork currently delivers its `.claude/skills` only as stubs; always pass Glob/Grep an
+  explicit path (a pathless search in cloud Cowork walks the whole home directory); sub-agents cannot nest in the remote
+  sandbox, which understates a sub-agent-dispatching skill evaluated there; the reason not to key
+  on `CLAUDE_CODE_IS_COWORK` is now given per lane; inline `` !`cmd` `` is documented as not running
+  in local Cowork and unverified in cloud Cowork.
+- **Maintainer tooling: cowork-harness pinned to 3.10.0** (was 3.2.0), and the harness CI job runs on
+  Node 22, which 3.10.0 requires. The committed cassette is recorded against a Desktop 2.x baseline
+  that CLIs before 3.8.0 do not ship, so the old pin reported it stale. The floor stated to skill
+  authors for the static checks is unchanged.
+- **Sub-agent return contract** (`references/official-guide-patterns.md`, *Designing Scripts for
+  Agent Use*): a step producing bulk output writes it to an absolute path and returns a receipt
+  (status, path, count) for the orchestrator to check.
+- **`official-guide-patterns.md` table of contents** now lists all 12 top-level sections, and the
+  entry for *Practical Lessons from Anthropic's Internal Use* points at its real anchor.
+
 ## [0.13.0] - 2026-09-01
 
 ### Added
