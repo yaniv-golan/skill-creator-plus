@@ -49,7 +49,11 @@ COMBINED_CAP = 1536           # description + when_to_use listing-entry truncati
 DESC_BUDGET_HINT = 800        # a single description this large is a top contributor to the shared listing budget
 
 # Import roots (not PyPI names) confirmed preinstalled in Cowork's VM image by a live probe on
-# 2026-08-05 — Python 3.10.12, image shipping with Claude Desktop 1.25927.0. Importing one of these
+# 2026-08-05 — Python 3.10.12, image shipping with Claude Desktop 1.25927.0. This is the LOCAL lane's
+# image; a later read of the image shipped with Desktop 2.9939.2 is consistent with it (Python 3.10,
+# numpy 2.2.6). The cloud sandbox ships a different image (seen with Python 3.11 and extra packages
+# such as scipy); do not add cloud-only modules here, or the rule goes silent for a local run that
+# lacks them. Importing one of these
 # in a bundled script is not a Cowork portability risk, so `thirdparty-import` stays silent for it.
 # This is observed state on ONE image in ONE org, not a published contract: it will drift, and a
 # much newer image should be re-probed rather than trusted against this list. A module dropped from
@@ -637,8 +641,10 @@ def _stdlib_names():
 def check_outputs_prefix(skill_path):
     """Flag skill text telling an agent to put its workspace under a relative `outputs/` path.
 
-    In Cowork the agent's working directory already IS the outputs directory, so `outputs/x` nests a
-    second level and the workspace stops appearing in the user's Working-folder panel. Scans
+    A relative `outputs/x` never lands where the user looks in Cowork: on older local Desktop the file
+    tools' cwd was the outputs directory, so it nested a second level and dropped out of the user's
+    Working-folder panel; on Desktop 2.7032.0 and later the file tools refuse any relative path; in
+    cloud Cowork it resolves under the home directory and is lost. Scans
     instruction text only — a script's own relative path is a different problem, covered by the
     absolute-path guidance in references/environments.md.
     """
@@ -658,16 +664,15 @@ def check_outputs_prefix(skill_path):
             loc = f"{rel}:{n}"
             findings.append(_finding(
                 "outputs-prefix-relative", SEVERITY_WARNING, ["cowork"],
-                f"instructs a workspace at the relative path `{m.group(0)}` — in Cowork the agent's "
-                f"working directory already IS the outputs directory, so this resolves to "
-                f"`outputs/outputs/...` for a FILE TOOL (whose cwd is already the outputs "
-                f"directory), and the workspace stops appearing in the user's Working-folder panel; "
-                f"under the SHELL the same string resolves against the session root instead, which "
-                f"is worse — invisible to the user and unreachable by the file tools. Either way "
-                f"the write succeeds and reports success, so nothing fails loudly. Fix per family: "
-                f"a bare relative path (`<skill-name>-workspace/`) for file tools, and an absolute "
-                f"path for anything handed to a shell command or a sub-agent. To reach a folder the "
-                f"user connected, an absolute path is required in both. A documented absolute "
+                f"instructs a workspace at the relative path `{m.group(0)}` — in Cowork no relative "
+                f"form of this reaches the user: a FILE TOOL refuses it on Desktop 2.7032.0 and "
+                f"later, nested it to `outputs/outputs/...` (out of the user's Working-folder panel) "
+                f"on older Desktop, and in cloud Cowork it lands under the home directory and is "
+                f"lost; under the SHELL it resolves against the session root, invisible to the user "
+                f"and unreachable by the file tools. Fix: use the absolute outputs path the "
+                f"surface's instructions name — not the \"Primary working directory\" — in the form "
+                f"each tool family accepts (locally the shell spells it `/sessions/<id>/mnt/outputs/`; "
+                f"elsewhere the two forms coincide), and hand sub-agents both forms, labelled. A documented absolute "
                 f"`.../mnt/outputs/...` path does not trip this. Suppress per file with an HTML-"
                 f"comment `<!-- portability-allow: outputs-prefix -->`. At {loc}.",
                 loc,

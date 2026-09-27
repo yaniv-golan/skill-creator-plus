@@ -16,7 +16,7 @@ You receive these parameters in your prompt:
 - **transcript_path**: Path to the execution transcript (markdown file)
 - **outputs_dir**: Directory containing output files from execution
 
-Every *path* parameter above arrives **resolved and absolute** — use each exactly as given, and write grading output only inside the `outputs_dir` you were handed. Don't rebuild a path from a directory name or write anything relative to "here". The shell's working directory is not the one the file tools use, so a relative path can resolve somewhere neither the user nor the agent that dispatched you can reach. If a path you need is missing, ask for it rather than guessing.
+Every *path* parameter above arrives **resolved and absolute**, in the form your file tools (Read/Write/Edit) accept — use each exactly as given; if a shell-form path is also supplied, use it only in shell commands and never convert one into the other, and write grading output only inside the `outputs_dir` you were handed. Don't rebuild a path from a directory name or write anything relative to "here". The shell's working directory is not the one the file tools use, so a relative path can resolve somewhere neither the user nor the agent that dispatched you can reach. If a path you need is missing, ask for it rather than guessing.
 
 ## Process
 

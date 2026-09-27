@@ -16,7 +16,7 @@ You receive these parameters in your prompt:
 - **output_b_path**: Path to the second output file or directory
 - **eval_prompt**: The original task/prompt that was executed
 - **expectations**: List of expectations to check (optional - may be empty)
-- **output_path**: Where to save the comparison JSON — expect an absolute path, and use it exactly as given. If it is missing, save to `comparison.json` in the iteration directory you were given for the comparison, and **state the full path you wrote in your reply**. Don't write it relative to "here": the shell's working directory is not the one the file tools use, so a bare relative path can land somewhere neither the user nor the dispatching agent can reach.
+- **output_path**: Where to save the comparison JSON — expect an absolute path in the form your file tools accept, and use it exactly as given. If it is missing, save to `comparison.json` in the iteration directory you were given for the comparison, and **state the full path you wrote in your reply**. Don't write it relative to "here": the shell's working directory is not the one the file tools use, so a bare relative path can land somewhere neither the user nor the dispatching agent can reach.
 
 ## Process
 
