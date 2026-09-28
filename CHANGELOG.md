@@ -10,7 +10,10 @@ All notable changes to this project will be documented in this file.
   Cowork VM that write "succeeds" into the container's home directory, outside outputs, and never
   reaches the user (observed in one probe); the Claude app's chat runtime refuses it. On local
   Cowork from Claude Desktop 2.7032.0, whose file tools now run from a private, deny-listed folder,
-  the write is refused, and the skill failed at its first step. Under the VM loop that locked-down
+  the write is refused. The skill's advice contradicted the platform's own instruction to pass
+  absolute paths; in a simulated host-loop run the model followed the platform and succeeded, so
+  the local failure is a latent conflict rather than an observed one, and the cloud loss is the
+  observed case. Under the VM loop that locked-down
   orgs use, both tool families address outputs as `/sessions/<id>/mnt/outputs/` (inferred from the
   spawn code). `SKILL.md`,
   `references/environments.md` and the agent instructions now use the absolute outputs path the
@@ -31,19 +34,20 @@ All notable changes to this project will be documented in this file.
   words in the skill's name.
 
 ### Changed
-- **Environment routing is by capability, not product name.** The Claude app's chat and Cowork
-  modes have merged, and a conversation that starts on the chat runtime can gain a Cowork workspace
+- **Environment routing is by capability, not product name.** The Claude app's chat and Cowork modes
+  have merged, and a conversation that starts on the chat runtime can gain a Cowork workspace
   mid-conversation, so "on Claude.ai" / "in Cowork" no longer tells the model what it can do.
   `SKILL.md` now routes from the tool list and instructions — no sub-agent tool, no `claude` CLI, no
   display, an outputs directory named for the user's files, device tools for a connected desktop —
-  and says to re-check (and re-read the outputs path) if the tools change. An outputs directory no
-  longer implies sub-agents: the chat runtime names the same `/mnt/user-data/outputs` as cloud Cowork.
-  The "Claude.ai-specific" section is now *Without sub-agents*; the Cowork section is now
-  *Outputs-directory sessions* and leads with the cloud VM as the default lane. In a cloud session
-  connected to the user's desktop, a path on the user's computer is documented as an argument to the
-  device file tools only — a file-tool write to it reports success but lands in the cloud
-  container — and a file reaches the user's folder by writing it to outputs and committing it with
-  the device tool.
+  including the one-pass path's "read environments.md first" gate, which asked "not running in
+  Claude Code?" — and says to re-check (and re-read the outputs path) if the tools change. An
+  outputs directory no longer implies sub-agents: the chat runtime names the same
+  `/mnt/user-data/outputs` as cloud Cowork. The "Claude.ai-specific" section is now *Without
+  sub-agents*; the Cowork section is now *Outputs-directory sessions* and leads with the cloud VM as
+  the default lane. In a cloud session connected to the user's desktop, a path on the user's
+  computer is documented as an argument to the device file tools only — a file-tool write to it
+  reports success but lands in the cloud container — and a file reaches the user's folder by writing
+  it to outputs and committing it with the device tool.
 - **Reviewing results without a display now delivers the viewer.** *Without sub-agents* used to
   say: skip the browser reviewer, present results inline, and "tell them where" an output file is.
   It now generates the static viewer and delivers it (and any output file) by the two-step delivery
@@ -63,10 +67,10 @@ All notable changes to this project will be documented in this file.
   and a missing PreToolUse hook script blocks every call it matches on the Linux lanes, where
   `/bin/sh` is `dash` (not on local host-loop, which runs hooks on the Mac); a folder granted to
   cloud Cowork currently delivers its `.claude/skills` only as stubs; always pass Glob/Grep an
-  explicit path (a pathless search in cloud Cowork walks the whole home directory); sub-agents cannot nest in the remote
-  sandbox, which understates a sub-agent-dispatching skill evaluated there; the reason not to key
-  on `CLAUDE_CODE_IS_COWORK` is now given per lane; inline `` !`cmd` `` is documented as not running
-  in local Cowork and unverified in cloud Cowork.
+  explicit path (a pathless search in cloud Cowork walks the whole home directory); sub-agents
+  cannot nest in the remote sandbox, which understates a sub-agent-dispatching skill evaluated
+  there; the reason not to key on `CLAUDE_CODE_IS_COWORK` is now given per lane; inline `` !`cmd` ``
+  is documented as not running in local Cowork and unverified in cloud Cowork.
 - **Maintainer tooling: cowork-harness pinned to 3.10.0** (was 3.2.0), and the harness CI job runs on
   Node 22, which 3.10.0 requires. The committed cassette is recorded against a Desktop 2.x baseline
   that CLIs before 3.8.0 do not ship, so the old pin reported it stale. The floor stated to skill
