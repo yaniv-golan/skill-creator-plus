@@ -37,7 +37,7 @@ Often the user wants a working skill now, not an eval report. That is a legitima
 4. **Package and deliver** it (see *Package the Skill*).
 5. **Then offer** the eval loop and description optimization as follow-ups.
 
-Steps 2 and 3 *are* the verification when you skip evals — shipping without eval evidence is fine, shipping with nothing exercised is not. **Not running in Claude Code? Read `references/environments.md` first** — where files must be written, and how to deliver them, differ per runtime.
+Steps 2 and 3 *are* the verification when you skip evals — shipping without eval evidence is fine, shipping with nothing exercised is not. **No sub-agent tool, or an outputs directory named? Read `references/environments.md` first** — paths and delivery differ per runtime.
 
 ## Communicating with the user
 
