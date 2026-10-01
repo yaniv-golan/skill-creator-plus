@@ -4,6 +4,25 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+- **The eval-viewer guidance no longer says the model has no browser.** Cowork sessions can have
+  browser tools, but they run on the user's side and can't open a server the model starts or a file
+  in its workspace (measured from a cloud session: the built-in browser and the user's Chrome both
+  failed to reach the session's server and files). `environments.md` now says that, and keeps the
+  static-file route.
+- **The two Artifact tool families are told apart.** The viewer note described only the older
+  sidebar-only tools and claimed availability on both Cowork lanes. It now says a session has at most
+  one family, either the `Artifact` tool, whose published page opens from a link on the web, a phone
+  or the desktop app, or the older `create_artifact` family in the desktop app's Artifacts sidebar.
+  It also says the paste-back feedback loop needs the user present.
+- **Connected-desktop guidance corrected.** A file can be committed to a granted folder straight from
+  the outputs folder, so sending it first is no longer required. Device tools have to be loaded before
+  the model concludes the computer is unreachable. *Two skill listings under Cowork* now says that local
+  Cowork reads the account's synced store and that plugins load too. It says the read-only mount is
+  recorded for local only, and that a stub keeps the whole frontmatter. The project-folder bullet
+  scopes stubs to folders granted to a cloud session and no longer asserts how Claude Code picks
+  between duplicate copies.
+
 ### Added
 - **Working on a skill that lives on the user's computer, from a cloud session.**
   `references/environments.md` now says how to bring such a skill in and put it back (the device
