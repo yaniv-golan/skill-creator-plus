@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [0.14.0] - 2026-09-27
+## [0.14.0] - 2026-10-01
 
 ### Fixed
 - **Where the skill builds and packages now follows the session's own instructions.** This skill
