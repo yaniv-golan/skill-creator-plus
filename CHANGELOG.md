@@ -5,20 +5,21 @@ All notable changes to this project will be documented in this file.
 ## [0.14.0] - 2026-09-27
 
 ### Fixed
-- **Files now reach the user on every Cowork runtime.** This skill told the model to create the
-  user's new skill directory and the eval workspace with a bare relative path. On the default cloud
-  Cowork VM that write "succeeds" into the container's home directory, outside outputs, and never
-  reaches the user (observed in one probe); the Claude app's chat runtime refuses it. On local
-  Cowork from Claude Desktop 2.7032.0, whose file tools now run from a private, deny-listed folder,
-  the write is refused. The skill's advice contradicted the platform's own instruction to pass
-  absolute paths; in a simulated host-loop run the model followed the platform and succeeded, so
-  the local failure is a latent conflict rather than an observed one, and the cloud loss is the
-  observed case. Under the VM loop that locked-down
-  orgs use, both tool families address outputs as `/sessions/<id>/mnt/outputs/` (inferred from the
-  spawn code). `SKILL.md`,
-  `references/environments.md` and the agent instructions now use the absolute outputs path the
-  surface's instructions name — never the "Primary working directory" — which is correct on every
-  lane and every Desktop release.
+- **Where the skill builds and packages now follows the session's own instructions.** This skill
+  told the model to create the user's new skill directory and the eval workspace with a bare
+  relative path. On local Cowork from Claude Desktop 2.7032.0 the file tools run from a private,
+  deny-listed folder and refuse relative paths, and Desktop's own prompt says to pass absolute
+  paths, so the advice contradicted the platform; in a simulated host-loop run the model followed
+  the platform and succeeded, so this was a latent conflict rather than an observed failure. Cloud
+  Cowork does not necessarily name an outputs directory at all: in live sessions its instructions
+  named only the working directory (which the user cannot see) and a tool that sends files, and the
+  client also has a per-session switch (read from its code, not seen live) under which the
+  instructions name `/mnt/user-data/outputs` and say writing there delivers. `SKILL.md` and
+  `references/environments.md` now build in the directory the session's instructions designate for
+  work, by absolute path: on local Cowork the outputs directory, never the private "Primary working
+  directory"; on cloud Cowork usually the working directory. Delivery is whatever the instructions
+  say delivers: present the file with the send-file tool, or, where the instructions explicitly say
+  writing into a named folder delivers it, don't send it again.
 - **One workspace placeholder was serving two path spellings.** `<abs-workspace>` was used both in
   main-thread shell commands and as the sub-agents' file-tool write target, and on local host-loop
   Cowork those are different strings (the shell sees `/sessions/<id>/mnt/outputs/…`; the file tools
@@ -33,21 +34,42 @@ All notable changes to this project will be documented in this file.
   description can lose to a shorter, lower-ranked one; the guidance now also says to put trigger
   words in the skill's name.
 
+- **A link is not delivery either.** In a cloud session a `computer://` link renders only for a file
+  the conversation itself wrote or sent; anything else, including a file in a folder the user
+  granted, shows as plain text with no error. The delivery rule now says so next to "stating the
+  path is not a substitute".
+- **Writing a file to the user's computer was described as needing a send first.** The tool that
+  commits a file into a granted folder on the user's device takes either the id from sending the
+  file into the conversation (preferred) or a path under `/mnt/user-data/outputs/`; the guidance now
+  says so instead of implying the send is mandatory.
+- **The `bin/` launcher was offered as the Cowork answer.** `SKILL.md` suggested shipping
+  `assets/plugin-bin-launcher.sh` so scripts could run under Cowork, but no plugin `bin/` has been
+  seen on Cowork's shell PATH. It now points at the script stanza's find-from-the-shell variant, and
+  keeps the launcher for CLI-installed plugins only.
+
+### Added
+- **Sending the `.skill` file is how the user saves it.** In the Claude app a sent `.skill` renders
+  as a card whose Save skill button installs the whole package, scripts included, so the skill now
+  says to send the file even when the user only wants it installed. A tool that saves a skill
+  straight from the conversation, where a session has one, carries `SKILL.md` alone; the skill never
+  uses it in place of sending the file, nor for a skill that bundles scripts, references or assets.
+
 ### Changed
 - **Environment routing is by capability, not product name.** The Claude app's chat and Cowork modes
   have merged, and a conversation that starts on the chat runtime can gain a Cowork workspace
   mid-conversation, so "on Claude.ai" / "in Cowork" no longer tells the model what it can do.
   `SKILL.md` now routes from the tool list and instructions — no sub-agent tool, no `claude` CLI, no
-  display, an outputs directory named for the user's files, device tools for a connected desktop —
-  including the one-pass path's "read environments.md first" gate, which asked "not running in
-  Claude Code?" — and says to re-check (and re-read the outputs path) if the tools change. An
-  outputs directory no longer implies sub-agents: the chat runtime names the same
-  `/mnt/user-data/outputs` as cloud Cowork. The "Claude.ai-specific" section is now *Without
-  sub-agents*; the Cowork section is now *Outputs-directory sessions* and leads with the cloud VM as
-  the default lane. In a cloud session connected to the user's desktop, a path on the user's
-  computer is documented as an argument to the device file tools only — a file-tool write to it
-  reports success but lands in the cloud container — and a file reaches the user's folder by writing
-  it to outputs and committing it with the device tool.
+  display, instructions that say the user can't see the working directory, name an outputs directory
+  or describe sending files, device tools for a connected desktop — including the one-pass path's
+  "read environments.md first" gate, which asked "not running in Claude Code?" — and says to
+  re-check (and re-read where to work) if the tools change. None of these implies sub-agents. The
+  "Claude.ai-specific" section is now *Without sub-agents*; the Cowork section is now *Sandboxed
+  sessions* and leads with the cloud VM as the default lane. In a cloud session connected to the
+  user's desktop, a path on the user's computer is documented as an argument to the device file
+  tools only — a file-tool write to it reports success but lands in the cloud container — and a file
+  reaches the user's folder by sending it and committing it with the device tool, after requesting
+  folder access if none is granted. The chat runtime could not be reached on demand while testing,
+  so its routing is capability-based and untested live.
 - **Reviewing results without a display now delivers the viewer.** *Without sub-agents* used to
   say: skip the browser reviewer, present results inline, and "tell them where" an output file is.
   It now generates the static viewer and delivers it (and any output file) by the two-step delivery

@@ -37,7 +37,7 @@ Often the user wants a working skill now, not an eval report. That is a legitima
 4. **Package and deliver** it (see *Package the Skill*).
 5. **Then offer** the eval loop and description optimization as follow-ups.
 
-Steps 2 and 3 *are* the verification when you skip evals — shipping without eval evidence is fine, shipping with nothing exercised is not. **No sub-agent tool, or an outputs directory named? Read `references/environments.md` first** — paths and delivery differ per runtime.
+Steps 2 and 3 *are* the verification when you skip evals — shipping without eval evidence is fine, shipping with nothing exercised is not. **No sub-agent tool, or instructions saying where to work or how files reach the user? Read `references/environments.md` first** — paths and delivery differ per runtime.
 
 ## Communicating with the user
 
@@ -82,7 +82,7 @@ Check available MCPs - if useful for research (searching docs, finding similar s
 
 ### Write the SKILL.md
 
-**Where the skill directory goes:** somewhere the user can keep it — a location in their project, confirmed with them if unclear. Never inside this plugin's own directory (read-only on a plugin install), and never a scratch directory. **Build it in one place and never keep a second copy to sync.** Authoring is mostly shell work, and the shell's cwd is not the file tools' — so name the destination once and address it per family: in Cowork, file tools take the absolute outputs or connected-folder path your instructions name; the shell, `<abs-workspace>/<skill-name>/`. `references/environments.md` has the mechanism.
+**Where the skill directory goes:** somewhere the user can keep it — a location in their project, confirmed with them if unclear. Never inside this plugin's own directory (read-only on a plugin install), and never a scratch directory. **Build it in one place and never keep a second copy to sync.** Authoring is mostly shell work, and the shell's cwd is not the file tools' — so name the destination once and address it per family: in Cowork, build in the directory your instructions designate for your work (outputs if named, else your working directory), by absolute path, each family in its own spelling. `references/environments.md` has the mechanism.
 
 Based on the user interview, fill in these components:
 
@@ -123,11 +123,11 @@ skill-name/
 substitution into `SKILL.md` text only — it arrives literally in a `references/*.md` and is the empty
 string in a shell. There is no skill-relative path resolution; CWD is never the skill directory.
 **Don't hand-write the stanza** — paste it from `assets/skill-script-invocation.md`, which carries the
-exact token form (a SKILL.md cannot show it: the runtime substitutes it at load). If the authored
-skill's scripts must run under Cowork's host loop, where the shell and file tools are in different
-filesystem namespaces, `assets/plugin-bin-launcher.sh` may be copied to `<plugin root>/bin/<name>` —
-**for CLI-installed plugins only.** A top-level `bin/` makes a plugin unpublishable through claude.ai
-organization settings, and `claude plugin validate` does not warn; the stanza works without it.
+exact token form (a SKILL.md cannot show it: the runtime substitutes it at load). Under Cowork,
+where the shell and file tools are different mounts, use its stanza B (find from the shell's side) —
+not a `bin/` launcher: none has been seen on Cowork's shell PATH, and a top-level `bin/` makes a plugin
+unpublishable through claude.ai organization settings (`claude plugin validate` does not warn).
+`assets/plugin-bin-launcher.sh` is for CLI-installed plugins only.
 
 #### Progressive Disclosure
 
@@ -247,7 +247,7 @@ See `references/schemas.md` for the full schema (including the `assertions` fiel
 
 This section is one continuous sequence — don't stop partway through. Do NOT use `/skill-test` or any other testing skill.
 
-Put results in `<skill-name>-workspace/`. **Put it somewhere user-visible and writable — never as a sibling to the skill directory.** In Cowork your **file tools** need the absolute outputs path your instructions name — never a bare path, the "Primary working directory" or an `outputs/` prefix. Your **shell** may spell that directory differently (locally `/sessions/<id>/mnt/outputs/`). Resolve both once (`<workspace, file-tool form>`, shell `<abs-workspace>`); give sub-agents both, labelled. On a plugin or marketplace install the skill directory is read-only, so a sibling path silently falls back to a scratchpad the user never sees — and on remote Cowork that is destroyed at session end. If you're unsure, ask. Organize it by iteration (`iteration-1/`, `iteration-2/`), and within that one directory per test case named for what it tests (`pdf-extraction/`, `multi-page-form/` — Step 1 explains the naming). Create directories as you go.
+Put results in `<skill-name>-workspace/`. **Put it where your instructions say to work — never as a sibling to the skill directory.** In Cowork your **file tools** need the absolute path of that directory: outputs if named (locally not the "Primary working directory", a private folder), else your working directory — never a bare path or an `outputs/` prefix. Your **shell** may spell that directory differently (locally `/sessions/<id>/mnt/outputs/`). Resolve both once (`<workspace, file-tool form>`, shell `<abs-workspace>`); give sub-agents both, labelled. On a plugin or marketplace install the skill directory is read-only, so a sibling path silently falls back to a scratchpad the user never sees — and on remote Cowork that is destroyed at session end. If you're unsure, ask. Organize it by iteration (`iteration-1/`, `iteration-2/`), and within that one directory per test case named for what it tests (`pdf-extraction/`, `multi-page-form/` — Step 1 explains the naming). Create directories as you go.
 
 ### Step 1: Spawn all runs (with-skill AND baseline) in the same turn
 
@@ -468,19 +468,21 @@ python -m scripts.package_skill <path/to/skill-folder> [output-dir]
 
 `output-dir` is optional and defaults to the skill folder's parent, which is unwritable on a plugin or marketplace install — pass the destination explicitly, as an absolute path when a script will consume it.
 
-**Never delete from the outputs directory.** Production denies `unlink`/`rmdir` there until the user approves it, so a "remove the stale copy and re-copy" step — the natural way to sync two directories — fails in production while succeeding in most test setups. Build once rather than staging a copy you have to refresh; if a file must change, overwrite it in place. Write the `.skill` file to a path you name in your reply — the workspace. (In Cowork `package_skill.py` runs in the shell, so give it the shell form, `<abs-workspace>/…`; state the path in your reply in the file-tool form the user sees. Never a bare filename, never an unnamed location.) Then present it: scan your available tools for one whose description says it sends or presents files to the user, and call it — the file is not delivered until you do, and stating the path is not a substitute. Only if no such tool exists, the path you already stated is the presentation. See `references/environments.md` → *Delivering files to the user* for why this two-step rule exists and which tool serves which surface. Packaging itself works everywhere Python does — never make it conditional on a presentation tool.
+**Never delete from the outputs directory.** Production denies `unlink`/`rmdir` there until the user approves it, so a "remove the stale copy and re-copy" step — the natural way to sync two directories — fails in production while succeeding in most test setups. Build once rather than staging a copy you have to refresh; if a file must change, overwrite it in place. Write the `.skill` file to a path you name in your reply — the workspace. (In Cowork `package_skill.py` runs in the shell, so give it the shell form, `<abs-workspace>/…`; state the path in your reply in the file-tool form the user sees. Never a bare filename, never an unnamed location.) Then present it: scan your available tools for one whose description says it sends or presents files to the user, and call it — the file is not delivered until you do, and stating the path is not a substitute — unless your instructions explicitly say that writing into a named folder delivers the file and not to send it as well. Only if no such tool exists, the path you already stated is the presentation. See `references/environments.md` → *Delivering files to the user* for why this two-step rule exists and which tool serves which surface. Packaging itself works everywhere Python does — never make it conditional on a presentation tool.
+
+**Sending the `.skill` file is also how the user saves it.** Where the app renders a sent `.skill` as a card with a Save skill button, that button installs the whole package, scripts included, into the user's account — so sending it is never optional. If your tools also include one that saves a skill straight from the conversation, it carries `SKILL.md` alone: never use it instead of sending the file, and never for a skill that bundles scripts, references or assets. See `references/environments.md` → *Sandboxed sessions*.
 
 ---
 
 ## Environment-specific instructions
 
-The core workflow above assumes sub-agents, a `claude` CLI on the shell's PATH, and a display. Route by what your **tool list** and instructions actually say, not by product name. If the tool list changes mid-conversation (a Claude app chat can be upgraded to a Cowork workspace), re-check, and re-read the outputs path from the new instructions. Before running test cases, the viewer, or packaging, read the matching parts of `references/environments.md`:
+The core workflow above assumes sub-agents, a `claude` CLI on the shell's PATH, and a display. Route by what your **tool list** and instructions actually say, not by product name. If the tool list changes mid-conversation (a Claude app chat can be upgraded to a Cowork workspace), re-check, and re-read where the new instructions say to work. Before running test cases, the viewer, or packaging, read the matching parts of `references/environments.md`:
 
 - **No tool that dispatches a sub-agent** (called `Agent`, or `Task` in older builds) → *Without sub-agents*: run test cases inline yourself, skip baselines, benchmarking and blind comparison.
 - **No `claude` CLI** (`command -v claude` finds nothing, or you have no shell) → skip description optimization.
-- **No display** (any container, remote shell, Cowork or chat session — assume none unless you are in a terminal on the user's own machine) → the static viewer and paste-back bullets in *Outputs-directory sessions*, which apply to any session without a display.
-- **Your instructions name an outputs directory for the user's files** (e.g. `/mnt/user-data/outputs`, or a host path on local Cowork) → *Outputs-directory sessions* for paths and delivery. That name alone does not tell you whether you have sub-agents; the first bullet decides that.
-- **Tools whose names contain `device_`**, possibly listed as deferred (a cloud session connected to the user's desktop) → same section: a path on the user's computer goes only to the device file tools; your own Write to it lands in the cloud container.
+- **No display** (any container, remote shell, Cowork or chat session — assume none unless you are in a terminal on the user's own machine) → the static viewer and paste-back bullets in *Sandboxed sessions*, which apply to any session without a display.
+- **Your instructions say the user cannot see your working directory, name an outputs directory for the user's files, or describe sending files to the user** — not a terminal on the user's own machine (Cowork, cloud or local, and the chat runtime) → *Sandboxed sessions* for paths and delivery. That does not tell you whether you have sub-agents; the first bullet decides that.
+- **Device tools** — names containing `device_`, often deferred (load them with ToolSearch) → same section: a path on the user's computer goes only to the device file tools, after a folder is granted (request access with the folder-access tool, or ask the user); your own Write to it lands in the cloud container.
 
 These combine: a cloud Cowork session typically has sub-agents but no display; the chat runtime typically has neither.
 
@@ -497,7 +499,7 @@ The agents/ directory contains instructions for specialized subagents. Read them
 The references/ directory has additional documentation:
 - `references/schemas.md` — JSON structures for evals.json, grading.json, etc.
 - `references/official-guide-patterns.md` — Anthropic's official best practices: use case categories, description formula, five skill patterns, instructions best practices, technical rules, troubleshooting guide, and quick checklist. **Consult this when designing a new skill or diagnosing issues with an existing one.**
-- `references/environments.md` — capability adaptations: no sub-agents, no display, outputs-directory paths and delivery (see *Environment-specific instructions*)
+- `references/environments.md` — capability adaptations: no sub-agents, no display, sandboxed-session paths and delivery (see *Environment-specific instructions*)
 - `references/description-optimization.md` — full triggering-optimization procedure
 
 ---

@@ -644,7 +644,8 @@ def check_outputs_prefix(skill_path):
     A relative `outputs/x` never lands where the user looks in Cowork: on older local Desktop the file
     tools' cwd was the outputs directory, so it nested a second level and dropped out of the user's
     Working-folder panel; on Desktop 2.7032.0 and later the file tools refuse any relative path; in
-    cloud Cowork it resolves under the home directory and is lost. Scans
+    cloud Cowork it resolves under the working directory, which the user cannot see until the file
+    is delivered. Scans
     instruction text only — a script's own relative path is a different problem, covered by the
     absolute-path guidance in references/environments.md.
     """
@@ -665,12 +666,14 @@ def check_outputs_prefix(skill_path):
             findings.append(_finding(
                 "outputs-prefix-relative", SEVERITY_WARNING, ["cowork"],
                 f"instructs a workspace at the relative path `{m.group(0)}` — in Cowork no relative "
-                f"form of this reaches the user: a FILE TOOL refuses it on Desktop 2.7032.0 and "
+                f"form of this is reliably delivered: a FILE TOOL refuses it on Desktop 2.7032.0 and "
                 f"later, nested it to `outputs/outputs/...` (out of the user's Working-folder panel) "
-                f"on older Desktop, and in cloud Cowork it lands under the home directory and is "
-                f"lost; under the SHELL it resolves against the session root, invisible to the user "
-                f"and unreachable by the file tools. Fix: use the absolute outputs path the "
-                f"surface's instructions name — not the \"Primary working directory\" — in the form "
+                f"on older Desktop, and in cloud Cowork it lands outside `/mnt/user-data/outputs`, "
+                f"undelivered where that is the delivery folder; under the SHELL it resolves against the "
+                f"session root, invisible to the user and unreachable by the file tools. Fix: use "
+                f"the absolute path of the directory the surface's instructions designate for work "
+                f"(on local Cowork the outputs directory, not the private \"Primary working "
+                f"directory\"; on cloud Cowork usually the working directory), in the form "
                 f"each tool family accepts (locally the shell spells it `/sessions/<id>/mnt/outputs/`; "
                 f"elsewhere the two forms coincide), and hand sub-agents both forms, labelled. A documented absolute "
                 f"`.../mnt/outputs/...` path does not trip this. Suppress per file with an HTML-"
