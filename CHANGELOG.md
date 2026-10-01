@@ -13,6 +13,14 @@ All notable changes to this project will be documented in this file.
   where answers can be kept, which runs have nobody to answer (sub-agents, forked skills, scheduled
   tasks), and that answers given in the conversation stay in the transcript.
 
+- **Cloud Cowork delivers `${CLAUDE_SKILL_DIR}` and `${CLAUDE_PLUGIN_DATA}` unexpanded.** In three
+  live runs, a plugin skill's `SKILL.md` reached the model with both tokens as literal text, and the
+  `Base directory for this skill` line named a directory the shell didn't have. The path-variable
+  section and its token table said the tokens are always substituted in `SKILL.md`; they now scope that
+  to Claude Code and local Cowork. Stanza B of `assets/skill-script-invocation.md` (find the script
+  from the shell) is now recommended for any skill that may run outside Claude Code, and it falls back
+  on an unexpanded token as well as on a missing path. This skill's own validate step says the same.
+
 ### Added
 - **What `argument-hint` does on Claude Desktop**: it tells the model what to collect when the
   skill is invoked; in Claude Code it is a hint shown while typing.

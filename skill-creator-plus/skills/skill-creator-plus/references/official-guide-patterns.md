@@ -699,7 +699,7 @@ It runs the command at skill activation time and inlines the output into the ski
 
 ### Path Variables
 
-**To reach a bundled script, write `${CLAUDE_SKILL_DIR}/scripts/tool.py` in `SKILL.md`.** It is replaced with a real absolute path before the model sees it, so the model can hand that path straight to Bash. That is the whole answer for most skills; the rest of this section is edge cases, and you can skip to *Argument Substitution* unless you hit one.
+**To reach a bundled script, write `${CLAUDE_SKILL_DIR}/scripts/tool.py` in `SKILL.md`.** In Claude Code and local Cowork it is replaced with a real absolute path before the model sees it, so the model can hand that path straight to Bash. In cloud Cowork it arrives unexpanded, so pair it with a fallback that finds the file from the shell (stanza B of `assets/skill-script-invocation.md`). That is the whole answer for most skills; the rest of this section is edge cases, and you can skip to *Argument Substitution* unless you hit one.
 
 The two that bite in practice: the token is **dead outside `SKILL.md`** — literal characters in a `references/*.md`, empty string in a shell — so a reference doc should name `scripts/tool.py` and let `SKILL.md` supply the base at the point of use. And if you want the model to invoke something as a *command* rather than a path, ship `bin/<name>` — but only for a CLI-installed plugin, since a top-level `bin/` makes a plugin unpublishable through claude.ai organization settings.
 
@@ -729,6 +729,8 @@ Save persistent data to ${CLAUDE_PLUGIN_DATA}/history.json.
 | `${CLAUDE_PLUGIN_DATA}` | ✅ | ✅ | ✅ | ❌ literal | ❌ empty **or another plugin's data dir** |
 | `${CLAUDE_SESSION_ID}` | ✅ | ❌ **not substituted** | ✅ | ❌ literal | ❌ empty |
 
+The table describes Claude Code and local Cowork. **In cloud Cowork, `${CLAUDE_SKILL_DIR}` and `${CLAUDE_PLUGIN_DATA}` arrive unexpanded in a plugin skill's `SKILL.md` body** (observed in three runs; the other two tokens were not checked), so a skill that may run there needs the shell-side fallback.
+
 **The `commands/*.md` column is the trap: the answer is token-specific, not surface-specific.** A
 command *is* a definition surface and substitution *does* happen there — just not for
 `${CLAUDE_SKILL_DIR}`, whose two replacement sites are guarded on an `isSkillMode` flag that both
@@ -750,11 +752,13 @@ difference between them.
 
 The `allowed-tools` column is a separate substitution pass from the body's, and it does not carry the same set — `${CLAUDE_SESSION_ID}` survives in a body and is passed through untouched in a permission rule.
 
-**A skill usually carries its own location, but do not rely on it.** The runtime prepends `Base directory for this skill: <absolute path>` as the first line of the loaded content, and truncation is head-preserving, so that line survives *truncation* by construction — if a section was cut, the skill's absolute path is still the first thing in its own context. Three things break it:
+**A skill usually carries its own location, but do not rely on it.** The runtime prepends `Base directory for this skill: <absolute path>` as the first line of the loaded content, and truncation is head-preserving, so that line survives *truncation* by construction — if a section was cut, the skill's absolute path is still the first thing in its own context. Four things break it:
 
 - **The combined cap zeroes rather than truncates.** A skill that does not fit the 25,000-token budget has its stored content set to the empty string and is skipped on sight for the rest of the session. There is no first line because there is no content. This is the failure `compaction-zeroing-risk` exists to catch, and it is the one case where an author is told to re-read from disk and has nothing to read *from*.
 - **It is the least-recently-invoked skill that gets zeroed**, since packing is most-recent-first — precisely the skill whose path you would need to recover.
 - **The path may name a directory that no longer exists.** Plugin roots are version-stamped, so an ordinary update leaves the recorded path dangling even when the line itself survives intact.
+
+- **In cloud Cowork the line names a directory the shell doesn't have.** For a plugin skill it reads `/mnt/skills/plugins/<plugin>:<skill>`, which doesn't exist there; the files are under a different path.
 
 So treat the base-directory line as a first thing to try, not a guarantee. (It is also absent entirely for a single-file `commands/*.md`, which gets no such line at all.)
 
@@ -826,7 +830,7 @@ do not ship a top-level `bin/`.
 
 - **A skill that shells out** — the case this guide is mostly about. Use the read path, then a
   filesystem search: write `python3 ${CLAUDE_SKILL_DIR}/scripts/<name>` in the `SKILL.md` body and
-  fall back to locating the file from the shell's side when the two are different mounts. That is
+  fall back to locating the file from the shell's side when the two are different mounts or the token arrives unexpanded. That is
   stanza A/B of `assets/skill-script-invocation.md`, it needs no `bin/` and no PATH, and it is the
   form this repo's own harness scenarios exercise. The launcher was only ever an optimisation on
   top of it.

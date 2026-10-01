@@ -11,7 +11,7 @@ arrives as literal characters.
 
 ---
 
-## A. No launcher (the default — use this unless you shipped `bin/`)
+## A. Claude Code only, no launcher
 
 ```markdown
 **Running this skill's scripts.** Use the absolute path this file was loaded with:
@@ -23,16 +23,16 @@ environment variable, and expands to nothing in a shell. Read the resolved path 
 and pass it along verbatim, including to any sub-agent.
 ```
 
-## B. Where the shell may not share the file tools' filesystem (Cowork host loop)
+## B. Anywhere the skill may run outside Claude Code (Cowork), or if unsure
 
 ```markdown
 **Running this skill's scripts.** Prefer the absolute path this file was loaded with:
 
     python3 ${CLAUDE_SKILL_DIR}/scripts/<script>.py [args]
 
-If the shell reports that path missing, you are on a host where the shell and the file tools are
-different mounts of the same content (Cowork's host loop). The file is there under a different
-absolute path, so locate it from the SHELL's side and run what it finds:
+If the line above still shows the variable unexpanded (cloud Cowork delivers it that way), or the
+shell reports that path missing (Cowork's host loop, where the shell and the file tools are
+different mounts of the same content), locate the file from the SHELL's side and run what it finds:
 
     find / -path "*<skill-name>/scripts/<script>.py" -print -quit 2>/dev/null
 
