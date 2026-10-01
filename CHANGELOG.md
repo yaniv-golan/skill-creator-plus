@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Fixed
+- **Setup guidance no longer says to keep `config.json` in the skill directory or to ask setup
+  questions with AskUserQuestion.** The skill directory is read-only in local Cowork and the chat
+  runtime, and hosts steer how arguments are collected themselves. *Think Through the Setup* in
+  `official-guide-patterns.md` now says to state what the skill needs, declare `argument-hint` and
+  leave how to ask to the model. It also says the three things the model cannot see from inside a run:
+  where answers can be kept, which runs have nobody to answer (sub-agents, forked skills, scheduled
+  tasks), and that answers given in the conversation stay in the transcript.
+
+### Added
+- **What `argument-hint` does on Claude Desktop**: it tells the model what to collect when the
+  skill is invoked; in Claude Code it is a hint shown while typing.
+
 ## [0.15.0] - 2026-10-01
 
 ### Fixed

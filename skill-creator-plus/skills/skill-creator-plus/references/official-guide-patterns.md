@@ -385,7 +385,13 @@ Claude already knows a lot about coding and has strong default opinions. If your
 Claude will generally try to stick to your instructions, and because skills are reusable across many situations, **be careful of being too specific**. Give Claude the information it needs, but give it flexibility to adapt to the situation. Overly rigid instructions that work for one test case may fail for the next user's slightly different context.
 
 ### Think Through the Setup
-Some skills need context from the user (e.g., which Slack channel to post to). A good pattern: store setup information in a `config.json` file in the skill directory. If the config is not set up, the agent can ask the user for information. You can instruct Claude to use the AskUserQuestion tool for structured, multiple-choice setup questions.
+Some skills need context from the user (e.g., which Slack channel to post to). Say in the skill what it needs and when, declare `argument-hint`, and read `$ARGUMENTS` (see *Argument Substitution* below). Leave *how* to ask to the model: it can see which question tools it has, and some hosts add their own instruction for collecting a skill's arguments. Naming one tool only helps if you also say what to do without it.
+
+What the model cannot see from inside a run, and the skill should say:
+
+- **Where to keep the answers.** Not in the skill directory: it is read-only in local Cowork and the chat runtime, discarded with a cloud session, and replaced by an upgrade anywhere. In Claude Code, a plugin's `${CLAUDE_PLUGIN_DATA}` is the place (see below). Elsewhere no store is established (the token can arrive unsubstituted), so keep setup in a folder the user connected, or ask again.
+- **Runs with nobody to answer.** A sub-agent or a forked skill (`context: fork`) can't reach the user: only its final message comes back, and the main conversation rewrites it. A scheduled task usually has no question tool. Pass such runs everything in `$ARGUMENTS` or saved setup.
+- **Secrets.** Any answer typed or picked in the conversation stays in the transcript. Point the user to their own configuration instead.
 
 ### The Description Field Is a Trigger, Not a Summary
 When Claude starts a session, it builds a listing of every available skill with its description. This is what Claude scans to decide "is there a skill for this request?" — which means the description is not a summary of what the skill contains. It's a description of **when to trigger**. Write it accordingly.
@@ -900,6 +906,8 @@ Deploy the service "$0" to the "$1" environment (default: staging).
 ```
 
 When the user types `/deploy api-gateway production`, `$0` becomes `api-gateway` and `$1` becomes `production`.
+
+On Claude Desktop, `argument-hint` also tells the model what to collect when the skill is invoked (seen in local Cowork, not in cloud Cowork); without it, the model infers from `SKILL.md`. In Claude Code it is a hint shown while typing.
 
 ### `user-invocable: false`
 
