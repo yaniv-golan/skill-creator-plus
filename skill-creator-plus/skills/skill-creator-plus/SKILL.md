@@ -33,7 +33,7 @@ Often the user wants a working skill now, not an eval report. That is a legitima
 
 1. **Draft** the skill (Capture Intent → Write the SKILL.md, below).
 2. **Smoke-test every script you bundled**, directly: run it on synthetic input with the problems planted (malformed rows, wrong delimiter, unusual encoding, empty and header-only files, a missing file), plus one realistic case. A script that only ever ran on clean input is untested. When a smoke test fails, work out whether the script or the *test* is wrong before changing either — a synthetic fixture is a guess too. A check worth keeping belongs in the skill's own `scripts/`, so its users can run it as well.
-3. **Validate**: `quick_validate` then `check_portability` (see *Validate Against the Official Checklist*).
+3. **Validate**: `quick_validate` then `check_portability` (see *Validate Against the Official Checklist*, which says how to find them; never hand-roll the package).
 4. **Package and deliver** it (see *Package the Skill*).
 5. **Then offer** the eval loop and description optimization as follow-ups.
 
@@ -452,7 +452,19 @@ Before packaging, run through the quick checklist from `references/official-guid
 - [ ] SKILL.md stays under 19,900 characters (`wc -m`) — detailed content in references/, which is not capped
 - [ ] No README.md inside the skill folder
 
-You can run `python -m scripts.quick_validate <path-to-skill>` to check some of these automatically. **Run this and `check_portability` below from the skill-creator-plus skill directory** — the `python -m` module form resolves `scripts.` relative to the current directory, so it fails anywhere else.
+You can run `python -m scripts.quick_validate <path-to-skill>` to check some of these automatically. **Run this and `check_portability` below from this skill's own directory** — the `python -m` module form resolves `scripts.` relative to the current directory, so it fails anywhere else. That directory is the one this file was loaded from; put the `cd` in the same command, since a shell's working directory may not carry between calls:
+
+```bash
+cd ${CLAUDE_SKILL_DIR} && python -m scripts.quick_validate <abs-path-to-skill>
+```
+
+If the shell says that directory does not exist, it sees these files under a different path (Cowork's host loop). If this file was re-read from disk after a compaction, the line above shows the variable unexpanded. Either way, find the directory from the shell's side and `cd` to the one that holds `scripts/`:
+
+```bash
+find / -path '*skill-creator-plus/scripts/quick_validate.py' -print -quit 2>/dev/null
+```
+
+Never skip `check_portability` or hand-roll the `.skill` zip because the scripts seem unreachable — locate them.
 
 Also run `python -m scripts.check_portability <path-to-skill> --target <claude-code|claude-ai|cowork|all>` — a stdlib-only cross-runtime linter (no dependencies, runs in any environment). It flags constructs that break on the skill's target runtime: an over-cap `description`, subagent use (absent on Claude.ai), `claude` CLI use (absent on Claude.ai), browser/server assumptions (no display in Cowork/Claude.ai), third-party Python imports outside the stack Cowork preinstalls (each costs a `pip install` on every run, and a locked-down org can deny the egress that install needs), a `SKILL.md` over the 19,900-character post-compaction cap (`compaction-truncation-risk`), a workspace placed under a relative `outputs/` path, which Cowork refuses, nests, or loses depending on the lane (`outputs-prefix-relative`), a delivery tool named for only one Cowork lane (`delivery-tool-single-lane` — phrase delivery by outcome, naming no tool; naming both, capability-conditionally, is also acceptable and stays clean), and the deliverable itself gated on a delivery tool's availability (`delivery-conditional-deliverable`). Pass `--target` matching where the skill will run; `--strict` to gate.
 
@@ -460,11 +472,13 @@ If `cowork-harness` is installed, also run its two token-free static checks — 
 
 ### Package the Skill
 
-Package the final skill into a distributable `.skill` file (run from the skill-creator-plus skill directory):
+Package the final skill into a distributable `.skill` file, from this skill's own directory (located as in *Validate* above):
 
 ```bash
-python -m scripts.package_skill <path/to/skill-folder> [output-dir]
+cd <this-skill-dir> && python -m scripts.package_skill <abs-path-to-skill-folder> [output-dir]
 ```
+
+**What the `.skill` file is:** a zip named `<skill-name>.skill` whose single top-level folder is the skill folder itself — `<skill-name>/SKILL.md`, `<skill-name>/scripts/…`, and so on — never files at the zip root. The folder name must equal the frontmatter `name` (validation runs first and refuses a mismatch), because installers key on that directory. Left out: `evals/` and `tests/` at the skill root, `__pycache__/`, `node_modules/`, `*.pyc`, `.DS_Store`, and every symlink (never followed, so nothing outside the folder is embedded); the script prints what it skipped.
 
 `output-dir` is optional and defaults to the skill folder's parent, which is unwritable on a plugin or marketplace install — pass the destination explicitly, as an absolute path when a script will consume it.
 

@@ -4,6 +4,20 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+- **The one-pass path could lose its own scripts.** `SKILL.md` said to run `quick_validate`,
+  `check_portability` and `package_skill` "from the skill-creator-plus skill directory" without saying
+  where that is. On Cowork's host loop, where the shell sees the files under a different path, a run
+  hand-rolled the `.skill` zip and skipped the portability check. It now gives the directory the
+  file was loaded from, `cd`'d in the same command, and a `find` from the shell's side for when that
+  path is missing or the file was re-read from disk; the one-pass step says never to hand-roll the
+  package.
+
+### Added
+- **The `.skill` archive layout is documented**: a zip named `<skill-name>.skill` with the skill
+  folder as its single top-level entry, the folder name equal to `name`, and the files packaging
+  leaves out (root `evals/` and `tests/`, caches, `.DS_Store`, every symlink).
+
 ### Changed
 - **Inline `` !`cmd` `` is documented per lane from live runs.** `official-guide-patterns.md` said its
   behaviour in cloud Cowork was unverified. Local Cowork replaces it with a disabled-execution
