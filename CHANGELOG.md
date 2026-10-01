@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [0.15.0] - 2026-10-01
 
 ### Fixed
 - **The one-pass path could lose its own scripts.** `SKILL.md` said to run `quick_validate`,
