@@ -6,15 +6,16 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 - **The eval-viewer guidance no longer says the model has no browser.** Cowork sessions can have
-  browser tools, but they run on the user's side and can't open a server the model starts or a file
-  in its workspace (measured from a cloud session: the built-in browser and the user's Chrome both
-  failed to reach the session's server and files). `environments.md` now says that, and keeps the
-  static-file route.
+  browser tools, but they run on the user's side, and from a cloud session they can't open a server
+  the model starts or a file in its container (measured: the built-in browser and the user's Chrome
+  both failed to reach the session's server and files). `environments.md` now says that, and has the
+  model publish the static viewer as an Artifact when it can, or deliver the file.
 - **The two Artifact tool families are told apart.** The viewer note described only the older
   sidebar-only tools and claimed availability on both Cowork lanes. It now says a session has at most
-  one family, either the `Artifact` tool, whose published page opens from a link on the web, a phone
-  or the desktop app, or the older `create_artifact` family in the desktop app's Artifacts sidebar.
-  It also says the paste-back feedback loop needs the user present.
+  one family, either the `Artifact` tool, whose published page appears beside the conversation on the
+  web and in the desktop app and opens from its link on a phone, or the older `create_artifact` family
+  in the desktop app's Artifacts sidebar. It also says the paste-back feedback loop needs the user
+  present.
 - **Connected-desktop guidance corrected.** A file can be committed to a granted folder straight from
   the outputs folder, so sending it first is no longer required. Device tools have to be loaded before
   the model concludes the computer is unreachable. *Two skill listings under Cowork* now says that local
