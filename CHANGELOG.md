@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [0.15.2] - 2026-10-01
 
 ### Fixed
 - **The eval-viewer guidance no longer says the model has no browser.** Cowork sessions can have
