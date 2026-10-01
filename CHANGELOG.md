@@ -16,6 +16,12 @@ All notable changes to this project will be documented in this file.
   `references/environments.md` now copies the installed skill into the directory the session
   designates, by absolute path, edits it there and packages it with `package_skill.py`. The old
   `/tmp` staging and manual-packaging advice contradicted both rules.
+- **Lint messages say what the chat runtime lacks, not what "Claude.ai" lacks.** `subagent-dependency`,
+  `claude-cli-dependency` and `browser-display-dependency`, and the README and `SKILL.md` summaries,
+  said Claude.ai has no sub-agents. A Claude app conversation can be a cloud Cowork session, which
+  has a sub-agent tool. The messages now name the chat runtime and say to check the tool list.
+  Target and rule ids are unchanged; `claude-ai` is documented as the chat runtime.
+- **README rule count** said 12 portability rules when there were 13; with the new rule it is 14.
 
 ### Added
 - **Three runtime notes in `references/environments.md`.** A pointer to https://ccinternals.dev/cowork/
@@ -23,6 +29,14 @@ All notable changes to this project will be documented in this file.
   names its file tools `create_file`, `view` and `str_replace`, so route by what a tool does. And a
   local Claude Desktop scheduled task can be moved to the cloud after two runs unless something holds
   it back, so a skill tested only on local scheduled runs can start running in the cloud.
+- **`relative-output-path` lint rule (advisory; `claude-ai` and `cowork` targets).** Flags `SKILL.md` or
+  `references/` text that tells the model to write a file to a bare relative path. Outside Claude
+  Code that path is invisible to the user (cloud Cowork), refused by the file tools (local Cowork),
+  or outside the outputs directory (chat runtime). The fix is to write by absolute path to the
+  directory the session's instructions designate, then deliver the file. Deliberately narrow: an
+  imperative write verb plus a relative file path, silent on anchored bases, the skill's own files,
+  URLs and links, and lines `outputs-prefix-relative` already reports. Suppress per file with
+  `<!-- portability-allow: relative-output-path -->`.
 - **The `.skill` archive layout is documented**: a zip named `<skill-name>.skill` with the skill
   folder as its single top-level entry, the folder name equal to `name`, and the files packaging
   leaves out (root `evals/` and `tests/`, caches, `.DS_Store`, every symlink).
