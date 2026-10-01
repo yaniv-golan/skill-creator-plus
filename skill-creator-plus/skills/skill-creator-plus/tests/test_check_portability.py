@@ -18,6 +18,7 @@ from check_portability import (  # noqa: E402
     COMBINED_TOKEN_CAP,
     COMPACTION_TOKEN_CAP,
     check_outputs_prefix,
+    check_relative_output_path,
     _filter_by_target,
     COMPACTION_CAP_CHARS,
     COMPACTION_MARKER_CHARS,
@@ -778,8 +779,10 @@ class OutputsPrefixTests(unittest.TestCase):
         The miss is recorded rather than fixed. Covering the general class needs a predicate that
         knows what base a bare `outputs/` is relative to; a regex measured against 263 installed
         skills flagged the canonical CORRECT explanations of this very bug at ~1-in-18 precision.
-        That is the `file-delivery-tool-hardcoded` failure mode (see check_portability.py), so the
-        class stays prose guidance in references/environments.md, not a rule.
+        That is the `file-delivery-tool-hardcoded` failure mode (see check_portability.py), so this
+        WARNING rule stays narrow. The general class is now covered at ADVISORY severity by
+        `relative-output-path`, which fires on this exact line -- see
+        RelativeOutputPathTests.test_the_historical_dispatch_bug_fires.
         """
         self.assertEqual(self._fires("- Also write outputs/user_notes.md: notes\n"), [],
                          "known miss -- if this ever fires, a predicate was found; update the docs")
@@ -844,6 +847,146 @@ class OutputsPrefixTests(unittest.TestCase):
         self.assertIn("outputs-prefix-relative", self._fires(body))
 
 
+class RelativeOutputPathTests(unittest.TestCase):
+    """`relative-output-path`: an imperative write to a bare relative FILE path. Advisory.
+
+    Precision over recall -- every exclusion below is a pin, because the sibling rules show what
+    a wide formulation of this class does (it flagged the correct explanations of the bug).
+    """
+
+    def _fires(self, body, refs=None):
+        with tempfile.TemporaryDirectory() as tmp:
+            d = _skill(Path(tmp), "name: s\ndescription: d", body)
+            for name, text in (refs or {}).items():
+                (d / "references").mkdir(exist_ok=True)
+                (d / "references" / name).write_text(text)
+            return check_relative_output_path(d)
+
+    def _rules(self, body, refs=None):
+        return [f["rule"] for f in self._fires(body, refs)]
+
+    # -- positives --
+    def test_save_report_to_bare_filename_fires(self):
+        self.assertEqual(self._rules("Save the report to report.md.\n"), ["relative-output-path"])
+
+    def test_write_results_to_relative_subdir_fires(self):
+        self.assertIn("relative-output-path", self._rules("Write results to `output/summary.json`.\n"))
+
+    def test_create_dot_slash_direct_object_fires(self):
+        self.assertIn("relative-output-path", self._rules("Then create ./out/table.csv with the rows.\n"))
+
+    def test_list_item_and_bold_fire(self):
+        self.assertIn("relative-output-path", self._rules("- **Export the chart as chart.png**\n"))
+
+    def test_the_historical_dispatch_bug_fires(self):
+        """The line `outputs-prefix-relative` records as a known miss -- a real shipped bug."""
+        self.assertIn("relative-output-path",
+                      self._rules("- Also write outputs/user_notes.md: notes\n"))
+
+    def test_references_are_scanned(self):
+        f = self._fires("Body.\n", {"guide.md": "Save the summary to summary.md.\n"})
+        self.assertEqual([x["location"] for x in f], ["references/guide.md:1"])
+
+    def test_is_advisory_and_skips_claude_code(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            d = _skill(Path(tmp), "name: s\ndescription: d", "Save the report to report.md.\n")
+            findings, _ = lint_portability(d)
+            f = next(x for x in findings if x["rule"] == "relative-output-path")
+            self.assertEqual(f["severity"], "advisory")
+            self.assertEqual(f["targets"], ["claude-ai", "cowork"])
+            self.assertNotIn("relative-output-path",
+                             _rules(_filter_by_target(findings, "claude-code")))
+
+    def test_one_finding_per_file(self):
+        self.assertEqual(len(self._fires("Save it to a.md.\nSave it to b.md.\n")), 1)
+
+    # -- negatives --
+    def test_absolute_paths_are_clean(self):
+        for body in ("Save the report to /mnt/user-data/outputs/report.md.\n",
+                     "Save the report to ~/reports/report.md.\n",
+                     "Save the report to $OUT/report.md.\n",
+                     "Save the report to ${CLAUDE_SKILL_DIR}/data/report.md.\n"):
+            self.assertEqual(self._rules(body), [], body)
+
+    def test_placeholder_bases_are_clean(self):
+        for body in ("Save it to `<abs-workspace>/iteration-1/report.md`.\n",
+                     "Save it to {workspace}/report.md.\n",
+                     "Write it to OUT_DIR/report.md.\n"):
+            self.assertEqual(self._rules(body), [], body)
+
+    def test_reading_instructions_are_clean(self):
+        self.assertEqual(self._rules("Read references/schemas.md, then open data.csv.\n"), [])
+
+    def test_bundled_files_are_clean(self):
+        for body in ("Save the helper to scripts/report.md.\n",
+                     "Write the notes to references/notes.md.\n",
+                     "Save test cases to evals/evals.json.\n",
+                     "Write the frontmatter to SKILL.md.\n"):
+            self.assertEqual(self._rules(body), [], body)
+
+    def test_urls_and_markdown_links_are_clean(self):
+        self.assertEqual(self._rules("Export it as described at https://example.com/a/report.md.\n"), [])
+        self.assertEqual(self._rules("Save it as shown in [the guide](guide/report.md).\n"), [])
+
+    def test_cd_to_absolute_dir_code_block_is_clean(self):
+        body = "```bash\ncd /tmp/work\n# then save the output to out/report.md\n```\n"
+        self.assertEqual(self._rules(body), [])
+
+    def test_unanchored_code_block_is_still_scanned(self):
+        """Dispatch prompts live in fences -- the historical bug was one."""
+        body = "```\n- Also write outputs/user_notes.md: notes\n```\n"
+        self.assertIn("relative-output-path", self._rules(body))
+
+    def test_stated_base_on_the_line_is_clean(self):
+        self.assertEqual(self._rules("Save the report to report.md in the run directory.\n"), [])
+        self.assertEqual(self._rules("Write grades to grading.json relative to the eval dir.\n"), [])
+
+    def test_basename_anchored_elsewhere_in_the_file_is_clean(self):
+        body = ("Write the receipt to `audit.json`.\n\n"
+                "The pipeline passes `-o \"$REVIEW_DIR/audit.json\"`.\n")
+        self.assertEqual(self._rules(body), [])
+
+    def test_a_relative_mention_elsewhere_does_not_anchor(self):
+        body = "Write the notes to notes.md.\n\nSee runs/x/notes.md for an example.\n"
+        self.assertIn("relative-output-path", self._rules(body))
+
+    def test_nouns_and_descriptions_are_clean(self):
+        for body in ("The sub-agent output maps to cross-refs.json.\n",
+                     "When done they click Submit, which saves all feedback to `feedback.json`.\n",
+                     "Create benchmark.json and run the viewer.\n",
+                     "Do NOT write any file other than OUTPUT_PATH.\n"):
+            self.assertEqual(self._rules(body), [], body)
+
+    def test_does_not_double_fire_with_outputs_prefix(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            d = _skill(Path(tmp), "name: s\ndescription: d",
+                       "Save the report to `outputs/my-skill-workspace/report.md`.\n")
+            rules = _rules(lint_portability(d)[0])
+            self.assertIn("outputs-prefix-relative", rules)
+            self.assertNotIn("relative-output-path", rules)
+
+    # -- suppression (mirrors OutputsPrefixTests) --
+    def test_html_comment_marker_suppresses(self):
+        body = "<!-- portability-allow: relative-output-path -->\nSave the report to report.md.\n"
+        self.assertEqual(self._rules(body), [])
+
+    def test_marker_is_per_file(self):
+        f = self._fires("<!-- portability-allow: relative-output-path -->\nSave it to a.md.\n",
+                        {"guide.md": "Save it to b.md.\n"})
+        self.assertEqual([x["location"] for x in f], ["references/guide.md:1"])
+
+    def test_prose_mention_of_marker_does_not_suppress(self):
+        body = ("Suppress it with a portability-allow: relative-output-path comment.\n"
+                "Save the report to report.md.\n")
+        self.assertIn("relative-output-path", self._rules(body))
+
+    def test_heading_and_fenced_forms_do_not_suppress(self):
+        for marker in ("# portability-allow: relative-output-path\n",
+                       "```\n# portability-allow: relative-output-path\n```\n"):
+            self.assertIn("relative-output-path",
+                          self._rules(marker + "Save the report to report.md.\n"), marker)
+
+
 class StrictGatingTests(unittest.TestCase):
     """`--strict` gates warnings and errors; advisories are informational by design."""
 
@@ -891,6 +1034,14 @@ class SelfLintTests(unittest.TestCase):
             self.assertNotIn("<!-- portability-allow: outputs-prefix",
                              (skill_root / name).read_text(),
                              f"{name} suppresses the rule instead of complying with it")
+
+    def test_this_skill_does_not_trip_relative_output_path(self):
+        """Clean on the real tree, and clean by compliance rather than by suppression."""
+        skill_root = Path(__file__).resolve().parent.parent
+        self.assertEqual(check_relative_output_path(skill_root), [])
+        for p in [skill_root / "SKILL.md", *sorted((skill_root / "references").rglob("*.md"))]:
+            self.assertNotIn("<!-- portability-allow: relative-output-path", p.read_text(),
+                             f"{p.name} suppresses the rule instead of complying with it")
 
     def test_load_bearing_workspace_facts_survive_compaction(self):
         """The instructions an agent needs AT the workspace step must be in the surviving prefix.
