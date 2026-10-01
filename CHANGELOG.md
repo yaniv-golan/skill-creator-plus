@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Added
+- **Working on a skill that lives on the user's computer, from a cloud session.**
+  `references/environments.md` now says how to bring such a skill in and put it back (the device
+  stage and commit tools, inside a folder the user grants), that `~/.claude` and `~/.claude/skills`
+  were refused as protected locations, so a personal skill there has to be sent in, and where the
+  result should live: the account (loads in Cowork and Claude Code, in the organization it was saved in) or a project folder (Claude Code
+  only; Cowork shows at most a stub). It also warns that keeping both leaves Claude Code with two
+  copies.
+
 ## [0.15.1] - 2026-10-01
 
 ### Fixed

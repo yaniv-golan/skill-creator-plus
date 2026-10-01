@@ -176,6 +176,8 @@ Use this section when your instructions say the user cannot see your working dir
 - Description optimization (`run_loop.py` / `run_eval.py`) should work in Cowork just fine since it uses `claude -p` via subprocess, not a browser, but please save it until you've fully finished making the skill and the user agrees it's in good shape.
 - **Updating an existing skill**: The user might be asking you to update an existing skill, not create a new one. Follow the update guidance in *Without sub-agents* above (its "Updating an existing skill" paragraph). It copies the skill into the designated workspace and not `/tmp`, which under Cowork's shell is VM-private and reaches neither the user nor your file tools.
 
+- **A skill that lives in a folder on the user's computer, from a cloud session.** You can reach it only inside a folder the user grants. `~/.claude` and `~/.claude/skills` were refused as protected locations (observed on Desktop 2.16120.0), so ask the user to send you a personal skill kept there. Bring the files in with the device stage tool and put your edits back with the device commit tool. Settle with the user where the result should live. A skill saved to their account (which sending the `.skill` file offers) loads in full in Cowork and in Claude Code, but only in the organization it was saved in. One kept in a project folder loads in Claude Code on that machine, but Cowork shows it at most as a stub (see *Two skill listings under Cowork* below). Keeping both leaves Claude Code with two copies, so pick one.
+
 ### Two skill listings under Cowork
 
 Cowork appears to show the model **two** skill listings in the same session, and they don't agree.
