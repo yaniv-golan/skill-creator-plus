@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Changed
+- **Inline `` !`cmd` `` is documented per lane from live runs.** `official-guide-patterns.md` said its
+  behaviour in cloud Cowork was unverified. Local Cowork replaces it with a disabled-execution
+  notice. A cloud session leaves it as literal text when the skill loads before the session's
+  container exists; after that, a command needing a permission prompt (one that writes a file did)
+  is rewritten into an instruction for the model to run it itself, and a probe whose command wrote
+  a random value to a file confirmed it did not run. An already-allowed command runs, by the
+  runtime's code, but that is not yet confirmed live. In the CLI an uploaded skill's command also stays literal (read from the
+  runtime's code).
+
 ## [0.14.0] - 2026-10-01
 
 ### Fixed
