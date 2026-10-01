@@ -890,11 +890,12 @@ class SelfLintTests(unittest.TestCase):
         surviving = skill_md[:COMPACTION_CAP_CHARS]
         for fact, why in [
             ("<abs-workspace>", "the shell/sub-agent path placeholder is never defined"),
-            ("**file tools** need the absolute outputs path",
+            ("**file tools** need the absolute path",
              "the file-tool path form is lost, and a bare path is what gets refused"),
             ("Your **shell** may spell that directory differently",
              "the shell-vs-file-tool split is lost"),
             ("give sub-agents both, labelled", "sub-agents get one form and misuse it"),
+            ("Put it where your instructions say to work", "the location rule for the workspace is lost"),
             # The one-pass route's verification doctrine. Both sentences were ported INLINE rather
             # than cross-referenced, because the eval-section text they came from sits past the cut
             # -- a pointer into it would dangle in exactly the compacted session this guards.
