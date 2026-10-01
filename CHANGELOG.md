@@ -46,10 +46,10 @@ All notable changes to this project will be documented in this file.
   behaviour in cloud Cowork was unverified, and did not mention permissions. Every command goes
   through the shell permission check first. In Claude Code an allowed command runs and is
   substituted, and a disallowed one makes the skill fail to load in the default permission mode.
-  Local Cowork replaces it with a disabled-execution notice. A cloud session leaves it as literal
-  text when the skill loads before the session's container exists; after that, every command, a
-  read-only one included, is rewritten into an instruction for the model to run it itself, so the
-  Claude app never executes it. Each run used a value nobody could guess.
+  Local Cowork replaces it with `[shell command execution disabled by policy]`. A cloud session
+  leaves it as literal text when the skill loads before the session's container exists; after that,
+  a command that writes a file or reads outside the working directory is rewritten into an
+  instruction for the model to run it itself. Each run used a value nobody could guess.
 
 ## [0.14.0] - 2026-10-01
 
