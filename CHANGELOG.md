@@ -33,7 +33,6 @@ All notable changes to this project will be documented in this file.
   Haiku 4.5 — not 40,000 / 8,000. Packing is first-fit and continues past a miss, so a long
   description can lose to a shorter, lower-ranked one; the guidance now also says to put trigger
   words in the skill's name.
-
 - **A link is not delivery either.** In a cloud session a `computer://` link renders only for a file
   the conversation itself wrote or sent; anything else, including a file in a folder the user
   granted, shows as plain text with no error. The delivery rule now says so next to "stating the
@@ -67,9 +66,9 @@ All notable changes to this project will be documented in this file.
   sessions* and leads with the cloud VM as the default lane. In a cloud session connected to the
   user's desktop, a path on the user's computer is documented as an argument to the device file
   tools only — a file-tool write to it reports success but lands in the cloud container — and a file
-  reaches the user's folder by sending it and committing it with the device tool, after requesting
-  folder access if none is granted. The chat runtime could not be reached on demand while testing,
-  so its routing is capability-based and untested live.
+  reaches the user's folder by committing it with the device tool, preferably after sending it,
+  and after requesting folder access if none is granted. The chat runtime could not be reached on
+  demand while testing, so its routing is capability-based and untested live.
 - **Reviewing results without a display now delivers the viewer.** *Without sub-agents* used to
   say: skip the browser reviewer, present results inline, and "tell them where" an output file is.
   It now generates the static viewer and delivers it (and any output file) by the two-step delivery
@@ -79,6 +78,8 @@ All notable changes to this project will be documented in this file.
   uploads or a connected folder" is now stated for local Cowork only; an uploaded file is found from
   the message that announced it (its location differs by lane) and is a place to read from, not to
   present from. Local Cowork does not appear to load a connected folder's `.claude/skills` at all.
+  The names that help a model recognise its delivery tool now list the chat runtime with local
+  Cowork as serving `present_files`.
 - **`outputs-prefix-relative` explains the failure per lane.** The rule fires on the same text as
   before; its message now says a relative `outputs/…` workspace nests on older local Desktop, is
   refused on 2.7032.0+, and is lost in cloud Cowork, and gives the two-form fix instead of "use a
