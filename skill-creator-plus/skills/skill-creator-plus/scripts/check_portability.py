@@ -4,7 +4,9 @@ Cross-runtime portability linter for skills.
 
 skill-creator-plus can author skills for three runtimes — Claude Code, Claude.ai, and Claude
 Cowork — whose capabilities differ. A construct that works in Claude Code can silently break
-elsewhere: Claude.ai has no subagents and no `claude` CLI; Cowork has no browser/display and ships
+elsewhere: the Claude app's chat runtime has no sub-agent tool and no `claude` CLI (but a Claude
+app conversation can be a cloud Cowork session, which has a sub-agent tool — so a skill should check
+its tool list, not the product name); Cowork has no browser/display and ships
 a large but finite preinstalled Python stack (an import outside it costs an install on every run,
 and egress is org-configurable so a locked-down org can deny that install), and file-delivery tools
 differ per surface (Cowork alone has two, one per
@@ -41,6 +43,10 @@ import re
 import sys
 from pathlib import Path
 
+# `claude-ai` means the Claude app's CHAT runtime, not every Claude app conversation: one can run
+# as (or upgrade to) a cloud Cowork session, which has a sub-agent tool and a shell, and that case
+# is what `cowork` covers. The ids name runtimes by product for CLI stability; findings should say
+# what the runtime lacks, so an author checks the tool list rather than the product.
 TARGETS = ("claude-code", "claude-ai", "cowork")
 
 # agentskills.io / Claude listing caps (see references/official-guide-patterns.md).
@@ -602,22 +608,26 @@ def check_runtime_constructs(skill_path):
         findings.append(_finding(
             "subagent-dependency", SEVERITY_WARNING, ["claude-ai"],
             f"references subagents at {len(md_hits_subagent)} site(s) without an 'if available' "
-            f"guard — Claude.ai has no subagents. Ensure an inline (no-subagent) fallback exists. "
+            f"guard — the Claude app's chat runtime has no sub-agent tool, so a skill that requires "
+            f"one fails there. Check the tool list rather than the product, and keep an inline "
+            f"fallback. "
             f"First: {md_hits_subagent[0]}",
             md_hits_subagent[0],
         ))
     if cli_hits:
         findings.append(_finding(
             "claude-cli-dependency", SEVERITY_WARNING, ["claude-ai"],
-            f"invokes the `claude` CLI (e.g. `claude -p`) at {len(cli_hits)} site(s) — the CLI is "
-            f"absent on Claude.ai. Gate these steps or provide a fallback. First: {cli_hits[0]}",
+            f"invokes the `claude` CLI (e.g. `claude -p`) at {len(cli_hits)} site(s) — it is not on "
+            f"the Claude app chat runtime's shell PATH. Gate these steps on `command -v claude` or "
+            f"provide a fallback. First: {cli_hits[0]}",
             cli_hits[0],
         ))
     if browser_hits:
         findings.append(_finding(
             "browser-display-dependency", SEVERITY_WARNING, ["claude-ai", "cowork"],
-            f"assumes a browser/local HTTP server at {len(browser_hits)} site(s) — Cowork and "
-            f"Claude.ai have no display. Provide a static / no-server fallback. First: {browser_hits[0]}",
+            f"assumes a browser/local HTTP server at {len(browser_hits)} site(s) — neither the "
+            f"Claude app's chat runtime nor Cowork has a display. Provide a static / no-server "
+            f"fallback. First: {browser_hits[0]}",
             browser_hits[0],
         ))
     findings += single_lane_findings

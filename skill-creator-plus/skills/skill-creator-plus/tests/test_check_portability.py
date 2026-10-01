@@ -360,6 +360,25 @@ class RuntimeConstructTests(unittest.TestCase):
             f = next(f for f in findings if f["rule"] == "subagent-dependency")
             self.assertEqual(f["targets"], ["claude-ai"])
 
+    def test_messages_route_by_capability_not_product(self):
+        """A Claude app conversation can be a cloud Cowork session, which HAS a sub-agent tool.
+
+        So no finding may state "Claude.ai has no X" as a product fact; each says what the chat
+        runtime lacks.
+        """
+        with tempfile.TemporaryDirectory() as td:
+            skill = _skill(Path(td), "name: x\ndescription: d",
+                           body="Spawn a subagent. Run `claude -p` too.\n")
+            (skill / "scripts").mkdir()
+            (skill / "scripts" / "viewer.py").write_text("import http.server\n")
+            findings, _ = lint_portability(skill)
+            msgs = {f["rule"]: f["message"] for f in findings}
+            for rule in ("subagent-dependency", "claude-cli-dependency",
+                         "browser-display-dependency"):
+                self.assertNotIn("Claude.ai", msgs[rule], rule)
+                self.assertIn("chat runtime", msgs[rule], rule)
+            self.assertIn("tool list", msgs["subagent-dependency"])
+
     def test_guarded_subagent_not_flagged(self):
         with tempfile.TemporaryDirectory() as td:
             skill = _skill(Path(td), "name: x\ndescription: d",
