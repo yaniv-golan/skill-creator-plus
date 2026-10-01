@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [0.15.1] - 2026-10-01
 
 ### Fixed
 - **Setup guidance no longer says to keep `config.json` in the skill directory or to ask setup
