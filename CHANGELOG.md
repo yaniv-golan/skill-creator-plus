@@ -12,8 +12,17 @@ All notable changes to this project will be documented in this file.
   file was loaded from, `cd`'d in the same command, and a `find` from the shell's side for when that
   path is missing or the file was re-read from disk; the one-pass step says never to hand-roll the
   package.
+- **Updating an installed skill no longer stages in `/tmp` or hand-rolls the package.**
+  `references/environments.md` now copies the installed skill into the directory the session
+  designates, by absolute path, edits it there and packages it with `package_skill.py`. The old
+  `/tmp` staging and manual-packaging advice contradicted both rules.
 
 ### Added
+- **Three runtime notes in `references/environments.md`.** A pointer to https://ccinternals.dev/cowork/
+  for current runtime facts (for human readers; nothing depends on fetching it). The chat runtime
+  names its file tools `create_file`, `view` and `str_replace`, so route by what a tool does. And a
+  local Claude Desktop scheduled task can be moved to the cloud after two runs unless something holds
+  it back, so a skill tested only on local scheduled runs can start running in the cloud.
 - **The `.skill` archive layout is documented**: a zip named `<skill-name>.skill` with the skill
   folder as its single top-level entry, the folder name equal to `name`, and the files packaging
   leaves out (root `evals/` and `tests/`, caches, `.DS_Store`, every symlink).
