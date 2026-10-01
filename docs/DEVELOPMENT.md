@@ -13,6 +13,13 @@ cd skill-creator-plus/skills/skill-creator-plus && python -m scripts.check_porta
 # claude-cli-dependency, browser-display-dependency, outputs-prefix-relative (Cowork-only:
 # a workspace under a relative `outputs/` path: refused on Desktop 2.7032.0+, nested and hidden on older
 # Desktop, lost in cloud Cowork),
+# relative-output-path (ADVISORY, claude-ai + cowork: SKILL.md or references/ tells the model to
+# write a file to a bare relative path — invisible in cloud Cowork, refused by local Cowork's file
+# tools, outside the outputs dir on the chat runtime. Precision over recall: imperative write verb +
+# relative file path only; silent on absolute/~/$VAR/<placeholder> bases, bundled files, a basename
+# the file anchors elsewhere, a stated base on the line, cd-to-absolute fences, and any line
+# outputs-prefix-relative already owns. Suppress per file with
+# `<!-- portability-allow: relative-output-path -->`),
 # thirdparty-import (allowlisted against Cowork's
 # preinstalled stack), delivery-tool-single-lane, delivery-conditional-deliverable,
 # plugin-bin-directory (PLUGIN-level, claude-ai-only: the plugin root — the dir holding

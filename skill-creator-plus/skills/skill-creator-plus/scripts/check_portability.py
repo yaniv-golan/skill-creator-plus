@@ -694,6 +694,135 @@ def check_outputs_prefix(skill_path):
     return findings
 
 
+# ---- relative-output-path -----------------------------------------------------------------
+# An instruction to WRITE a file to a bare relative path. Where that lands depends on the runtime's
+# working directory: the project in Claude Code (visible, which is why this skips that target), a
+# private working directory in cloud Cowork, a refusal from local Cowork's file tools, a work dir
+# separate from the outputs directory on the chat runtime. Precision over recall — the rule fires
+# only on an imperative write verb with a relative FILE path (a known deliverable extension), and
+# skips anything an author has already anchored; RelativeOutputPathTests pins each exclusion.
+_REL_OUT_EXT = (r"(?:md|markdown|txt|json|jsonl|csv|tsv|html?|pdf|docx|xlsx|pptx|png|jpe?g|svg|"
+                r"ya?ml|xml|zip)")
+# Not preceded by a path/variable/placeholder character, so `/abs/x.md`, `~/x.md`, `$D/x.md`,
+# `<ws>/x.md`, `{d}/x.md` and `https://h/x.md` never yield a relative match.
+_REL_OUT_PATH = (r"(?<![\w/~$<>{}.\-@:])(?P<path>(?:\./)?(?:[A-Za-z0-9_][\w.\-]*/)*"
+                 r"[A-Za-z0-9_][\w\-]*(?:\.[\w\-]+)*\." + _REL_OUT_EXT + r")(?![\w/<{])")
+# The verb must sit where an imperative does — line/list start, after sentence punctuation or bold,
+# or after a modal/connective — so nouns ("the export", "sub-agent output") and descriptions of
+# what a script does ("the viewer saves ...") don't count.
+_REL_OUT_VERB = (r"(?:^\s*(?:[-*+>]\s+|\d+[.)]\s+)?|[.!?:;]\s+|\*\*|"
+                 r"\b(?:then|and|also|to|should|must|please|always|you|now)\s+)"
+                 r"(?:write|save|create|output|export|store|dump|generate|produce)\b")
+_REL_OUT_OPEN = r"[`'\"*]*"
+# "save the report to report.md" — destination after to/into/as, within one clause.
+_REL_OUT_DEST_RE = re.compile(
+    _REL_OUT_VERB + r"[^.!?\n`]{0,60}?\b(?:to|into|as)\s+" + _REL_OUT_OPEN + _REL_OUT_PATH,
+    re.IGNORECASE,
+)
+# "create ./out/table.csv" — direct object, only when it has a directory part ("Create
+# benchmark.json" names a file kind far more often than it places one).
+_REL_OUT_OBJ_RE = re.compile(
+    _REL_OUT_VERB + r"\s+(?:the\s+)?(?:file\s+)?" + _REL_OUT_OPEN + r"(?=[^\s`'\"*]*/)"
+    + _REL_OUT_PATH,
+    re.IGNORECASE,
+)
+# The skill's own bundle, and config files that belong to a project or plugin, not a deliverable.
+_REL_OUT_BUNDLED = ("scripts/", "references/", "assets/", "agents/", "evals/")
+_REL_OUT_OWN = frozenset({
+    "SKILL.md", "README.md", "CHANGELOG.md", "CLAUDE.md", "AGENTS.md", "LICENSE.txt",
+    "plugin.json", "marketplace.json", "hooks.json", "settings.json", "settings.local.json",
+})
+# A line that names the base explicitly ("relative to", "in the run directory") is anchored.
+_REL_OUT_BASE_RE = re.compile(
+    r"\brelative to\b|\b(?:under|inside|within|in|into)\s+(?:the|each|your|its|that|this)\s+"
+    r"[\w`<>/.\-]*\s*(?:dir|directory|folder|workspace|run dir|outputs?)\b",
+    re.IGNORECASE,
+)
+_REL_OUT_FENCE_RE = re.compile(r"^\s*(?:```|~~~)")
+_REL_OUT_CD_ABS_RE = re.compile(r"\bcd\s+[\"']?(?:/|~|\$|<)")
+# Same form and reasoning as _OUTPUTS_ALLOW_RE: an HTML comment only.
+_REL_OUT_ALLOW_RE = re.compile(r"<!--\s*portability-allow:\s*relative-output-path\s*-->")
+
+
+def _rel_out_anchored_elsewhere(text, basename):
+    """True if the file also spells this basename under an absolute/variable/placeholder base."""
+    return re.search(
+        r"(?:^|(?<=[\s`'\"(=]))(?:/|~/|\$\{?\w+\}?/|<[^>\n]+>/|\{[^}\s]+\}/)(?:[^\s`'\"]*/)?"
+        + re.escape(basename) + r"(?![\w.])",
+        text, re.MULTILINE,
+    ) is not None
+
+
+def _rel_out_match(line):
+    for rx in (_REL_OUT_DEST_RE, _REL_OUT_OBJ_RE):
+        for m in rx.finditer(line):
+            path = m.group("path")
+            bare = path[2:] if path.startswith("./") else path
+            if bare.startswith(_REL_OUT_BUNDLED) or bare.rsplit("/", 1)[-1] in _REL_OUT_OWN:
+                continue
+            if re.match(r"[A-Z][A-Z0-9_]*/", bare):  # `OUT_DIR/x.md` — a variable, not a path
+                continue
+            if line[max(0, m.start("path") - 2):m.start("path")] == "](":  # markdown link target
+                continue
+            return path
+    return None
+
+
+def check_relative_output_path(skill_path):
+    """Flag SKILL.md / references text that writes a file to a bare relative path.
+
+    Advisory: the relative form is correct in Claude Code, and a skill may define its base
+    elsewhere in a way no line-level check can see. Silent on any line `outputs-prefix-relative`
+    already owns, so the two never double-fire.
+    """
+    findings = []
+    files = [skill_path / "SKILL.md"]
+    ref_dir = skill_path / "references"
+    if ref_dir.is_dir():
+        files += sorted(ref_dir.rglob("*.md"))
+    for p in files:
+        try:
+            text = p.read_text()
+        except OSError:
+            continue
+        if _REL_OUT_ALLOW_RE.search(text):
+            continue
+        lines = text.split("\n")
+        # A fenced block that `cd`s to an absolute/variable dir first is a worked shell example
+        # whose relative paths have a stated base.
+        skip, start = set(), None
+        for n, line in enumerate(lines):
+            if _REL_OUT_FENCE_RE.match(line):
+                if start is None:
+                    start = n
+                else:
+                    if _REL_OUT_CD_ABS_RE.search("\n".join(lines[start:n + 1])):
+                        skip.update(range(start, n + 1))
+                    start = None
+        rel = p.relative_to(skill_path)
+        for n, line in enumerate(lines):
+            if n in skip or _REL_OUT_BASE_RE.search(line) or _OUTPUTS_WORKSPACE_RE.search(line):
+                continue
+            path = _rel_out_match(line)
+            if not path or _rel_out_anchored_elsewhere(text, path.rsplit("/", 1)[-1]):
+                continue
+            loc = f"{rel}:{n + 1}"
+            findings.append(_finding(
+                "relative-output-path", SEVERITY_ADVISORY, ["claude-ai", "cowork"],
+                f"tells the model to write `{path}` by a bare relative path. Where that lands "
+                f"depends on the runtime's working directory: invisible to the user in cloud "
+                f"Cowork, refused by local Cowork's file tools, outside the outputs directory on "
+                f"the chat runtime (only Claude Code's project directory makes it visible). Write "
+                f"deliverables by ABSOLUTE path to the directory the session's instructions "
+                f"designate, then deliver them to the user; for scratch files, state the base "
+                f"directory. Suppress per file with an HTML comment "
+                f"`<!-- portability-allow: relative-output-path -->`. At {loc}.",
+                loc,
+            ))
+            break
+    return findings
+
+
 def check_thirdparty_imports(skill_path):
     """Flag bundled-script imports that Cowork's image does not already provide.
 
@@ -759,6 +888,7 @@ def lint_portability(skill_path):
     findings += check_plugin_bin_directory(skill_path)
     findings += check_runtime_constructs(skill_path)
     findings += check_outputs_prefix(skill_path)
+    findings += check_relative_output_path(skill_path)
     findings += check_thirdparty_imports(skill_path)
     return findings, None
 
