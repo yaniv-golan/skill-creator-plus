@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [0.16.0] - 2026-10-02
 
 ### Fixed
 - **A failing `` !`cmd` `` is documented per runtime, and the rule is "never let it fail".** The guide
