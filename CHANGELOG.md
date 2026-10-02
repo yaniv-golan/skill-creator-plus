@@ -2,6 +2,24 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.16.2] - 2026-10-03
+
+### Fixed
+- **The eval viewer's Download button failed for text outputs on claude.ai.** Opened from a
+  delivered file on the web and in Claude Desktop, it raised an `atob` error and saved nothing, while
+  binary outputs downloaded after the app's trust prompt. Text downloads now use a base64 `data:` URI
+  like the others (not yet re-tested in the app).
+- **What the viewer's downloads do in the Claude app.** `environments.md` now says the Download links
+  don't work when the viewer is published as an Artifact (the app blocks file downloads there; the
+  outputs still show in the page), and that from a delivered viewer, binary downloads worked after a
+  confirmation.
+
+### Changed
+- **Where the `claude` CLI is.** Measured once each: found on PATH in cloud and local sessions (a
+  nested `claude -p` ran in a cloud session), and not on the chat runtime's PATH (Chat in the older
+  Chat/Cowork picker). The `claude-cli-dependency` message, `SKILL.md` and the README say so again,
+  now backed by a measurement; the advice to gate on `command -v claude` is unchanged.
+
 ## [0.16.1] - 2026-10-03
 
 ### Fixed
