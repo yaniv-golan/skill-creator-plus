@@ -385,7 +385,7 @@ Claude already knows a lot about coding and has strong default opinions. If your
 Claude will generally try to stick to your instructions, and because skills are reusable across many situations, **be careful of being too specific**. Give Claude the information it needs, but give it flexibility to adapt to the situation. Overly rigid instructions that work for one test case may fail for the next user's slightly different context.
 
 ### Think Through the Setup
-Some skills need context from the user (e.g., which Slack channel to post to). Say in the skill what it needs and when, declare `argument-hint`, and read `$ARGUMENTS` (see *Argument Substitution* below). Leave *how* to ask to the model: it can see which question tools it has, and some hosts add their own instruction for collecting a skill's arguments. Naming one tool only helps if you also say what to do without it.
+Some skills need context from the user (e.g., which Slack channel to post to). Say in the skill what it needs and when, declare `argument-hint`, and read `$ARGUMENTS` (see *Argument Substitution* below); if the text still shows `$ARGUMENTS` itself, take the input from the user's message. Leave *how* to ask to the model: it can see which question tools it has, and some hosts add their own instruction for collecting a skill's arguments. Naming one tool only helps if you also say what to do without it.
 
 What the model cannot see from inside a run, and the skill should say:
 
@@ -780,7 +780,7 @@ For anything the model invokes as a *command* rather than a path, ship `bin/<nam
 
    *Lane caveat, because these two facts read as opposites: `CLAUDE_ENV_FILE` is a plain-CLI mechanism. In a local session the VM shell is sealed and hook exports do not cross the host/VM boundary, so "don't rely on a hook to export env for your shell commands" remains correct **there**. Neither fact generalizes to the other lane.*
 
-Under a local session's host loop the substituted value is a **host** path, which the VM shell cannot resolve either — so even case 1 does not survive being handed to a sandboxed shell.
+Under a local session's host loop the substituted value is a **host** path. Current Desktop builds (since about September 2026) rewrite plugin and skill paths inside shell commands to the VM's mounts, so the token works in a shell command there; but the shell then prints the VM path, which the file tools refuse, so give the file tools the path from the skill text, never one the shell printed. `${CLAUDE_PLUGIN_DATA}` and the outputs path are not rewritten.
 
 #### Braced or bare? The same token has three different form rules
 
@@ -910,6 +910,8 @@ Deploy the service "$0" to the "$1" environment (default: staging).
 ```
 
 When the user types `/deploy api-gateway production`, `$0` becomes `api-gateway` and `$1` becomes `production`.
+
+In a cloud session, a skill invoked before the conversation has started its cloud session (typically its first message) receives `$ARGUMENTS` unfilled; the positional placeholders were not checked. Write the skill so it still works then.
 
 On Claude Desktop, `argument-hint` also tells the model what to collect when the skill is invoked (seen in a local session, not in a cloud session); without it, the model infers from `SKILL.md`. In Claude Code it is a hint shown while typing.
 
