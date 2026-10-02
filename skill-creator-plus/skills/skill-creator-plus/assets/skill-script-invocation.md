@@ -30,7 +30,8 @@ and pass it along verbatim, including to any sub-agent.
 
     python3 ${CLAUDE_SKILL_DIR}/scripts/<script>.py [args]
 
-If the line above still shows the variable unexpanded (cloud Cowork delivers it that way), or the
+If the line above still shows the variable unexpanded (cloud Cowork does that when the skill is
+invoked before the conversation's cloud session exists, typically as its first message), or the
 shell reports that path missing (Cowork's host loop, where the shell and the file tools are
 different mounts of the same content), locate the file from the SHELL's side and run what it finds:
 
