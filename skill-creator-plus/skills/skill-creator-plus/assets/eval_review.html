@@ -35,6 +35,10 @@
     .btn-delete { background: #c44; color: white; padding: 0.3rem 0.6rem; border: none; border-radius: 4px; cursor: pointer; font-size: 0.75rem; font-family: 'Poppins', sans-serif; }
     .btn-delete:hover { background: #a33; }
     .summary { margin-top: 1rem; color: #b0aea5; font-size: 0.875rem; }
+    .export-panel { display: none; margin-top: 1.5rem; max-width: 1100px; }
+    .export-panel.visible { display: block; }
+    .export-panel p { font-family: 'Poppins', sans-serif; font-size: 0.875rem; margin-bottom: 0.5rem; }
+    .export-json { width: 100%; min-height: 220px; padding: 0.6rem; border: 1px solid #e8e6dc; border-radius: 6px; font-family: ui-monospace, Menlo, monospace; font-size: 0.8rem; background: white; }
   </style>
 </head>
 <body>
@@ -58,6 +62,14 @@
   </table>
 
   <p class="summary" id="summary"></p>
+
+  <div class="export-panel" id="export-panel">
+    <p>Copy this JSON and paste it back into the conversation.</p>
+    <textarea class="export-json" id="export-json" readonly></textarea>
+    <div class="controls" style="margin-top:0.5rem">
+      <button class="btn btn-export" onclick="copyExport(this)">Copy JSON</button>
+    </div>
+  </div>
 
   <script>
     const EVAL_DATA = __EVAL_DATA_PLACEHOLDER__;
@@ -126,18 +138,31 @@
         `${evalItems.length} queries total: ${trigger} should trigger, ${noTrigger} should not trigger`;
     }
 
+    // No file download: in embedded viewers a blob-URL download can blank the page, and the
+    // agent cannot read the user's Downloads folder. The JSON is shown for the user to paste back.
     function exportEvalSet() {
       const valid = evalItems.filter(i => i.query.trim() !== '');
       const data = valid.map(i => ({ query: i.query.trim(), should_trigger: i.should_trigger }));
-      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'eval_set.json';
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      const box = document.getElementById('export-json');
+      box.value = JSON.stringify(data, null, 2);
+      document.getElementById('export-panel').classList.add('visible');
+      box.focus();
+      box.select();
+    }
+
+    function copyExport(btn) {
+      const box = document.getElementById('export-json');
+      box.select();
+      const done = () => {
+        btn.textContent = 'Copied!';
+        setTimeout(() => { btn.textContent = 'Copy JSON'; }, 2000);
+      };
+      const fallback = () => { try { if (document.execCommand('copy')) done(); } catch (e) {} };
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(box.value).then(done, fallback);
+      } else {
+        fallback();
+      }
     }
 
     render();

@@ -2,6 +2,33 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Fixed
+- **A failing `` !`cmd` `` is documented per runtime, and the rule is "never let it fail".** The guide
+  said a non-zero exit shows the user the command and stderr. In a cloud session, a command the skill
+  allows that then fails hangs a `/skill-name` the user typed, with no reply and no error, and
+  returns an error when the model invokes the skill. `official-guide-patterns.md` now says so and
+  links the upstream issue. It also says that a command needing approval is rewritten into an
+  instruction only in auto mode, and in other modes makes the skill fail to load. The DCI
+  `` !`git log` `` example now shows its `allowed-tools` entry and warns that outside a repository it
+  fails. The testing tip warns against `uuidgen` (absent in the cloud container), and names
+  `cat /proc/sys/kernel/random/uuid` together with the `allowed-tools` entry it ran under.
+- **Cloud literal tokens are scoped to when they happen.** `${CLAUDE_SKILL_DIR}` and
+  `${CLAUDE_PLUGIN_DATA}` arrive unexpanded, and the base-directory line names a missing
+  `/mnt/skills/…` path, when a skill is invoked before the conversation has started its cloud session
+  (typically its first message). Invoked later, they arrive filled. The text and the script stanza
+  now say this; the search fallback stays.
+- **The eval-set review page no longer downloads a file.** The agent can't read the user's
+  Downloads folder, and a download can blank an embedded page. `assets/eval_review.html` now shows
+  the JSON with a Copy button for the user to paste back, and `description-optimization.md` says so.
+- **The description optimizer's report is put where the user can get it.** The documented
+  `run_loop` command now passes `--results-dir`; without it the live report went to a temp directory
+  the user couldn't see. The docs say to deliver the final `report.html` rather than expect it to
+  open in a browser, and the Cowork note no longer says the optimizer "should work just fine" there:
+  it needs the `claude` CLI on the shell's PATH.
+- **Network egress is described as org-configurable**, not as denied by default.
+
 ## [0.15.2] - 2026-10-01
 
 ### Fixed

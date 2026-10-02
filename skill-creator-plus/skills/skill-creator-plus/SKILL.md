@@ -458,7 +458,7 @@ You can run `python -m scripts.quick_validate <path-to-skill>` to check some of 
 cd ${CLAUDE_SKILL_DIR} && python -m scripts.quick_validate <abs-path-to-skill>
 ```
 
-If the shell says that directory does not exist, it sees these files under a different path (Cowork's host loop). If the line above shows the variable unexpanded (cloud Cowork delivers it that way, and so does a re-read from disk after a compaction), the `cd` silently lands in the home directory. Either way, find the directory from the shell's side and `cd` to the one that holds `scripts/`:
+If the shell says that directory does not exist, it sees these files under a different path (Cowork's host loop). If the line above shows the variable unexpanded (cloud Cowork does that when this skill is invoked before the conversation's cloud session exists, typically as its first message, and so does a re-read from disk after a compaction), the `cd` silently lands in the home directory. Either way, find the directory from the shell's side and `cd` to the one that holds `scripts/`:
 
 ```bash
 find / -path '*skill-creator-plus/scripts/quick_validate.py' -print -quit 2>/dev/null

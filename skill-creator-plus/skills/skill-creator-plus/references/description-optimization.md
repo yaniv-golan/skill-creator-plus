@@ -36,7 +36,7 @@ Present the eval set to the user for review using the HTML template:
    - `__SKILL_DESCRIPTION_PLACEHOLDER__` → the skill's current description, HTML-escaped the same way (these land in HTML, not JS — unescaped `<` breaks the page)
 3. Write it to a path you name in your reply — inside the workspace, as an absolute path, e.g. `<abs-workspace>/eval_review_<skill-name>.html`. Don't write it to `/tmp`: under sandboxed runtimes that directory is private to the VM and reaches neither the user nor your file tools. If a display is available you can `open` it; otherwise present the file with whatever tool surfaces files to the user, or state the path.
 4. The user can edit queries, toggle should-trigger, add/remove entries, then click "Export Eval Set"
-5. The file downloads to `~/Downloads/eval_set.json` — check the Downloads folder for the most recent version in case there are multiple (e.g., `eval_set (1).json`)
+5. The page shows the eval set as JSON with a Copy button; ask the user to paste it back into the conversation, and save it to the workspace. The page downloads no file: you can't read the user's Downloads folder, and in embedded viewers a download can blank the page.
 
 This step matters — bad eval queries lead to bad descriptions.
 
@@ -54,8 +54,11 @@ cd <skill-creator-plus-skill-path> && python -m scripts.run_loop \
   --max-iterations 5 \
   --target-length 500 \
   --plateau-patience 2 \
+  --results-dir <abs-workspace>/desc-opt \
   --verbose
 ```
+
+Pass `--results-dir` as an absolute path in the workspace. The script writes its live progress page (`skill_description_report_<name>_<timestamp>.html`) and each run's final `report.html` (in a `<timestamp>/` subfolder) there; without it, the progress page goes to a temp directory the user can't see.
 
 Use the model ID from your system prompt (the one powering the current session) so the triggering test matches what the user actually experiences.
 
@@ -65,7 +68,7 @@ Use the model ID from your system prompt (the one powering the current session) 
 
 While it runs, periodically tail the output to give the user updates on which iteration it's on, what the scores look like, and how description length is trending.
 
-This handles the full optimization loop automatically. It splits the eval set into 60% train and 40% held-out test, evaluates the current description (running each query 3 times to get a reliable trigger rate), then calls Claude to propose improvements based on what failed. It re-evaluates each new description on both train and test, iterating up to 5 times (or until plateau). When it's done, it opens an HTML report in the browser showing the results per iteration and returns JSON with `best_description` — selected by test score (with shorter winning ties) rather than train score to avoid overfitting.
+This handles the full optimization loop automatically. It splits the eval set into 60% train and 40% held-out test, evaluates the current description (running each query 3 times to get a reliable trigger rate), then calls Claude to propose improvements based on what failed. It re-evaluates each new description on both train and test, iterating up to 5 times (or until plateau). When it's done, it writes an HTML report of the results per iteration to the results directory and returns JSON with `best_description` — selected by test score (with shorter winning ties) rather than train score to avoid overfitting.
 
 ### How skill triggering works
 
@@ -75,4 +78,4 @@ This means your eval queries should be substantive enough that Claude would actu
 
 ### Step 4: Apply the result
 
-Take `best_description` from the JSON output and update the skill's SKILL.md frontmatter. Show the user before/after and report the scores.
+Take `best_description` from the JSON output and update the skill's SKILL.md frontmatter. Show the user before/after and report the scores. Deliver the final `report.html` to the user the same way as any other file (a browser opens it on its own only where there is a display).
