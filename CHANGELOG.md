@@ -2,6 +2,26 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.16.1] - 2026-10-03
+
+### Fixed
+- **Where a Cowork task runs, by interface.** 0.16.0 said choosing Cowork in the Chat/Cowork picker
+  starts a cloud session. It runs locally when "Only on this computer" is on and in the cloud when
+  it's off; the newer interface ran in the cloud even with the setting on. `environments.md` now says
+  so and quotes the app's notice on local tasks that new ones can't be started from October 6.
+- **Plugin and skill paths in a local session's shell.** The guide said the VM shell can't resolve
+  the substituted host path. Current Desktop builds rewrite those paths inside shell commands, so the
+  token works there; the guide now warns instead not to hand a path the shell printed to the file
+  tools, which refuse VM paths.
+- **The `claude` CLI is not only in Claude Code.** It was found in a local session's shell, and its
+  absence from the chat runtime was never measured. The README, `SKILL.md` and the
+  `claude-cli-dependency` lint message now say it may be off the PATH outside Claude Code and to gate
+  a `claude -p` step on `command -v claude`.
+
+### Added
+- **`$ARGUMENTS` can arrive unfilled** in a cloud session when the skill is invoked before the
+  session exists. The setup guidance now says to take the input from the user's message then.
+
 ## [0.16.0] - 2026-10-02
 
 ### Fixed
