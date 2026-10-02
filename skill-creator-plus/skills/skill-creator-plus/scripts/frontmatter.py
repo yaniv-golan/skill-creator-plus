@@ -4,7 +4,7 @@ Stdlib-only parser for SKILL.md YAML frontmatter.
 
 Why this exists: skill-creator-plus is distributed as a `.skill` zip and runs in sandboxes whose
 package inventory it does not control and must not depend on. Do NOT "simplify" this back to PyYAML
-on the grounds that some sandbox ships it — Cowork's image does, and can install more, but a
+on the grounds that some sandbox ships it — the local session's image does, and can install more, but a
 validator must not be hostage to any one image's contents and Claude.ai's inventory has never been
 probed. Frontmatter
 is a small, well-constrained YAML subset — a mapping of scalars, string lists, and shallow nested

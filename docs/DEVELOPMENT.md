@@ -10,17 +10,17 @@ python skill-creator-plus/skills/skill-creator-plus/scripts/quick_validate.py sk
 # Cross-runtime portability lint (stdlib-only; --target claude-code|claude-ai|cowork|all)
 cd skill-creator-plus/skills/skill-creator-plus && python -m scripts.check_portability . --target all
 # Rules: desc-over-hard-cap, listing-entry-truncation, listing-desc-drop-risk, subagent-dependency,
-# claude-cli-dependency, browser-display-dependency, outputs-prefix-relative (Cowork-only:
+# claude-cli-dependency, browser-display-dependency, outputs-prefix-relative (cowork target only:
 # a workspace under a relative `outputs/` path: refused on Desktop 2.7032.0+, nested and hidden on older
-# Desktop, lost in cloud Cowork),
+# Desktop, lost in a cloud session),
 # relative-output-path (ADVISORY, claude-ai + cowork: SKILL.md or references/ tells the model to
-# write a file to a bare relative path — invisible in cloud Cowork, refused by local Cowork's file
-# tools, outside the outputs dir on the chat runtime. Precision over recall: imperative write verb +
+# write a file to a bare relative path — invisible in a cloud session, refused by a local session's
+# file tools, outside the outputs dir on the chat runtime. Precision over recall: imperative write verb +
 # relative file path only; silent on absolute/~/$VAR/<placeholder> bases, bundled files, a basename
 # the file anchors elsewhere, a stated base on the line, cd-to-absolute fences, and any line
 # outputs-prefix-relative already owns. Suppress per file with
 # `<!-- portability-allow: relative-output-path -->`),
-# thirdparty-import (allowlisted against Cowork's
+# thirdparty-import (allowlisted against the local session's
 # preinstalled stack), delivery-tool-single-lane, delivery-conditional-deliverable,
 # plugin-bin-directory (PLUGIN-level, claude-ai-only: the plugin root — the dir holding
 # `.claude-plugin/plugin.json` — has a non-empty `bin/`, which claude.ai rejects OUTRIGHT from
@@ -120,7 +120,7 @@ cowork-harness verify-cassettes harness/cassettes --allow-empty
 
 ## cowork-harness dogfood suite (`harness/`)
 
-`harness/` regression-tests this repo's own skill under Claude Cowork's runtime contract. It is
+`harness/` regression-tests this repo's own skill under the runtime contract of a cloud or local session. It is
 maintainer CI, not part of the user-facing skill workflow. Full instructions: `harness/README.md`.
 
 - **CI** (`.github/workflows/harness.yml`) runs the token-free static lane on every PR/push:

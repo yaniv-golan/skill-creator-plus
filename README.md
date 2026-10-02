@@ -9,7 +9,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 [![Claude Code Plugin](https://img.shields.io/badge/Claude_Code-plugin-F97316)](https://docs.anthropic.com/en/docs/agents-and-tools/claude-code/plugins)
 
-The skill that builds skills. Draft one and ship it in a single pass, or run evals against a baseline and iterate until it measurably works — targeting Claude Code, Claude.ai or Cowork, whose runtimes differ in ways that silently break skills. You can also just ask it how skills work. Based on Anthropic's official [`skill-creator`](https://github.com/anthropics/claude-plugins-official) plugin, with bug fixes and best practices baked in.
+The skill that builds skills. Draft one and ship it in a single pass, or run evals against a baseline and iterate until it measurably works — targeting Claude Code, the Claude app's chat, or its cloud and local sessions (Claude Cowork, now part of Claude for accounts that have moved over) — runtimes that differ in ways that silently break skills. You can also just ask it how skills work. Based on Anthropic's official [`skill-creator`](https://github.com/anthropics/claude-plugins-official) plugin, with bug fixes and best practices baked in.
 
 | | Official `skill-creator` | `skill-creator-plus` |
 |---|---|---|
@@ -17,9 +17,9 @@ The skill that builds skills. Draft one and ship it in a single pass, or run eva
 | Script vs. Instruct guidance | — | Decision framework for when to bundle scripts vs. use instructions |
 | Structure validation | — | Frontmatter, naming and length caps against the [agentskills.io](https://agentskills.io/specification) spec |
 | Cross-runtime linting | — | 14 rules for what breaks outside Claude Code — sub-agent, `claude` CLI and browser dependencies, third-party imports, file delivery, compaction |
-| Cowork authoring guidance | — | Runtime-specific guidance for Cowork's two lanes ([below](#authoring-for-cowork)) |
+| Cloud and local session guidance | — | Runtime-specific guidance for the Claude app's cloud and local sessions ([below](#authoring-for-cowork)) |
 | Claude Code runtime docs | — | Listing budget + per-skill degradation order, permission semantics, truncation caps, live-reload behavior — verified against 2.1.222–2.1.251 (listing budget re-verified at 2.1.280) |
-| Eval viewer in Cowork | Silent fail on submit | Copyable JSON textarea (fixed) |
+| Eval viewer in cloud and local sessions | Silent fail on submit | Copyable JSON textarea (fixed) |
 | Description optimizer | Requires separate `ANTHROPIC_API_KEY`; drifts toward 1,024-char bloat | Uses your existing `claude` session; length-aware selection + plateau early-stop |
 | Benchmarking script | Silent empty results | Fixed directory handling |
 | Skill type taxonomy | 3 broad categories | 3 + 9 Anthropic internal types |
@@ -30,7 +30,7 @@ The skill that builds skills. Draft one and ship it in a single pass, or run eva
 Anthropic ships a `skill-creator` plugin. It's good, but several parts are broken or missing:
 
 - **Best practices guide included** — 620+ lines of patterns, structural templates, troubleshooting guide, and checklists extracted from Anthropic's [Complete Guide to Building Skills for Claude](https://resources.anthropic.com/hubfs/The-Complete-Guide-to-Building-Skill-for-Claude.pdf) and Thariq's [Lessons from Building Claude Code Skills](https://x.com/trq212/status/2024574133011673516). Includes a "Script vs. Instruct" decision framework for when to bundle pre-made scripts vs. keep logic as instructions — covering context window efficiency, reliability, and auditability. The built-in doesn't ship any of this.
-- **A skill that works here can break there, silently** — the `claude` CLI exists only in Claude Code, so a `claude -p` step is dead anywhere else; the Claude app's chat runtime has no sub-agent tool, so parallel eval runs have to collapse to serial there (a Claude app conversation running as cloud Cowork does have one — route by the tool list, not the product); a Cowork agent can't serve a local HTTP server and open it, so the eval viewer needs a static build; a third-party import on Cowork costs an install on every run, and egress is org-configurable, so a locked-down org can refuse it; and file delivery differs per surface — on Cowork's remote lane, writing a file is not delivering it. Structure validation can't see any of that, so there are two checks: `quick_validate` for structure, and a 14-rule portability linter for runtime assumptions — including the two ways compaction loses a skill. Both are stdlib-only, because they have to run inside the sandboxes they lint. Rule ids, flags and exit codes are in [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md).
+- **A skill that works here can break there, silently** — the `claude` CLI exists only in Claude Code, so a `claude -p` step is dead anywhere else; the Claude app's chat runtime has no sub-agent tool, so parallel eval runs have to collapse to serial there (a Claude app conversation running in a cloud session does have one — route by the tool list, not the product); an agent in a cloud or local session can't serve a local HTTP server and open it, so the eval viewer needs a static build; a third-party import there costs an install on every run, and egress is org-configurable, so a locked-down org can refuse it; and file delivery differs per surface — in a cloud session, writing a file is not delivering it. Structure validation can't see any of that, so there are two checks: `quick_validate` for structure, and a 14-rule portability linter for runtime assumptions — including the two ways compaction loses a skill. Both are stdlib-only, because they have to run inside the sandboxes they lint. Rule ids, flags and exit codes are in [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md).
 - **Claude Code runtime docs** — the mechanics most skill authors hit the hard way, read out of the shipping binary rather than inherited from a blog post: overflow of the shared listing budget drops descriptions **per skill, least-recently-used first**, packing first-fit, so full and name-only entries coexist and a long description can lose to a shorter one; `allowed-tools` **grants** permission rather than requesting it; and compaction is a CHARACTER gate, not the documented token one, losing content two different ways — truncation keeps the first 19,900 characters and leaves a marker, while the combined cross-skill cap **zeroes** a skill outright with no marker and no entry. Verified against Claude Code 2.1.222–2.1.251; the listing budget re-verified at 2.1.280. Where the public docs and the binary disagree, [the reference](skill-creator-plus/skills/skill-creator-plus/references/official-guide-patterns.md) says so and shows which one shipped.
 
 The eval viewer, description optimizer and benchmarking fixes are in the table above; see the [CHANGELOG](CHANGELOG.md) for the full list.
@@ -85,16 +85,17 @@ Then repeat. Order is flexible, and an existing draft can join at step 1.
 - **Blind A/B comparison** — the comparator agent scores two outputs without knowing which skill produced them; the analyzer agent then unblinds and explains the differences.
 - **Description optimization** — generates trigger and non-trigger queries, runs an optimization loop with a train/test split, and selects the best-performing description. A description is what decides whether your skill is ever invoked at all.
 
-## Authoring for Cowork
+<a id="authoring-for-cowork"></a>
+## Authoring for cloud and local sessions
 
-Cowork breaks assumptions that hold everywhere else, and it breaks them *quietly* — the write succeeds, the tool reports success, and the file is somewhere nobody will look. The skill knows about:
+Cloud and local sessions break assumptions that hold everywhere else, and it breaks them *quietly* — the write succeeds, the tool reports success, and the file is somewhere nobody will look. The skill knows about:
 
-- **Where the workspace must live.** The skill directory is a read-only plugin mount, so the workspace can't sit beside it. The agent falls back to the session scratchpad — which on the remote lane is reclaimed at session end, destroying the skill it just built.
+- **Where the workspace must live.** The skill directory is a read-only plugin mount, so the workspace can't sit beside it. The agent falls back to the session scratchpad — which in a cloud session is reclaimed at session end, destroying the skill it just built.
 - **File tools and the shell don't share a working directory.** No single relative path is correct for both, so the identifier and the base have to stay apart.
-- **Writing a file is not delivering it.** On the remote lane a file written and never presented through a tool is silently lost. Delivery is two steps, always taught in order.
-- **A script's stdout is not delivery for text, either.** Tool-call output is collapsed in the Cowork transcript, so anything the user actually needs to read has to be said, not printed.
+- **Writing a file is not delivering it.** In a cloud session a file written and never presented through a tool is silently lost. Delivery is two steps, always taught in order.
+- **A script's stdout is not delivery for text, either.** Tool-call output is collapsed in a cloud or local session's transcript, so anything the user actually needs to read has to be said, not printed.
 
-Parts of this are authoring guidance rather than verified behavior, and the guidance says which is which. For the current, dated state of Cowork's runtime — what was checked, when, and on which Desktop and agent builds — see [Writing skills that survive Cowork](https://ccinternals.dev/cowork/) on ccinternals.dev, which most of this guidance draws on. See [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) for the linter's flags, rule ids and exit codes.
+Parts of this are authoring guidance rather than verified behavior, and the guidance says which is which. For the current, dated state of these runtimes — what was checked, when, and on which Desktop and agent builds — see [Writing skills that survive Cowork](https://ccinternals.dev/cowork/) on ccinternals.dev, which most of this guidance draws on. See [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) for the linter's flags, rule ids and exit codes.
 
 ## Installation
 

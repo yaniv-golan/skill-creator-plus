@@ -6,7 +6,7 @@
 # Runs a script shipped with this plugin as a bare command, so no filesystem path has to travel
 # from the file tools to the shell. Claude Code puts <plugin root>/bin on the Bash tool's PATH.
 #
-# READ FIRST — this is an OPTIMISATION, not a fallback. Measured: at Cowork host-loop, the lane
+# READ FIRST — this is an OPTIMISATION, not a fallback. Measured: on a local session's host loop, the lane
 # with the namespace split this exists to bridge, the shell's PATH carries no plugin bin/ at all.
 # Gate every use on `command -v <name>` and keep a search branch behind it.
 #

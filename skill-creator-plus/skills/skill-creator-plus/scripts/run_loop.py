@@ -334,7 +334,7 @@ def main():
         if args.report == "auto":
             timestamp = time.strftime("%Y%m%d_%H%M%S")
             # Default beside the results dir, not the system temp dir: under sandboxed
-            # runtimes (e.g. Cowork) the shell's temp dir is private to the VM and reaches
+            # runtimes (e.g. a cloud or local session) the shell's temp dir is private to the VM and reaches
             # neither the user nor the agent's file tools. Fall back to temp only if there
             # is no results dir to anchor to.
             _anchor = Path(args.results_dir) if args.results_dir else Path(tempfile.gettempdir())
