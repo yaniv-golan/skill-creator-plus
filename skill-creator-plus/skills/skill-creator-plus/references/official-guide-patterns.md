@@ -128,7 +128,7 @@ The `description` field is the primary — and on most hosts, the **only** — s
 
 ### Claude-specific addenda (Claude Code, verified against 2.1.222)
 
-- **`when_to_use`** is an optional companion field. Claude Code renders the listing entry as `<name>: <description> - <when_to_use>`. Non-Claude hosts ignore it entirely — **never move trigger-critical content out of `description` into `when_to_use`**. Under Cowork it appears to be only *half* visible: the session puts two different skill listings in front of the model and only one of them carries `when_to_use` (see `references/environments.md` → *Two skill listings under Cowork*). That is a second, mechanism-level reason the field must never be load-bearing.
+- **`when_to_use`** is an optional companion field. Claude Code renders the listing entry as `<name>: <description> - <when_to_use>`. Non-Claude hosts ignore it entirely — **never move trigger-critical content out of `description` into `when_to_use`**. In a local session it appears to be only *half* visible: the session puts two different skill listings in front of the model and only one of them carries `when_to_use` (see `references/environments.md` → *Two skill listings in a local session*). That is a second, mechanism-level reason the field must never be load-bearing.
 - **Combined listing-entry cap: 1,536 characters** for `description + when_to_use`. This is the default of the `skillListingMaxDescChars` setting, not a hard-coded constant. Above it, Claude truncates the entry.
 - **The listing budget is shared, and overflow degrades per skill — not all at once** (re-verified against 2.1.280). Every skill competes for `contextWindow × charsPerToken × skillListingBudgetFraction` characters (fraction defaults to `0.01`). `charsPerToken` is 4 for models up to Opus 4.6, Sonnet 4.6 and Haiku 4.5, and 3 for newer ones (Sonnet 5, Opus above 4.6, Fable 5). That gives **~30,000 chars for current first-party models at their 1 M window**, 6,000 for the same models at 200 K (1 M disabled, or a third-party provider without native 1 M), and 8,000 for Haiku 4.5 and older 200 K models. A 4-chars-per-token model running at 1 M would get 40,000. On overflow Claude ranks skills by recency-weighted usage — `usageCount × max(0.5^(daysSinceLastUse/7), 0.1)`, 0 if never used, ties keeping listing order — then packs descriptions **first-fit**: a description that doesn't fit is skipped and packing continues, so a long description can lose to a shorter, lower-ranked one. Every skill that loses renders as name-only. **The skills you use keep their descriptions; the ones you never touch lose theirs first.** Bundled prompt skills, and skills set to `name-only`, are protected and never compete.
 
@@ -389,7 +389,7 @@ Some skills need context from the user (e.g., which Slack channel to post to). S
 
 What the model cannot see from inside a run, and the skill should say:
 
-- **Where to keep the answers.** Not in the skill directory: it is read-only in local Cowork and the chat runtime, discarded with a cloud session, and replaced by an upgrade anywhere. In Claude Code, a plugin's `${CLAUDE_PLUGIN_DATA}` is the place (see below). Elsewhere no store is established (the token can arrive unsubstituted), so keep setup in a folder the user connected, or ask again.
+- **Where to keep the answers.** Not in the skill directory: it is read-only in a local session and the chat runtime, discarded with a cloud session, and replaced by an upgrade anywhere. In Claude Code, a plugin's `${CLAUDE_PLUGIN_DATA}` is the place (see below). Elsewhere no store is established (the token can arrive unsubstituted), so keep setup in a folder the user connected, or ask again.
 - **Runs with nobody to answer.** A sub-agent or a forked skill (`context: fork`) can't reach the user: only its final message comes back, and the main conversation rewrites it. A scheduled task usually has no question tool. Pass such runs everything in `$ARGUMENTS` or saved setup.
 - **Secrets.** Any answer typed or picked in the conversation stays in the transcript. Point the user to their own configuration instead.
 
@@ -464,9 +464,9 @@ you must call it." It names no tool and no runtime, so it stays correct when a s
 renames one, or ships it behind a per-account gate.
 
 **Why not an environment check.** The obvious idea is a marker like `CLAUDE_CODE_IS_COWORK`. It
-fails in the worst possible way, in both Cowork lanes, for different reasons. Locally a skill spans
+fails in the worst possible way, in both cloud and local sessions, for different reasons. Locally a skill spans
 two execution contexts and the shell context is sealed — none of those markers survive into it. In
-cloud Cowork there is one context and some markers do reach the shell (`CLAUDECODE`, the entry-point
+a cloud session there is one context and some markers do reach the shell (`CLAUDECODE`, the entry-point
 marker), but `CLAUDE_CODE_IS_COWORK` is not among them (observed in a single cloud session). Either
 way the check returns "not Cowork" *in exactly the configuration you most needed to detect*,
 silently, and every branch downstream is wrong. Host
@@ -483,7 +483,7 @@ actually wrote. A script with no caller takes the destination as a **required ar
 loudly when it is missing** — it never invents a directory.
 
 That last clause is load-bearing, and here is the failure it prevents. A probe of the shape
-"if a Cowork-shaped mount is visible, write there, otherwise write to `outputs/`" looks fail-safe
+"if a session mount like `/sessions/<id>/mnt/` is visible, write there, otherwise write to `outputs/`" looks fail-safe
 and is not: on a surface where the shell already starts *inside* the outputs directory, the mount is
 not visible, the fallback appends a second level, and you have re-created the `outputs/outputs/`
 doubling — silently. One bit of evidence cannot separate three or more surfaces. A probe that
@@ -493,7 +493,7 @@ guesses is worse than an argument that is missing, because the missing argument 
 
 `SKILL.md` states the rules; this is the mechanism behind them.
 
-**`when_to_use`.** Claude Code joins it with `description` in its skill listing, and the combined pair is capped at 1,536 characters there. Non-Claude hosts ignore the field entirely, so trigger information placed only here is invisible to them. Under Cowork it is worse than non-portable: the session appears to show the model **two** listings and only one carries `when_to_use` (see `references/environments.md` → *Two skill listings under Cowork*), so it is partially invisible even on Claude. Keep `description` self-sufficient and treat `when_to_use` as additive phrasing only.
+**`when_to_use`.** Claude Code joins it with `description` in its skill listing, and the combined pair is capped at 1,536 characters there. Non-Claude hosts ignore the field entirely, so trigger information placed only here is invisible to them. In a local session it is worse than non-portable: the session appears to show the model **two** listings and only one carries `when_to_use` (see `references/environments.md` → *Two skill listings in a local session*), so it is partially invisible even on Claude. Keep `description` self-sufficient and treat `when_to_use` as additive phrasing only.
 
 **`allowed-tools` / `disallowed-tools` / `shell`.** `allowed-tools` **grants**: it pre-approves tools for the invoking turn so Claude uses them without a permission prompt, and the grant clears on the user's next message. Populating it does **not** cause a prompt. `disallowed-tools` is the denylist that removes tools while the skill is active. `shell` only selects an interpreter (`bash`/`powershell`) and carries no permission semantics.
 
@@ -553,7 +553,7 @@ Error: --format must be one of: json, csv, table.
 
 **Predictable output size.** Many agent harnesses truncate tool output beyond a threshold (often 10–30 K characters), silently dropping critical information. If your script can produce large output, default to a summary or a reasonable limit and support pagination flags (`--limit`, `--offset`). For genuinely large output that doesn't paginate, require an `--output FILE` flag so the agent explicitly opts in to capturing it on disk.
 
-**The same rule governs a sub-agent: hand it a path, get back a receipt.** A sub-agent is a step that produces bulk output, so treat it like a script that does — it writes its result to an absolute path given in its dispatch prompt (see `environments.md` → *On local Cowork, a sub-agent cannot resolve a connected folder's mount name from its own prompt* for why the path must be resolved and absolute) and returns only a receipt: status, the path it wrote, and a count. The orchestrator then checks the file exists and reads the slice it needs. Returning the full result instead spends the parent's context on bytes it will mostly discard, and does it at the one moment the parent has the least room — mid-workflow, with every prior step's output already behind it. The cost compounds with fan-out: ten sub-agents returning their work in full is ten payloads in one context, where ten receipts is ten lines.
+**The same rule governs a sub-agent: hand it a path, get back a receipt.** A sub-agent is a step that produces bulk output, so treat it like a script that does — it writes its result to an absolute path given in its dispatch prompt (see `environments.md` → *In a local session, a sub-agent cannot resolve a connected folder's mount name from its own prompt* for why the path must be resolved and absolute) and returns only a receipt: status, the path it wrote, and a count. The orchestrator then checks the file exists and reads the slice it needs. Returning the full result instead spends the parent's context on bytes it will mostly discard, and does it at the one moment the parent has the least room — mid-workflow, with every prior step's output already behind it. The cost compounds with fan-out: ten sub-agents returning their work in full is ten payloads in one context, where ten receipts is ten lines.
 
 *Worth knowing, and only partly verified: the reason to prefer a file over the transcript is that the transcript is the lossy half. What is measured here is narrow and concerns skills, not sub-agent results — when a skill is truncated at re-attachment, "the file on disk is untouched, so a `Read` still recovers it; nothing else will" (see SKILL.md Size). Generalising that to intermediate results is an inference, not a measurement; no compacted multi-step run has been traced here. Carry the caveat that comes with it either way: a file is recoverable only if its path survives too. A run staged in a timestamped directory named nowhere but the transcript is exactly as lost as the payload would have been — derive the path from something stable, or write it where a later step can find it without the transcript.*
 
@@ -572,10 +572,10 @@ The common thread: scripts are agent tools, not human CLIs. Design them so a fre
 
 ### On-Demand Hooks
 Skills can include hooks that are only activated when the skill is called, lasting for the duration of the session. Use this for opinionated hooks that you don't want running all the time but are extremely useful sometimes. Examples:
-- `/careful` — blocks rm -rf, DROP TABLE, force-push, kubectl delete via a PreToolUse matcher on the shell. Write it as `Bash|mcp__workspace__bash`: a bare `Bash` reaches Cowork's local shell only through a tool alias the session may not carry.
+- `/careful` — blocks rm -rf, DROP TABLE, force-push, kubectl delete via a PreToolUse matcher on the shell. Write it as `Bash|mcp__workspace__bash`: a bare `Bash` reaches a local session's shell only through a tool alias the session may not carry.
 - `/freeze` — blocks any Edit/Write that's not in a specific directory
 
-A hook that names a script you didn't ship behaves differently per host shell. `dash` (the usual `/bin/sh` on Debian and Ubuntu) exits 2 when it cannot open the script — the hook *block* code — while macOS `sh` and `bash` exit 127, which is not. The runtime softens a missing script's exit 2 into a visible warning only for Stop, SubagentStop, TaskCompleted, TeammateIdle and a plugin's UserPromptSubmit hook; for PreToolUse it is a real block, so under `dash` a missing script refuses every call the hook matches. Local host-loop hooks run on the Mac and don't block this way. On the Linux lanes — cloud Cowork and local Cowork's VM — `/bin/sh` is `dash` (measured on both), so there a missing PreToolUse script does block. Ship every script a hook names inside the plugin and test the installed plugin, not the source folder. Don't paper over it with a "skip if the script is missing" guard: a safety hook that fails open is worse than one that fails loudly.
+A hook that names a script you didn't ship behaves differently per host shell. `dash` (the usual `/bin/sh` on Debian and Ubuntu) exits 2 when it cannot open the script — the hook *block* code — while macOS `sh` and `bash` exit 127, which is not. The runtime softens a missing script's exit 2 into a visible warning only for Stop, SubagentStop, TaskCompleted, TeammateIdle and a plugin's UserPromptSubmit hook; for PreToolUse it is a real block, so under `dash` a missing script refuses every call the hook matches. Local host-loop hooks run on the Mac and don't block this way. In the Linux shells — a cloud session and a local session's VM — `/bin/sh` is `dash` (measured on both), so there a missing PreToolUse script does block. Ship every script a hook names inside the plugin and test the installed plugin, not the source folder. Don't paper over it with a "skip if the script is missing" guard: a safety hook that fails open is worse than one that fails loudly.
 
 ### Composing Skills
 Skills can depend on each other. You can reference other skills by name in your instructions, and the model will invoke them if they're installed. Formal dependency management doesn't exist yet, but this pattern works today.
@@ -699,7 +699,7 @@ It runs the command at skill activation time and inlines the output into the ski
 
 ### Path Variables
 
-**To reach a bundled script, write `${CLAUDE_SKILL_DIR}/scripts/tool.py` in `SKILL.md`.** In Claude Code and local Cowork it is replaced with a real absolute path before the model sees it, so the model can hand that path straight to Bash. In cloud Cowork it arrives unexpanded when the skill is invoked before the conversation has started its cloud session (in the newer interface, typically as the first message), so pair it with a fallback that finds the file from the shell (stanza B of `assets/skill-script-invocation.md`). That is the whole answer for most skills; the rest of this section is edge cases, and you can skip to *Argument Substitution* unless you hit one.
+**To reach a bundled script, write `${CLAUDE_SKILL_DIR}/scripts/tool.py` in `SKILL.md`.** In Claude Code and a local session it is replaced with a real absolute path before the model sees it, so the model can hand that path straight to Bash. It arrives unexpanded when the skill is invoked before the conversation has started its cloud session (in the newer interface, typically as the first message), so pair it with a fallback that finds the file from the shell (stanza B of `assets/skill-script-invocation.md`). That is the whole answer for most skills; the rest of this section is edge cases, and you can skip to *Argument Substitution* unless you hit one.
 
 The two that bite in practice: the token is **dead outside `SKILL.md`** — literal characters in a `references/*.md`, empty string in a shell — so a reference doc should name `scripts/tool.py` and let `SKILL.md` supply the base at the point of use. And if you want the model to invoke something as a *command* rather than a path, ship `bin/<name>` — but only for a CLI-installed plugin, since a top-level `bin/` makes a plugin unpublishable through claude.ai organization settings.
 
@@ -729,7 +729,7 @@ Save persistent data to ${CLAUDE_PLUGIN_DATA}/history.json.
 | `${CLAUDE_PLUGIN_DATA}` | ✅ | ✅ | ✅ | ❌ literal | ❌ empty **or another plugin's data dir** |
 | `${CLAUDE_SESSION_ID}` | ✅ | ❌ **not substituted** | ✅ | ❌ literal | ❌ empty |
 
-The table describes Claude Code and local Cowork. **In cloud Cowork, a plugin skill invoked before the conversation has started its cloud session (in the newer interface, typically as the first message) arrives with `${CLAUDE_SKILL_DIR}` and `${CLAUDE_PLUGIN_DATA}` unexpanded in its `SKILL.md` body** (the other two tokens were not checked). Invoked later in the conversation, they arrive filled: the skill directory under `/root/.claude/plugins/synced/…`, and the data directory as `/root/.claude/plugins/data/<plugin>-synced`. A skill that may run in the cloud needs the shell-side fallback either way.
+The table describes Claude Code and local sessions. **A plugin skill invoked before the conversation has started its cloud session (in the newer interface, typically as the first message) arrives with `${CLAUDE_SKILL_DIR}` and `${CLAUDE_PLUGIN_DATA}` unexpanded in its `SKILL.md` body** (the other two tokens were not checked). Invoked later in the conversation, they arrive filled: the skill directory under `/root/.claude/plugins/synced/…`, and the data directory as `/root/.claude/plugins/data/<plugin>-synced`. A skill that may run in the cloud needs the shell-side fallback either way.
 
 **The `commands/*.md` column is the trap: the answer is token-specific, not surface-specific.** A
 command *is* a definition surface and substitution *does* happen there — just not for
@@ -758,7 +758,7 @@ The `allowed-tools` column is a separate substitution pass from the body's, and 
 - **It is the least-recently-invoked skill that gets zeroed**, since packing is most-recent-first — precisely the skill whose path you would need to recover.
 - **The path may name a directory that no longer exists.** Plugin roots are version-stamped, so an ordinary update leaves the recorded path dangling even when the line itself survives intact.
 
-- **In cloud Cowork it can name a directory the shell doesn't have.** For a plugin skill invoked before the conversation has started its cloud session (in the newer interface, typically as the first message), it reads `/mnt/skills/plugins/<plugin>:<skill>`, which doesn't exist there; invoked later, it names the synced copy under `/root/.claude/plugins/synced/…`.
+- **It can name a directory a cloud session's shell doesn't have.** For a plugin skill invoked before the conversation has started its cloud session (in the newer interface, typically as the first message), it reads `/mnt/skills/plugins/<plugin>:<skill>`, which doesn't exist there; invoked later, it names the synced copy under `/root/.claude/plugins/synced/…`.
 
 So treat the base-directory line as a first thing to try, not a guarantee. (It is also absent entirely for a single-file `commands/*.md`, which gets no such line at all.)
 
@@ -778,9 +778,9 @@ For anything the model invokes as a *command* rather than a path, ship `bin/<nam
 
    So a shell reading `$CLAUDE_PLUGIN_ROOT` may get nothing, or a confident, wrong, unrelated directory. Never trust it in a shell. The corollary for skill authors is the sharper one: **a variable being set in your shell is not evidence it was set for you.**
 
-   *Lane caveat, because these two facts read as opposites: `CLAUDE_ENV_FILE` is a plain-CLI mechanism. Under Cowork the VM shell is sealed and hook exports do not cross the host/VM boundary, so "don't rely on a hook to export env for your shell commands" remains correct **there**. Neither fact generalizes to the other lane.*
+   *Lane caveat, because these two facts read as opposites: `CLAUDE_ENV_FILE` is a plain-CLI mechanism. In a local session the VM shell is sealed and hook exports do not cross the host/VM boundary, so "don't rely on a hook to export env for your shell commands" remains correct **there**. Neither fact generalizes to the other lane.*
 
-Under Cowork's host-loop the substituted value is a **host** path, which the VM shell cannot resolve either — so even case 1 does not survive being handed to a sandboxed shell.
+Under a local session's host loop the substituted value is a **host** path, which the VM shell cannot resolve either — so even case 1 does not survive being handed to a sandboxed shell.
 
 #### Braced or bare? The same token has three different form rules
 
@@ -839,7 +839,7 @@ do not ship a top-level `bin/`.
   token really is substituted.
 - **Something the user types** — a `commands/*.md` slash command wrapping the script. The rejection
   message itself names hooks, commands and `mcpServers` as the sanctioned entry points.
-- **Not a substitute: declaring `clis`.** On Cowork's org-remote lane the runtime materialises
+- **Not a substitute: declaring `clis`.** On the org-remote lane the runtime materialises
   `bin/<key>` itself (see *Status* below) — but whether declaring `clis` clears claude.ai intake is
   untested here, so don't plan a distribution around it.
 
@@ -861,7 +861,7 @@ Two traps around that restriction:
   rather than from a hooks/`mcpServers` config, the portable answer is the read-path-then-search
   resolver in `assets/skill-script-invocation.md`, not the documented one.
 
-With that established: Claude Code puts **every enabled non-builtin plugin's `bin/` directory on the Bash tool's PATH**, and the entry is correct for that shell's own namespace in all three lanes — local CLI cache paths, Cowork host-loop mounts, and cloud sync paths. So a scaffolded skill can ship `bin/<name>` and invoke it as a bare command:
+With that established: Claude Code puts **every enabled non-builtin plugin's `bin/` directory on the Bash tool's PATH**, and the entry is correct for that shell's own namespace in all three places — local CLI cache paths, local-session host-loop mounts, and cloud-session sync paths. So a scaffolded skill can ship `bin/<name>` and invoke it as a bare command:
 
 ```bash
 my-plugin-tool --input foo      # resolved via PATH; no path crosses a namespace boundary
@@ -883,10 +883,10 @@ This complements the "pass bundled scripts absolute paths" rule rather than repl
 
 - **A PATH entry is not evidence the directory exists.** The builder maps every enabled non-builtin plugin to `<root>/bin` and filters only for shell metacharacters — there is no existence check, so the entry appears whether or not the directory is there. The consequence is a diagnostic that lies: `echo $PATH` shows your plugin listed and looks healthy, so "command not found" never means PATH is misconfigured — it means the file is missing, at the wrong root, or not executable. Check with `command -v`, not by reading PATH.
 
-- **Commit the launcher executable.** The plugin mount is read-only under Cowork, so a missing `+x` bit cannot be repaired at runtime.
+- **Commit the launcher executable.** The plugin mount is read-only in a cloud or local session, so a missing `+x` bit cannot be repaired at runtime.
 - **A plugin path containing shell metacharacters is dropped from PATH silently** — the runtime filters those entries and logs a warning the model never sees. A plugin installed under a path with a `$`, a quote, or a backtick simply has no `bin/` on PATH.
 
-*Status: verified on the local-install lane — the PATH entry is live (it resolves the moment the directory appears, with no reload) and source directories survive installation unaltered. On Cowork's org-remote lane the runtime writes into that directory too, and the rule is exact: a plugin root has a `bin/` **iff** its manifest declares `clis`, and the file dropped there is named for the declared key. So if you declare `clis: {foo: …}`, the runtime owns `bin/foo` — don't also ship a launcher by that name. Whether an author's differently-named launcher survives alongside the generated one is untested. The affordance appears to have no adopters yet, which is a reason to confirm a first use with `command -v <name>`, not a reason to doubt it.*
+*Status: verified on the local-install lane — the PATH entry is live (it resolves the moment the directory appears, with no reload) and source directories survive installation unaltered. On the org-remote lane the runtime writes into that directory too, and the rule is exact: a plugin root has a `bin/` **iff** its manifest declares `clis`, and the file dropped there is named for the declared key. So if you declare `clis: {foo: …}`, the runtime owns `bin/foo` — don't also ship a launcher by that name. Whether an author's differently-named launcher survives alongside the generated one is untested. The affordance appears to have no adopters yet, which is a reason to confirm a first use with `command -v <name>`, not a reason to doubt it.*
 
 *Version note: the commonly-cited v2.1.91 origin for the PATH behavior is **unverified**. The CHANGELOG embedded in these binaries reaches back only to 2.1.220, so its absence there proves nothing either way.*
 
@@ -911,7 +911,7 @@ Deploy the service "$0" to the "$1" environment (default: staging).
 
 When the user types `/deploy api-gateway production`, `$0` becomes `api-gateway` and `$1` becomes `production`.
 
-On Claude Desktop, `argument-hint` also tells the model what to collect when the skill is invoked (seen in local Cowork, not in cloud Cowork); without it, the model infers from `SKILL.md`. In Claude Code it is a hint shown while typing.
+On Claude Desktop, `argument-hint` also tells the model what to collect when the skill is invoked (seen in a local session, not in a cloud session); without it, the model infers from `SKILL.md`. In Claude Code it is a hint shown while typing.
 
 ### `user-invocable: false`
 
@@ -963,7 +963,7 @@ Everything in this section is Claude-specific (observed from Claude Code 2.1.222
 
 Claude Code supports inline shell substitution in skill bodies. Authors should know:
 
-- **Where it runs depends on the host, and on permissions.** Every command first goes through the shell tool's permission check. In Claude Code an allowed command runs, with the project working directory as CWD rather than `${CLAUDE_SKILL_DIR}` (scripts needing their own dir need `cd "$(dirname "$0")"` at the top), and its output is substituted. A command that is not allowed — one that touches a path outside the working directories, or uses `$(…)` the checker cannot analyse — makes the whole skill fail to load with "Shell command permission check failed", in the default permission mode; by the runtime's code, an uploaded skill's command stays literal in the CLI. In local Cowork the command is replaced with `[shell command execution disabled by policy]`. In a cloud session it reaches the model as literal text when the skill is invoked before the conversation has started its cloud session (in the newer interface, typically as the first message); after that, an allowed command runs and is substituted (a read inside the working directory did, and so did one the skill declared in `allowed-tools`), while one that needs approval, such as a write or a read outside the working directory, is not run: in auto mode it is rewritten as an instruction, `[run this first, exactly as written, and use its output: <command>]`, so it runs only if the model chooses to run it with a tool call, and in other modes the skill fails to load. A model asked to report such a line may print a plausible output it never computed; when testing, have the command produce a value nobody can guess and check it afterwards. Not with `uuidgen`, which the cloud container lacks: `cat /proc/sys/kernel/random/uuid`, declared in the skill's `allowed-tools` as `Bash(cat /proc/sys/kernel/random/uuid)`, ran there (untested without that entry). Don't make a skill depend on `` !`cmd` ``: keep it to reads inside the working directory or commands declared in `allowed-tools`; in the Claude app it can also arrive literal, disabled, or as an instruction to the model; and put anything load-bearing in a script the model runs explicitly.
+- **Where it runs depends on the host, and on permissions.** Every command first goes through the shell tool's permission check. In Claude Code an allowed command runs, with the project working directory as CWD rather than `${CLAUDE_SKILL_DIR}` (scripts needing their own dir need `cd "$(dirname "$0")"` at the top), and its output is substituted. A command that is not allowed — one that touches a path outside the working directories, or uses `$(…)` the checker cannot analyse — makes the whole skill fail to load with "Shell command permission check failed", in the default permission mode; by the runtime's code, an uploaded skill's command stays literal in the CLI. In a local session the command is replaced with `[shell command execution disabled by policy]`. In a cloud session it reaches the model as literal text when the skill is invoked before the conversation has started its cloud session (in the newer interface, typically as the first message); after that, an allowed command runs and is substituted (a read inside the working directory did, and so did one the skill declared in `allowed-tools`), while one that needs approval, such as a write or a read outside the working directory, is not run: in auto mode it is rewritten as an instruction, `[run this first, exactly as written, and use its output: <command>]`, so it runs only if the model chooses to run it with a tool call, and in other modes the skill fails to load. A model asked to report such a line may print a plausible output it never computed; when testing, have the command produce a value nobody can guess and check it afterwards. Not with `uuidgen`, which the cloud container lacks: `cat /proc/sys/kernel/random/uuid`, declared in the skill's `allowed-tools` as `Bash(cat /proc/sys/kernel/random/uuid)`, ran there (untested without that entry). Don't make a skill depend on `` !`cmd` ``: keep it to reads inside the working directory or commands declared in `allowed-tools`; in the Claude app it can also arrive literal, disabled, or as an instruction to the model; and put anything load-bearing in a script the model runs explicitly.
 - **A command that fails is worse than one that doesn't run.** Make every `` !`cmd` `` one that cannot exit non-zero in any environment the skill may run in. In Claude Code a failing command is reported to abort the skill load. In a cloud session, a command the skill declared in `allowed-tools` that then failed returned an error when the model invoked the skill ("Shell command failed for pattern …", seen once), and, when the user typed `/skill-name`, hung the conversation with no reply and no error ([anthropics/claude-code#99008](https://github.com/anthropics/claude-code/issues/99008)).
 - **Must appear at line start or after whitespace.** Mid-word backticks won't substitute.
 - **State doesn't persist between `!` blocks.** Each is independent.

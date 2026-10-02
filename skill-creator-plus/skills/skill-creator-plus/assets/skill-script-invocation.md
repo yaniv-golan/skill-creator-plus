@@ -23,16 +23,16 @@ environment variable, and expands to nothing in a shell. Read the resolved path 
 and pass it along verbatim, including to any sub-agent.
 ```
 
-## B. Anywhere the skill may run outside Claude Code (Cowork), or if unsure
+## B. Anywhere the skill may run outside Claude Code (a cloud or local session), or if unsure
 
 ```markdown
 **Running this skill's scripts.** Prefer the absolute path this file was loaded with:
 
     python3 ${CLAUDE_SKILL_DIR}/scripts/<script>.py [args]
 
-If the line above still shows the variable unexpanded (cloud Cowork does that when the skill is
-invoked before the conversation's cloud session exists, typically as its first message), or the
-shell reports that path missing (Cowork's host loop, where the shell and the file tools are
+If the line above still shows the variable unexpanded (it does when the skill is invoked before the
+conversation has started its cloud session, typically as its first message), or the
+shell reports that path missing (a local session's host loop, where the shell and the file tools are
 different mounts of the same content), locate the file from the SHELL's side and run what it finds:
 
     find / -path "*<skill-name>/scripts/<script>.py" -print -quit 2>/dev/null
@@ -44,7 +44,7 @@ directory, so checking whether it is empty will not tell you it is wrong.
 
 **A `bin/` launcher is an optimisation here, not the fallback.** If you ship one (see
 `assets/plugin-bin-launcher.sh`), the skill may try `command -v <cmd>` before the search — but it
-must not depend on it. Measured under Cowork host-loop: the workspace shell's `PATH` was eight
+must not depend on it. Measured under a local session's host loop: the workspace shell's `PATH` was eight
 stock entries with **no plugin `bin/` at all**, so `command -v` found nothing and only the search
 recovered. Install it as described in the launcher's header, confirm `<cmd> --list` names your
 scripts, and still keep the search branch.
@@ -118,7 +118,7 @@ validator says so.
 3. **A PATH entry is not evidence the directory exists.** The builder maps every enabled
    non-builtin plugin to `<root>/bin` with no existence check, so `echo $PATH` reads healthy on the
    actual failure and "command not found" never means PATH is misconfigured.
-4. **Don't name it after a `clis` key.** On Cowork's org-remote lane a plugin root has a `bin/`
+4. **Don't name it after a `clis` key.** On the org-remote lane a plugin root has a `bin/`
    **iff** `clis` is declared, and the runtime materialises `bin/<key>` itself as a wrapper shim on
    its own schedule.
 5. **Commit the exec bit.** The plugin mount is read-only; it cannot be added after install.

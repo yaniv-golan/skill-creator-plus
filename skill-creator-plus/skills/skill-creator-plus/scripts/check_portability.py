@@ -2,16 +2,16 @@
 """
 Cross-runtime portability linter for skills.
 
-skill-creator-plus can author skills for three runtimes — Claude Code, Claude.ai, and Claude
-Cowork — whose capabilities differ. A construct that works in Claude Code can silently break
-elsewhere: the Claude app's chat runtime has no sub-agent tool and no `claude` CLI (but a Claude
-app conversation can be a cloud Cowork session, which has a sub-agent tool — so a skill should check
-its tool list, not the product name); Cowork has no browser/display and ships
+skill-creator-plus can author skills for three runtimes — Claude Code, the Claude app's chat
+runtime (target `claude-ai`), and the Claude app's cloud and local sessions (target `cowork`, named
+for Claude Cowork) — whose capabilities differ. A construct that works in Claude Code can silently
+break elsewhere: the Claude app's chat runtime has no sub-agent tool and no `claude` CLI (but a
+Claude app conversation can run in a cloud session, which has a sub-agent tool — so a skill should
+check its tool list, not the product name); cloud and local sessions have no browser/display and ship
 a large but finite preinstalled Python stack (an import outside it costs an install on every run,
 and egress is org-configurable so a locked-down org can deny that install), and file-delivery tools
-differ per surface (Cowork alone has two, one per
-product lane, and an agent sees only its own — naming only one in skill text strands the lane
-served by the other; the correct pattern phrases delivery by outcome and names no tool — naming
+differ per surface (cloud and local sessions serve different ones, and an agent sees only its own —
+naming only one in skill text strands the surface served by the other; the correct pattern phrases delivery by outcome and names no tool — naming
 both, capability-conditionally, is also acceptable — and never gates producing the artifact itself
 on either being available). `quick_validate.py` checks *structure*; this checks *runtime
 portability*.
@@ -44,7 +44,7 @@ import sys
 from pathlib import Path
 
 # `claude-ai` means the Claude app's CHAT runtime, not every Claude app conversation: one can run
-# as (or upgrade to) a cloud Cowork session, which has a sub-agent tool and a shell, and that case
+# as (or start partway through) a cloud session, which has a sub-agent tool and a shell, and that case
 # is what `cowork` covers. The ids name runtimes by product for CLI stability; findings should say
 # what the runtime lacks, so an author checks the tool list rather than the product.
 TARGETS = ("claude-code", "claude-ai", "cowork")
@@ -232,14 +232,14 @@ _SUBAGENT_GUARD_RE = re.compile(r"if available|if you have|otherwise inline|when
 _CLAUDE_CLI_RE = re.compile(r"\bclaude\s+-p\b|\bclaude\s+setup-token\b|subprocess.*\bclaude\b")
 _BROWSER_RE = re.compile(r"\bwebbrowser\b|http\.server|HTTPServer|BaseHTTPRequestHandler|localhost:\d+|127\.0\.0\.1:\d+")
 
-# File-delivery tools are per-surface: no single name is served everywhere — Cowork alone has two,
-# one per product lane (desktop-local sandbox serves `present_files`, remote cloud-container Cowork
-# serves `SendUserFile`, also native to Claude Code), and an agent only sees the one for its surface.
+# File-delivery tools are per-surface: no single name is served everywhere — cloud and local sessions
+# serve different ones (a local session serves `present_files`, a cloud session serves
+# `SendUserFile`, also native to Claude Code), and an agent only sees the one for its surface.
 # Naming only one in skill text strands the lane served by the other; the correct pattern phrases
 # delivery by outcome and names no tool (naming BOTH, capability-conditionally, is also acceptable
 # and stays clean — see references/environments.md). Both rules below therefore carry the full
 # `TARGETS` — a single-lane skill can misbehave on any of the three runtimes depending on which
-# Cowork lane (or product) it lands on.
+# kind of session (or product) it lands on.
 # Fixed iteration order → deterministic finding order regardless of scan order.
 # NOT EXHAUSTIVE, deliberately: Claude Code tracks four delivery channels (`artifact`,
 # `cowork_present_files`, `send_user_file`, `brief`); these two are the ones whose *names* appearing
@@ -592,10 +592,10 @@ def check_runtime_constructs(skill_path):
         single_lane_findings.append(_finding(
             "delivery-tool-single-lane", SEVERITY_WARNING, TARGETS,
             f"names the file-delivery tool `{named_tool}` but not `{missing_tool}` anywhere in "
-            f"the skill — Cowork alone has two delivery tools, one per product lane (desktop-"
-            f"local sandbox serves `present_files`, remote cloud-container Cowork serves "
-            f"`SendUserFile`, also native to Claude Code), and an agent only sees the one for its "
-            f"surface. Naming only `{named_tool}` strands the lane served by `{missing_tool}`. "
+            f"the skill — cloud and local sessions serve different delivery tools (a local session "
+            f"serves `present_files`, a cloud session serves `SendUserFile`, also native to Claude "
+            f"Code), and an agent only sees the one for its surface. Naming only `{named_tool}` "
+            f"strands the surface served by `{missing_tool}`. "
             f"Phrase delivery by outcome, naming no tool (\"if a tool for surfacing files to the "
             f"user is available, present the file with it; if none exists, state the path\") — "
             f"naming both tools, capability-conditionally, is also acceptable and stays clean. If "
@@ -626,7 +626,7 @@ def check_runtime_constructs(skill_path):
         findings.append(_finding(
             "browser-display-dependency", SEVERITY_WARNING, ["claude-ai", "cowork"],
             f"assumes a browser/local HTTP server at {len(browser_hits)} site(s) — neither the "
-            f"Claude app's chat runtime nor Cowork has a display. Provide a static / no-server "
+            f"Claude app's chat runtime nor a cloud or local session has a display. Provide a static / no-server "
             f"fallback. First: {browser_hits[0]}",
             browser_hits[0],
         ))
@@ -651,10 +651,10 @@ def _stdlib_names():
 def check_outputs_prefix(skill_path):
     """Flag skill text telling an agent to put its workspace under a relative `outputs/` path.
 
-    A relative `outputs/x` never lands where the user looks in Cowork: on older local Desktop the file
+    A relative `outputs/x` never lands where the user looks in a cloud or local session: on older local Desktop the file
     tools' cwd was the outputs directory, so it nested a second level and dropped out of the user's
     Working-folder panel; on Desktop 2.7032.0 and later the file tools refuse any relative path; in
-    cloud Cowork it resolves under the working directory, which the user cannot see until the file
+    a cloud session it resolves under the working directory, which the user cannot see until the file
     is delivered. Scans
     instruction text only — a script's own relative path is a different problem, covered by the
     absolute-path guidance in references/environments.md.
@@ -675,15 +675,15 @@ def check_outputs_prefix(skill_path):
             loc = f"{rel}:{n}"
             findings.append(_finding(
                 "outputs-prefix-relative", SEVERITY_WARNING, ["cowork"],
-                f"instructs a workspace at the relative path `{m.group(0)}` — in Cowork no relative "
+                f"instructs a workspace at the relative path `{m.group(0)}` — in a cloud or local session no relative "
                 f"form of this is reliably delivered: a FILE TOOL refuses it on Desktop 2.7032.0 and "
                 f"later, nested it to `outputs/outputs/...` (out of the user's Working-folder panel) "
-                f"on older Desktop, and in cloud Cowork it lands outside `/mnt/user-data/outputs`, "
+                f"on older Desktop, and in a cloud session it lands outside `/mnt/user-data/outputs`, "
                 f"undelivered where that is the delivery folder; under the SHELL it resolves against the "
                 f"session root, invisible to the user and unreachable by the file tools. Fix: use "
                 f"the absolute path of the directory the surface's instructions designate for work "
-                f"(on local Cowork the outputs directory, not the private \"Primary working "
-                f"directory\"; on cloud Cowork usually the working directory), in the form "
+                f"(in a local session the outputs directory, not the private \"Primary working "
+                f"directory\"; in a cloud session usually the working directory), in the form "
                 f"each tool family accepts (locally the shell spells it `/sessions/<id>/mnt/outputs/`; "
                 f"elsewhere the two forms coincide), and hand sub-agents both forms, labelled. A documented absolute "
                 f"`.../mnt/outputs/...` path does not trip this. Suppress per file with an HTML-"
@@ -697,7 +697,7 @@ def check_outputs_prefix(skill_path):
 # ---- relative-output-path -----------------------------------------------------------------
 # An instruction to WRITE a file to a bare relative path. Where that lands depends on the runtime's
 # working directory: the project in Claude Code (visible, which is why this skips that target), a
-# private working directory in cloud Cowork, a refusal from local Cowork's file tools, a work dir
+# private working directory in a cloud session, a refusal from a local session's file tools, a work dir
 # separate from the outputs directory on the chat runtime. Precision over recall — the rule fires
 # only on an imperative write verb with a relative FILE path (a known deliverable extension), and
 # skips anything an author has already anchored; RelativeOutputPathTests pins each exclusion.
@@ -810,8 +810,8 @@ def check_relative_output_path(skill_path):
             findings.append(_finding(
                 "relative-output-path", SEVERITY_ADVISORY, ["claude-ai", "cowork"],
                 f"tells the model to write `{path}` by a bare relative path. Where that lands "
-                f"depends on the runtime's working directory: invisible to the user in cloud "
-                f"Cowork, refused by local Cowork's file tools, outside the outputs directory on "
+                f"depends on the runtime's working directory: invisible to the user in a cloud "
+                f"session, refused by a local session's file tools, outside the outputs directory on "
                 f"the chat runtime (only Claude Code's project directory makes it visible). Write "
                 f"deliverables by ABSOLUTE path to the directory the session's instructions "
                 f"designate, then deliver them to the user; for scratch files, state the base "
@@ -862,8 +862,8 @@ def check_thirdparty_imports(skill_path):
         findings.append(_finding(
             "thirdparty-import", SEVERITY_ADVISORY, ["cowork"],
             f"bundled script imports third-party module `{mod}`, which is not in the Python stack "
-            f"confirmed preinstalled in Cowork's image — so the skill pays a `pip install` on every "
-            f"run there. Cowork installed an absent package from PyPI successfully in the probed "
+            f"confirmed preinstalled in the local session's image — so the skill pays a `pip install` on "
+            f"every run there. The sandbox installed an absent package from PyPI successfully in the probed "
             f"configuration, but egress is org-configurable and a locked-down org can deny it, in "
             f"which case this step fails. Prefer the preinstalled stack where it suffices (numpy, "
             f"pandas, requests, PyYAML, bs4, openpyxl, Pillow, matplotlib, python-docx, "
@@ -901,7 +901,8 @@ def _filter_by_target(findings, target):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Lint a skill for cross-runtime portability (Claude Code / Claude.ai / Cowork).",
+        description="Lint a skill for cross-runtime portability (Claude Code / the Claude app's chat "
+                    "runtime / the Claude app's cloud and local sessions).",
         epilog=(
             "Examples:\n"
             "  python -m scripts.check_portability ./my-skill\n"
@@ -909,6 +910,8 @@ def main():
             "  python -m scripts.check_portability --json --strict ./my-skill\n"
             "\n"
             "Targets: claude-code | claude-ai | cowork | all (default: all)\n"
+            "  claude-ai  the Claude app's chat runtime\n"
+            "  cowork     sandboxed cloud and local sessions; the id predates the merge\n"
             "\n"
             "Exit codes:\n"
             "  0  no gating findings (advisories always report without gating)\n"

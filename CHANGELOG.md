@@ -29,6 +29,25 @@ All notable changes to this project will be documented in this file.
   it needs the `claude` CLI on the shell's PATH.
 - **Network egress is described as org-configurable**, not as denied by default.
 
+### Changed
+- **Runtime terms follow Anthropic's merge of Claude Cowork into Claude.** The text now says
+  *cloud session* and *local session* for the Claude app's task runtimes (defined once in
+  `environments.md`: not Claude Code on the web or the CLI), and *sandboxed session* for those plus the
+  chat runtime. "Cowork" stays only for identifiers and UI strings (`remote_cowork`, the lint target
+  `cowork`, `cowork-harness`), page titles, and the brand's first mention. Renamed headings keep
+  working references, including the README's old `#authoring-for-cowork` anchor.
+
+### Added
+- **The 2026-10-06 change for Pro and Max, as announced.** `environments.md` quotes Anthropic's
+  notice that new tasks, scheduled ones included, run in the cloud from that date and the "Only on your
+  computer" option is removed, and what it documents about reaching the user's files from a cloud
+  session (only connected folders, only while the desktop app is open). Local-session facts stay,
+  scoped to tasks already started locally and plans the change hasn't reached; a local session is
+  still possible where the older Chat/Cowork interface is offered, and only cloud sessions have been
+  seen with the newer one.
+- **What egress settings cover**, as Anthropic documents it. They govern the session's shell and network; web fetch and search,
+  MCP servers and Claude in Chrome sit outside them.
+
 ## [0.15.2] - 2026-10-01
 
 ### Fixed
