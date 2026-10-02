@@ -5,7 +5,7 @@ Cross-runtime portability linter for skills.
 skill-creator-plus can author skills for three runtimes — Claude Code, the Claude app's chat
 runtime (target `claude-ai`), and the Claude app's cloud and local sessions (target `cowork`, named
 for Claude Cowork) — whose capabilities differ. A construct that works in Claude Code can silently
-break elsewhere: the Claude app's chat runtime has no sub-agent tool and may have no `claude` CLI (but a
+break elsewhere: the Claude app's chat runtime has no sub-agent tool and no `claude` CLI on its PATH (but a
 Claude app conversation can run in a cloud session, which has a sub-agent tool — so a skill should
 check its tool list, not the product name); cloud and local sessions have no browser/display and ship
 a large but finite preinstalled Python stack (an import outside it costs an install on every run,
@@ -617,10 +617,10 @@ def check_runtime_constructs(skill_path):
     if cli_hits:
         findings.append(_finding(
             "claude-cli-dependency", SEVERITY_WARNING, ["claude-ai"],
-            f"invokes the `claude` CLI (e.g. `claude -p`) at {len(cli_hits)} site(s) — outside Claude "
-            f"Code it may not be on the shell's PATH (it is unchecked in the Claude app's chat "
-            f"runtime). Gate these steps on `command -v claude` or provide a fallback. "
-            f"First: {cli_hits[0]}",
+            f"invokes the `claude` CLI (e.g. `claude -p`) at {len(cli_hits)} site(s) — it was not on "
+            f"the Claude app chat runtime's shell PATH (Chat in the older Chat/Cowork picker; it "
+            f"was found in cloud and local sessions). Gate these steps on `command -v claude` or "
+            f"provide a fallback. First: {cli_hits[0]}",
             cli_hits[0],
         ))
     if browser_hits:
