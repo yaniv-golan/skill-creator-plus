@@ -1181,8 +1181,19 @@
     function getDownloadUri(file) {
       if (file.data_uri) return file.data_uri;
       if (file.data_b64) return "data:application/octet-stream;base64," + file.data_b64;
-      if (file.type === "text") return "data:text/plain;charset=utf-8," + encodeURIComponent(file.content);
+      // Base64, not percent-encoding: in the Claude app (web and Desktop), a percent-encoded text
+      // data: URI failed to download with an atob() error, while base64 ones worked.
+      if (file.type === "text") return "data:text/plain;charset=utf-8;base64," + utf8ToBase64(file.content);
       return "#";
+    }
+
+    function utf8ToBase64(text) {
+      const bytes = new TextEncoder().encode(text);
+      let bin = "";
+      for (let i = 0; i < bytes.length; i += 0x8000) {
+        bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+      }
+      return btoa(bin);
     }
 
     function escapeHtml(text) {
