@@ -13,7 +13,7 @@ A skill for creating new skills, iteratively improving them, and answering quest
 
 The loop: decide what the skill should do → draft it → run test prompts with the skill → help the user evaluate the results, qualitatively (the eval viewer) and quantitatively (benchmarks) → rewrite from their feedback → repeat, then expand the test set. Figure out where the user is in this loop and join them there: "I want a skill for X" starts at the top; an existing draft jumps straight to eval/iterate. Order is flexible; once the skill is done you can run the description improver to sharpen its triggering. **Before running any test case, read `references/running-evals.md`.**
 
-Calibrate jargon to the person: "evaluation" and "benchmark" are borderline but OK; explain "JSON" or "assertion" unless they've shown they know them. If you're unsure a term will land, define it briefly in passing.
+Calibrate jargon to the person: "evaluation" and "benchmark" are borderline but OK; explain "JSON" or "assertion" unless they've shown they know them.
 
 **If a section this file refers to seems to be missing, it was truncated — re-read `SKILL.md` from disk before continuing.** Compaction cuts the tail and writes the cut back, so what's in context can be a partial copy. (This works only when a truncation marker is present; it cannot detect a skill dropped whole by the combined cap.)
 
@@ -43,7 +43,7 @@ These combine: a cloud session typically has sub-agents but no display; the chat
 
 ## Answering a question about skills
 
-A narrow question (referencing a bundled script, a frontmatter field, size limits, what breaks across runtimes) gets a direct answer, not the build loop. Open the matching reference via its table of contents and answer from it — `references/official-guide-patterns.md` for authoring and Claude Code mechanics, `references/environments.md` for cloud, local and chat sessions, `assets/skill-script-invocation.md` for script paths — keeping its hedges (observed vs documented).
+A narrow question (referencing a bundled script, a frontmatter field, size limits, what breaks across runtimes) gets a direct answer, not the build loop. Open the matching reference via its table of contents and answer from it — `references/official-guide-patterns.md` for authoring, `references/advanced-features.md` for Claude Code mechanics, `references/environments.md` for cloud, local and chat sessions, `assets/skill-script-invocation.md` for script paths — keeping its hedges.
 
 ---
 
@@ -77,15 +77,15 @@ Ask about edge cases, input/output formats, example files, success criteria and 
 - **description**: how agents decide whether to load the skill. Write a **trigger, not a summary**: `[What it does] + [When to use it] + [Key capabilities]`; under 1024 characters, no XML tags, assertive (models undertrigger). On portable hosts it is the only discovery text, so it must stand alone. See `references/official-guide-patterns.md` (*Description Field Formula*).
 - Optional: `license`, `metadata` (`author`, `version`), `compatibility` (≤500 chars), `allowed-tools`. **When the user hasn't specified**, omit `license` and `metadata.author` rather than inventing them — a licence or byline you made up is a claim on their behalf. Default `metadata.version` to `0.1.0`.
 
-**Claude-specific fields** (`when_to_use`, `disallowed-tools`, `model`, `context: fork`, `argument-hint`, path variables, …) are silently ignored elsewhere; see `references/official-guide-patterns.md` (*Claude-specific frontmatter: what these fields actually do*). **Never put load-bearing trigger info in `when_to_use`** — non-Claude hosts ignore it, and in a local session it is only half-visible even on Claude. Tool fields grant and restrict but never prompt; the real gate is **workspace trust**, accepted once per folder.
+**Claude-specific fields** (`when_to_use`, `disallowed-tools`, `model`, `context: fork`, `argument-hint`, path variables, …) are silently ignored elsewhere; see `references/official-guide-patterns.md` (*Claude-specific frontmatter: what these fields actually do*). **Never put load-bearing trigger info in `when_to_use`** — non-Claude hosts ignore it, and in a local session it is only half-visible even on Claude. Tool fields grant and restrict but never prompt; for a project skill (`.claude/skills/`) the real gate is **workspace trust**, accepted once per folder.
 
 ### Skill Writing Guide
 
 A skill is a folder: `SKILL.md` plus optional `scripts/` (deterministic work), `references/` (read on demand) and `assets/` (used in output). For several domains, one reference per variant, so Claude reads only the relevant one.
 
-**Reaching a bundled script:** the skill-directory variable (`CLAUDE_SKILL_DIR`, braced) is a load-time substitution into `SKILL.md` text only — it arrives literally in a `references/*.md` and is the empty string in a shell; CWD is never the skill directory. **Don't hand-write the stanza** — paste it from `assets/skill-script-invocation.md` (stanza B outside Claude Code). Not a `bin/` launcher: none has been seen on a cloud or local session's shell PATH, and a top-level `bin/` makes a plugin unpublishable through claude.ai organization settings. `assets/plugin-bin-launcher.sh` is for CLI-installed plugins only.
+**Reaching a bundled script:** the skill-directory variable (`CLAUDE_SKILL_DIR`, braced) is a load-time substitution into `SKILL.md` text only — it arrives literally in a `references/*.md` and is the empty string in a shell; CWD is never the skill directory. **Don't hand-write the stanza** — paste it from `assets/skill-script-invocation.md` (stanza B outside Claude Code). Not a `bin/` launcher: no plugin's own launcher has been seen on a local session's shell PATH (the cloud case is untested), and a top-level `bin/` makes a plugin unpublishable through claude.ai organization settings. `assets/plugin-bin-launcher.sh` is for CLI-installed plugins only.
 
-**Keep SKILL.md under 19,900 characters — measure with `wc -m`, not a line count.** After auto-compaction Claude re-attaches each invoked skill truncated to that many characters and usually writes the truncation **back**, so a second compaction cannot recover the tail. Move whole phases into `references/` (not capped; give long ones a table of contents), say when to read each, and front-load what must survive. See `references/official-guide-patterns.md` (*SKILL.md Size*; *Advanced Skill Authoring Features* for hooks, path variables and more).
+**Keep SKILL.md under 19,900 characters — measure with `wc -m`, not a line count.** After auto-compaction Claude re-attaches each invoked skill truncated to that many characters and usually writes the truncation **back**, so a second compaction cannot recover the tail. Move whole phases into `references/` (not capped; give long ones a table of contents), say when to read each, and front-load what must survive. See `references/official-guide-patterns.md` (*SKILL.md Size*); hooks and path variables: `references/advanced-features.md`.
 
 Rules and structure: `references/official-guide-patterns.md` (*Technical Rules*, *Five Skill Patterns*). Skills must not contain malware, exploit code, or anything that would surprise the user if described, and must not be misleading or built to facilitate unauthorized access.
 
@@ -109,7 +109,7 @@ Write 2-3 realistic test prompts — what a real user would say — and check th
 
 ### The workspace
 
-Put results in `<skill-name>-workspace/`. **Put it where your instructions say to work.** In Claude Code a sibling of a skill directory you own is fine; never beside an installed (read-only) skill — in a sandboxed session see `references/environments.md`. There your **file tools** need the absolute path of that directory: outputs if named (locally not the "Primary working directory", a private folder), else your working directory — never a bare path or an `outputs/` prefix. Your **shell** may spell that directory differently (locally `/sessions/<id>/mnt/outputs/`). Resolve both once (`<workspace, file-tool form>`, shell `<abs-workspace>`); give sub-agents both, labelled. On a plugin or marketplace install the skill directory is read-only, so a sibling path silently falls back to a scratchpad the user never sees — and in a cloud session that is destroyed at session end. If you're unsure, ask.
+Put results in `<skill-name>-workspace/`. **Put it where your instructions say to work.** In Claude Code a sibling of a skill directory you own is fine; never beside an installed (read-only) skill — in a sandboxed session see `references/environments.md`. There your **file tools** need the absolute path of that directory: outputs if named (locally not the "Primary working directory", a private folder), else your working directory — never a bare path or an `outputs/` prefix. Your **shell** may spell that directory differently (locally `/sessions/<id>/mnt/outputs/`). Resolve both once (`<workspace, file-tool form>`, shell `<abs-workspace>`); give sub-agents both, labelled. In a sandboxed session an installed skill's directory is read-only, so a sibling path silently falls back to a scratchpad the user never sees — and in a cloud session that is destroyed at session end; in Claude Code it is writable but replaced on update, so never there either. If you're unsure, ask.
 
 ## Run, review, improve
 
@@ -118,7 +118,7 @@ One continuous sequence; don't stop partway. Do NOT use `/skill-test` or any oth
 1. **Spawn all runs** — per test case, a with-skill and a baseline sub-agent **in the same turn**, never baselines later.
 2. **Draft assertions** while they run; explain them to the user.
 3. **Capture timing** — `total_tokens` and `duration_ms` exist only in the task notification, so save them to the run's `timing.json` as each run completes.
-4. **Grade, aggregate, and show the user the viewer** (`eval-viewer/generate_review.py`; static mode with no display) before your own analysis.
+4. **Grade each run against its assertions, aggregate into a benchmark** (pass rate, time and tokens, with and without the skill), **and show the user the viewer** (`eval-viewer/generate_review.py`; static mode with no display) before your own analysis.
 5. **Read the feedback, improve, rerun** into `iteration-<N+1>/` until the user is happy or progress stops.
 
 ## Description optimization
@@ -133,7 +133,7 @@ Detail and checklist: `references/validate-and-package.md`. The `python -m` form
 cd ${CLAUDE_SKILL_DIR} && python -m scripts.quick_validate <abs-path-to-skill>
 ```
 
-If the shell says that directory does not exist (a local session's host loop), or the line shows the variable unexpanded (when invoked before the conversation has started its cloud session, typically as its first message, and on a re-read from disk after a compaction — the `cd` then silently lands in home), find it from the shell's side and `cd` to the one holding `scripts/`:
+If the shell says that directory does not exist (an older local Desktop build), or the line shows the variable unexpanded (when invoked before the conversation has started its cloud session, typically as its first message, and on a re-read from disk after a compaction — the `cd` then silently lands in home), find it from the shell's side and `cd` to the one holding `scripts/`:
 
 ```bash
 find / -path '*skill-creator-plus/scripts/quick_validate.py' -print -quit 2>/dev/null
@@ -146,7 +146,7 @@ cd <this-skill-dir> && python -m scripts.check_portability <abs-path-to-skill> -
 cd <this-skill-dir> && python -m scripts.package_skill <abs-path-to-skill-folder> <output-dir>
 ```
 
-Pass `<output-dir>` explicitly (the default is unwritable on a plugin install): the shell form, `<abs-workspace>/…`, in a cloud or local session; name the file-tool form in your reply. **Deliver in two steps**: write it to that stated path, then call any tool whose description says it sends or presents files to the user — the file is not delivered until you do, and stating the path is not a substitute — unless your instructions explicitly say that writing into a named folder delivers the file and not to send it as well. Only with no such tool is the stated path the presentation. Never make packaging conditional on that tool. **Don't delete from the outputs directory** — a delete can be refused until the user approves it; overwrite in place.
+Pass `<output-dir>` explicitly (the default is unwritable in a sandboxed session and replaced on update in Claude Code): the shell form, `<abs-workspace>/…`, in a cloud or local session; name the file-tool form in your reply. **Deliver in two steps**: write it to that stated path, then call any tool whose description says it sends or presents files to the user — the file is not delivered until you do, and stating the path is not a substitute — unless your instructions explicitly say that writing into a named folder delivers the file and not to send it as well. Only with no such tool is the stated path the presentation. Never make packaging conditional on that tool. **Don't delete from the outputs directory** — a delete can be refused until the user approves it; overwrite in place.
 
 **Sending the `.skill` file is also how the user saves it**: its card's Save skill button (shown only when the user's org allows skill creation) installs the whole package, scripts included, so sending it is never optional. A tool that saves a skill from the conversation carries `SKILL.md` alone — never a substitute.
 
@@ -155,7 +155,8 @@ Pass `<output-dir>` explicitly (the default is unwritable on a plugin install): 
 - `references/running-evals.md` — Steps 1–5, viewer, feedback, improving, blind comparison
 - `references/validate-and-package.md` — checklist, validators, packaging, delivery
 - `references/environments.md` — no sub-agents, no display, sandboxed sessions
-- `references/official-guide-patterns.md` — Anthropic's guidance, authoring rules, runtime mechanics
+- `references/official-guide-patterns.md` — Anthropic's guidance and authoring rules
+- `references/advanced-features.md` — Claude-specific features, runtime mechanics
 - `references/description-optimization.md`, `references/schemas.md`
 - `agents/grader.md`, `agents/comparator.md`, `agents/analyzer.md` — sub-agent instructions
 - `assets/skill-script-invocation.md`, `assets/plugin-bin-launcher.sh`, `assets/eval_review.html` (trigger-eval review)
