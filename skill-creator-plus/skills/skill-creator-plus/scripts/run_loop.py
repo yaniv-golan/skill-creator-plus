@@ -297,7 +297,8 @@ def main():
             "\n"
             "Exit codes:\n"
             "  0  loop completed (returned a best_description)\n"
-            "  1  eval-set unreadable, skill not found, or all iterations failed"
+            "  1  eval-set unreadable, skill not found, or all iterations failed\n"
+            "  4  INSTRUMENT FAILURE — the trigger eval measured nothing (see run_eval); no score"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )

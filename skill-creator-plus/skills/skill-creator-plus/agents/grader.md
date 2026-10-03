@@ -16,7 +16,7 @@ You receive these parameters in your prompt:
 - **transcript_path**: Path to the execution transcript (markdown file)
 - **outputs_dir**: Directory containing output files from execution
 
-Every *path* parameter above arrives **resolved and absolute**, in the form your file tools (Read/Write/Edit) accept — use each exactly as given; if a shell-form path is also supplied, use it only in shell commands and never convert one into the other, and write grading output only inside the `outputs_dir` you were handed. Don't rebuild a path from a directory name or write anything relative to "here". The shell's working directory is not the one the file tools use, so a relative path can resolve somewhere neither the user nor the agent that dispatched you can reach. If a path you need is missing, ask for it rather than guessing.
+Every *path* parameter above arrives **resolved and absolute**, in the form your file tools (Read/Write/Edit) accept — use each exactly as given; if a shell-form path is also supplied, use it only in shell commands and never convert one into the other, and write only `grading.json`, to the run directory that holds the `outputs_dir` you were handed (`{outputs_dir}/../grading.json`). Don't rebuild a path from a directory name or write anything relative to "here". The shell's working directory is not the one the file tools use, so a relative path can resolve somewhere neither the user nor the agent that dispatched you can reach. If a path you need is missing, stop and report which one, rather than guessing.
 
 ## Process
 
@@ -83,7 +83,7 @@ Keep the bar high. The goal is to flag things the eval author would say "good ca
 ### Step 7: Read Executor Metrics and Timing (optional inputs)
 
 1. If `{outputs_dir}/metrics.json` exists, read it and copy it into the `execution_metrics` field of your output. If it doesn't exist, omit `execution_metrics` entirely — both files are optional artifacts and their absence is normal, not an error.
-2. If `{outputs_dir}/../timing.json` exists, copy its fields **verbatim** into the `timing` field of your output — including `total_tokens` and `duration_ms`. timing.json is the only place the executor's real token count lives; dropping `total_tokens` here means the benchmark silently falls back to a character count.
+2. If `{outputs_dir}/../timing.json` exists, copy its fields **verbatim** into the `timing` field of your output — including `total_tokens` and `duration_ms`. timing.json is the only place the executor's real token count lives, so dropping `total_tokens` here loses it from the benchmark.
 3. Do NOT add your own grading time. `total_duration_seconds` means the executor's wall-clock duration, exactly as timing.json recorded it.
 
 ### Step 8: Write Grading Results

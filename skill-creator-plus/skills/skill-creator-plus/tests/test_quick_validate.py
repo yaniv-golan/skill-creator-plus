@@ -151,3 +151,37 @@ class NameDescriptionContentTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SingleShippedSkillMdTest(unittest.TestCase):
+    """claude.ai and the Skills API reject an upload carrying more than one SKILL.md."""
+
+    def _skill(self, td):
+        return _write_skill(Path(td), "name: my-skill\ndescription: Does a thing.")
+
+    def test_nested_skill_md_that_would_ship_is_rejected(self):
+        with tempfile.TemporaryDirectory() as td:
+            skill = self._skill(td)
+            (skill / "sub").mkdir()
+            (skill / "sub" / "SKILL.md").write_text("---\nname: sub\ndescription: x\n---\n")
+            ok, msg = validate_skill(skill)
+            self.assertFalse(ok)
+            self.assertIn("sub/SKILL.md", msg)
+
+    def test_skill_md_in_excluded_dirs_does_not_count(self):
+        """A SKILL.md under tests/, evals/ or a cache never ships, so it must not fail validation."""
+        with tempfile.TemporaryDirectory() as td:
+            skill = self._skill(td)
+            for d in ("tests/fixture", "evals", "node_modules/pkg"):
+                (skill / d).mkdir(parents=True)
+                (skill / d / "SKILL.md").write_text("---\nname: f\ndescription: x\n---\n")
+            ok, msg = validate_skill(skill)
+            self.assertTrue(ok, msg)
+
+    def test_symlinked_skill_md_does_not_count(self):
+        with tempfile.TemporaryDirectory() as td:
+            skill = self._skill(td)
+            (skill / "linked").mkdir()
+            (skill / "linked" / "SKILL.md").symlink_to(skill / "SKILL.md")
+            ok, msg = validate_skill(skill)
+            self.assertTrue(ok, msg)

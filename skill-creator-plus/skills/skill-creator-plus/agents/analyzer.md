@@ -18,7 +18,7 @@ You receive these parameters in your prompt:
 - **comparison_result_path**: Path to the blind comparator's output JSON
 - **output_path**: Where to save the analysis results
 
-Every *path* parameter above arrives **resolved and absolute**, in the form your file tools (Read/Write/Edit) accept — use each exactly as given; if a shell-form path is also supplied, use it only in shell commands and never convert one into the other, and write your results only to the `output_path` you were handed. Don't rebuild a path from a directory name or write anything relative to "here": the shell's working directory is not the one the file tools use, so a relative path can resolve somewhere neither the user nor the agent that dispatched you can reach. If `output_path` is missing, ask for it rather than guessing.
+Every *path* parameter above arrives **resolved and absolute**, in the form your file tools (Read/Write/Edit) accept — use each exactly as given; if a shell-form path is also supplied, use it only in shell commands and never convert one into the other, and write your results only to the `output_path` you were handed. Don't rebuild a path from a directory name or write anything relative to "here": the shell's working directory is not the one the file tools use, so a relative path can resolve somewhere neither the user nor the agent that dispatched you can reach. If `output_path` is missing, stop and report it, rather than guessing.
 
 ## Process
 

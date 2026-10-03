@@ -16,6 +16,10 @@ try:
     from scripts.frontmatter import parse as parse_frontmatter, FrontmatterError
 except ImportError:
     from frontmatter import parse as parse_frontmatter, FrontmatterError
+try:
+    from scripts._packaging_rules import shipped_files
+except ImportError:
+    from _packaging_rules import shipped_files
 
 def validate_skill(skill_path):
     """Basic validation of a skill"""
@@ -25,6 +29,21 @@ def validate_skill(skill_path):
     skill_md = skill_path / 'SKILL.md'
     if not skill_md.exists():
         return False, "SKILL.md not found"
+
+    # A skill must ship exactly one SKILL.md, at <folder>/SKILL.md. claude.ai and the Skills API reject
+    # an upload carrying more (only Claude Code's filesystem loads nested skills), so judge by what
+    # packaging would include: a SKILL.md under tests/, evals/ or a cache never ships.
+    shipped_skill_mds = sorted(
+        str(rel.relative_to(rel.parts[0])) for _, rel in shipped_files(skill_path)
+        if rel.name == 'SKILL.md'
+    )
+    if len(shipped_skill_mds) > 1:
+        extras = [p for p in shipped_skill_mds if p != 'SKILL.md']
+        return False, (
+            f"Found {len(shipped_skill_mds)} SKILL.md files that would be packaged; a skill must ship "
+            f"exactly one, at <folder>/SKILL.md. claude.ai and the Skills API reject the upload "
+            f"otherwise. Remove or rename: {', '.join(extras)}"
+        )
 
     # Read and validate frontmatter
     content = skill_md.read_text()
