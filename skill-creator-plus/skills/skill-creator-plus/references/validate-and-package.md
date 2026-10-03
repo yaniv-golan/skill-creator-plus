@@ -40,7 +40,7 @@ You can run `quick_validate` to check some of these automatically. **Run this an
 cd <this-skill-dir> && python -m scripts.quick_validate <abs-path-to-skill>
 ```
 
-If the shell says the directory SKILL.md's `cd` line names does not exist, it sees these files under a different path (a local session's host loop). If that line shows the skill-directory variable unexpanded (it does when this skill is invoked before the conversation has started its cloud session, typically as its first message, and so does a re-read from disk after a compaction), the `cd` silently lands in the home directory. Either way, find the directory from the shell's side and `cd` to the one that holds `scripts/`:
+If the shell says the directory SKILL.md's `cd` line names does not exist, it sees these files under a different path (a local session's host loop on an older Desktop build; current builds rewrite the path). If that line shows the skill-directory variable unexpanded (it does when this skill is invoked before the conversation has started its cloud session, typically as its first message, and so does a re-read from disk after a compaction), the `cd` silently lands in the home directory. Either way, find the directory from the shell's side and `cd` to the one that holds `scripts/`:
 
 ```bash
 find / -path '*skill-creator-plus/scripts/quick_validate.py' -print -quit 2>/dev/null

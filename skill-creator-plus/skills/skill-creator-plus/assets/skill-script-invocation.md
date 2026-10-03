@@ -32,7 +32,7 @@ and pass it along verbatim, including to any sub-agent.
 
 If the line above still shows the variable unexpanded (it does when the skill is invoked before the
 conversation has started its cloud session, typically as its first message), or the
-shell reports that path missing (a local session's host loop, where the shell and the file tools are
+shell reports that path missing (a local session's host loop on an older Desktop build, where the shell and the file tools are
 different mounts of the same content), locate the file from the SHELL's side and run what it finds:
 
     find / -path "*<skill-name>/scripts/<script>.py" -print -quit 2>/dev/null

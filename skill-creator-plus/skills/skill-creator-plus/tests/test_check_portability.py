@@ -1267,14 +1267,14 @@ class SkillPointerTests(unittest.TestCase):
     def test_no_skill_dir_token_in_references_or_agents(self):
         """`${CLAUDE_SKILL_DIR}` is substituted in SKILL.md only; elsewhere it arrives literally.
 
-        References write `<this-skill-dir>`, which SKILL.md defines. official-guide-patterns.md is
-        excluded: it DOCUMENTS the token (what it does, where it is dead), it does not use it in a
+        References write `<this-skill-dir>`, which SKILL.md defines. official-guide-patterns.md and
+        advanced-features.md are excluded: they DOCUMENT the token (what it does, where it is dead), it does not use it in a
         command this skill runs.
         """
         token = "${" + "CLAUDE_SKILL_DIR}"
         files = sorted((self.ROOT / "agents").glob("*.md"))
         files += [p for p in sorted((self.ROOT / "references").glob("*.md"))
-                  if p.name != "official-guide-patterns.md"]
+                  if p.name not in ("official-guide-patterns.md", "advanced-features.md")]
         self.assertTrue(files)
         for p in files:
             self.assertNotIn(token, p.read_text(), f"{p.name} uses the token, which is dead there")
