@@ -5,20 +5,19 @@ All notable changes to this project will be documented in this file.
 ## [0.16.2] - 2026-10-03
 
 ### Fixed
-- **The eval viewer's Download button failed for text outputs on claude.ai.** Opened from a
-  delivered file on the web and in Claude Desktop, it raised an `atob` error and saved nothing, while
+- **The eval viewer's Download button failed for text outputs in the Claude app.** Opened from a
+  delivered file on claude.ai and in Claude Desktop, it raised an `atob` error and saved nothing, while
   binary outputs downloaded after the app's trust prompt. Text downloads now use a base64 `data:` URI
-  like the others (not yet re-tested in the app).
+  like the others; after release, that form was confirmed to download from a delivered file (not an
+  Artifact) in Chrome and in Claude Desktop.
 - **What the viewer's downloads do in the Claude app.** `environments.md` now says the Download links
   don't work when the viewer is published as an Artifact (the app blocks file downloads there; the
   outputs still show in the page), and that from a delivered viewer, binary downloads worked after a
   confirmation.
-
-### Changed
 - **Where the `claude` CLI is.** Measured once each: found on PATH in cloud and local sessions (a
   nested `claude -p` ran in a cloud session), and not on the chat runtime's PATH (Chat in the older
-  Chat/Cowork picker). The `claude-cli-dependency` message, `SKILL.md` and the README say so again,
-  now backed by a measurement; the advice to gate on `command -v claude` is unchanged.
+  Chat/Cowork picker). The `claude-cli-dependency` message, `SKILL.md` and the README say so,
+  replacing 0.16.1's "unchecked"; the advice to gate on `command -v claude` is unchanged.
 
 ## [0.16.1] - 2026-10-03
 
@@ -26,32 +25,36 @@ All notable changes to this project will be documented in this file.
 - **Where a Cowork task runs, by interface.** 0.16.0 said choosing Cowork in the Chat/Cowork picker
   starts a cloud session. It runs locally when "Only on this computer" is on and in the cloud when
   it's off; the newer interface ran in the cloud even with the setting on. `environments.md` now says
-  so and quotes the app's notice on local tasks that new ones can't be started from October 6.
+  so, quotes the app's notice on local tasks that new ones can't be started from October 6, and drops
+  0.16.0's sentence that local sessions remain available on Team plans.
 - **Plugin and skill paths in a local session's shell.** The guide said the VM shell can't resolve
-  the substituted host path. Current Desktop builds rewrite those paths inside shell commands, so the
-  token works there; the guide now warns instead not to hand a path the shell printed to the file
-  tools, which refuse VM paths.
+  the substituted host path. Current Desktop builds (since about September 2026) rewrite plugin and
+  skill paths inside shell commands, so the token works there; `${CLAUDE_PLUGIN_DATA}` and the outputs
+  path are not rewritten. The guide now warns not to hand a path the shell printed to the file tools,
+  which refuse VM paths.
 - **The `claude` CLI is not only in Claude Code.** It was found in a local session's shell, and its
-  absence from the chat runtime was never measured. The README, `SKILL.md` and the
+  absence from the chat runtime had never been measured. The README, `SKILL.md` and the
   `claude-cli-dependency` lint message now say it may be off the PATH outside Claude Code and to gate
   a `claude -p` step on `command -v claude`.
 
 ### Added
 - **`$ARGUMENTS` can arrive unfilled** in a cloud session when the skill is invoked before the
-  session exists. The setup guidance now says to take the input from the user's message then.
+  session exists (only `$ARGUMENTS` was observed; the positional placeholders were not checked). The
+  setup guidance now says to take the input from the user's message then.
 
 ## [0.16.0] - 2026-10-02
 
 ### Fixed
 - **A failing `` !`cmd` `` is documented per runtime, and the rule is "never let it fail".** The guide
   said a non-zero exit shows the user the command and stderr. In a cloud session, a command the skill
-  allows that then fails hangs a `/skill-name` the user typed, with no reply and no error, and
-  returns an error when the model invokes the skill. `official-guide-patterns.md` now says so and
-  links the upstream issue. It also says that a command needing approval is rewritten into an
-  instruction only in auto mode, and in other modes makes the skill fail to load. The DCI
-  `` !`git log` `` example now shows its `allowed-tools` entry and warns that outside a repository it
-  fails. The testing tip warns against `uuidgen` (absent in the cloud container), and names
-  `cat /proc/sys/kernel/random/uuid` together with the `allowed-tools` entry it ran under.
+  allows that then failed returned an error when the model invoked the skill (seen once) and, when the
+  user typed `/skill-name`, hung the conversation with no reply and no error.
+  `official-guide-patterns.md` now says so and links the upstream issue. It also says that a command
+  needing approval is rewritten into an instruction only in auto mode, and in other modes makes the
+  skill fail to load. The DCI `` !`git log` `` example now shows its `allowed-tools` entry and warns
+  that outside a repository it fails. The testing tip warns against `uuidgen` (absent in the cloud
+  container), and names `cat /proc/sys/kernel/random/uuid` together with the `allowed-tools` entry it
+  ran under (untested without it).
 - **Cloud literal tokens are scoped to when they happen.** `${CLAUDE_SKILL_DIR}` and
   `${CLAUDE_PLUGIN_DATA}` arrive unexpanded, and the base-directory line names a missing
   `/mnt/skills/…` path, when a skill is invoked before the conversation has started its cloud session
@@ -63,37 +66,39 @@ All notable changes to this project will be documented in this file.
 - **The description optimizer's report is put where the user can get it.** The documented
   `run_loop` command now passes `--results-dir`; without it the live report went to a temp directory
   the user couldn't see. The docs say to deliver the final `report.html` rather than expect it to
-  open in a browser, and the Cowork note no longer says the optimizer "should work just fine" there:
-  it needs the `claude` CLI on the shell's PATH.
+  open in a browser. The Cowork note no longer says the optimizer "should work just fine" there:
+  `SKILL.md` and `environments.md` now say it needs the `claude` CLI, found by `command -v claude`.
 - **Network egress is described as org-configurable**, not as denied by default.
 
 ### Changed
 - **Runtime terms follow Anthropic's merge of Claude Cowork into Claude.** The text now says
   *cloud session* and *local session* for the Claude app's task runtimes (defined once in
   `environments.md`: not Claude Code on the web or the CLI), and *sandboxed session* for those plus the
-  chat runtime. "Cowork" stays only for identifiers and UI strings (`remote_cowork`, the lint target
-  `cowork`, `cowork-harness`), page titles, and the brand's first mention. Renamed headings keep
-  working references, including the README's old `#authoring-for-cowork` anchor.
+  chat runtime. "Cowork" stays mainly for identifiers and UI strings (`remote_cowork`, the lint target
+  `cowork`, `cowork-harness`), page titles and citations, the brand's first mention, and trigger
+  phrases in the skill's description. Renamed headings keep working references, including the
+  README's old `#authoring-for-cowork` anchor.
 
 ### Added
 - **The 2026-10-06 change for Pro and Max, as announced.** `environments.md` quotes Anthropic's
   notice that new tasks, scheduled ones included, run in the cloud from that date and the "Only on your
   computer" option is removed, and what it documents about reaching the user's files from a cloud
   session (only connected folders, only while the desktop app is open). Local-session facts stay,
-  scoped to tasks already started locally and plans the change hasn't reached; a local session is
-  still possible where the older Chat/Cowork interface is offered, and only cloud sessions have been
-  seen with the newer one.
-- **What egress settings cover**, as Anthropic documents it. They govern the session's shell and network; web fetch and search,
-  MCP servers and Claude in Chrome sit outside them.
+  scoped to tasks already started locally and plans the change hasn't reached; a local session was
+  still possible where the older Chat/Cowork interface was offered (Team plans, as of 2026-10-02;
+  placement unreliable), and only cloud sessions had been seen with the newer one.
+- **What egress settings cover**, as Anthropic documents it. They govern the session's shell and
+  network; web fetch and search, MCP servers and Claude in Chrome sit outside them.
 
 ## [0.15.2] - 2026-10-01
 
 ### Fixed
-- **The eval-viewer guidance no longer says the model has no browser.** Cowork sessions can have
-  browser tools, but they run on the user's side, and from a cloud session they can't open a server
-  the model starts or a file in its container (measured: the built-in browser and the user's Chrome
-  both failed to reach the session's server and files). `environments.md` now says that, and has the
-  model publish the static viewer as an Artifact when it can, or deliver the file.
+- **The eval-viewer guidance no longer says the model has no browser.** Sessions in the Claude app
+  can have browser tools, but they run on the user's side: from a cloud session, the built-in browser
+  and the user's Chrome both failed to reach a server the model started or a file in its container
+  (local sessions untested). `environments.md` now says that, and has the model publish the static
+  viewer as an Artifact when it can, unless the outputs include spreadsheets (the preview's script is
+  blocked on an Artifact page) or the page is too large to publish; then it delivers the file.
 - **The two Artifact tool families are told apart.** The viewer note described only the older
   sidebar-only tools and claimed availability on both Cowork lanes. It now says a session has at most
   one family, either the `Artifact` tool, whose published page appears beside the conversation on the
@@ -102,20 +107,21 @@ All notable changes to this project will be documented in this file.
   present.
 - **Connected-desktop guidance corrected.** A file can be committed to a granted folder straight from
   the outputs folder, so sending it first is no longer required. Device tools have to be loaded before
-  the model concludes the computer is unreachable. *Two skill listings under Cowork* now says that local
-  Cowork reads the account's synced store and that plugins load too. It says the read-only mount is
-  recorded for local only, and that a stub keeps the whole frontmatter. The project-folder bullet
-  scopes stubs to folders granted to a cloud session and no longer asserts how Claude Code picks
-  between duplicate copies.
+  the model concludes the computer is unreachable. *Two skill listings under Cowork* now says that
+  local Cowork reads the account's synced store, that plugins load too, and that a new upload reached
+  every surface within about a minute. It says the read-only mount is recorded for local only, and
+  that a stub keeps the frontmatter and a notice to run the skill on the user's device, with none of
+  the body.
 
 ### Added
 - **Working on a skill that lives on the user's computer, from a cloud session.**
   `references/environments.md` now says how to bring such a skill in and put it back (the device
-  stage and commit tools, inside a folder the user grants), that `~/.claude` and `~/.claude/skills`
-  were refused as protected locations, so a personal skill there has to be sent in, and where the
-  result should live: the account (loads in Cowork and Claude Code, in the organization it was saved in) or a project folder (Claude Code
-  only; Cowork shows at most a stub). It also warns that keeping both leaves Claude Code with two
-  copies.
+  stage and commit tools, inside a folder the user grants), that in one session `~/.claude` and
+  `~/.claude/skills` were refused as protected locations, so a personal skill there has to be sent
+  in, and where the result should live: the account (loads in Cowork and Claude Code, in the
+  organization it was saved in) or a project folder (Claude Code only; Cowork shows at most a stub).
+  It also warns that keeping both leaves Claude Code with two copies, and how it chooses between them
+  isn't documented.
 
 ## [0.15.1] - 2026-10-01
 
@@ -127,18 +133,20 @@ All notable changes to this project will be documented in this file.
   leave how to ask to the model. It also says the three things the model cannot see from inside a run:
   where answers can be kept, which runs have nobody to answer (sub-agents, forked skills, scheduled
   tasks), and that answers given in the conversation stay in the transcript.
-
 - **Cloud Cowork delivers `${CLAUDE_SKILL_DIR}` and `${CLAUDE_PLUGIN_DATA}` unexpanded.** In three
-  live runs, a plugin skill's `SKILL.md` reached the model with both tokens as literal text, and the
-  `Base directory for this skill` line named a directory the shell didn't have. The path-variable
-  section and its token table said the tokens are always substituted in `SKILL.md`; they now scope that
-  to Claude Code and local Cowork. Stanza B of `assets/skill-script-invocation.md` (find the script
-  from the shell) is now recommended for any skill that may run outside Claude Code, and it falls back
-  on an unexpanded token as well as on a missing path. This skill's own validate step says the same.
+  live runs, a plugin skill's `SKILL.md` reached the model with both tokens as literal text (the other
+  two tokens were not checked), and the `Base directory for this skill` line named a directory the
+  shell didn't have. The path-variable section and its token table said the tokens are always
+  substituted in `SKILL.md`; they now scope that to Claude Code and local Cowork. Stanza A of
+  `assets/skill-script-invocation.md` is now marked Claude-Code-only, and stanza B (find the script
+  from the shell) is recommended for any skill that may run outside Claude Code; it falls back on an
+  unexpanded token as well as on a missing path. This skill's own validate step says the same, and
+  that an unexpanded token makes its `cd` land silently in the home directory.
 
 ### Added
 - **What `argument-hint` does on Claude Desktop**: it tells the model what to collect when the
-  skill is invoked; in Claude Code it is a hint shown while typing.
+  skill is invoked (seen in local Cowork, not in cloud Cowork); in Claude Code it is a hint shown
+  while typing.
 
 ## [0.15.0] - 2026-10-01
 
@@ -157,16 +165,19 @@ All notable changes to this project will be documented in this file.
 - **Lint messages say what the chat runtime lacks, not what "Claude.ai" lacks.** `subagent-dependency`,
   `claude-cli-dependency` and `browser-display-dependency`, and the README and `SKILL.md` summaries,
   said Claude.ai has no sub-agents. A Claude app conversation can be a cloud Cowork session, which
-  has a sub-agent tool. The messages now name the chat runtime and say to check the tool list.
-  Target and rule ids are unchanged; `claude-ai` is documented as the chat runtime.
+  has a sub-agent tool. The messages now name the chat runtime and say to check the tool list; the
+  CLI one says to gate on `command -v claude`. Target and rule ids are unchanged; `claude-ai` is
+  described in `check_portability.py` as the chat runtime.
 - **README rule count** said 12 portability rules when there were 13; with the new rule it is 14.
 
 ### Added
 - **Three runtime notes in `references/environments.md`.** A pointer to https://ccinternals.dev/cowork/
   for current runtime facts (for human readers; nothing depends on fetching it). The chat runtime
   names its file tools `create_file`, `view` and `str_replace`, so route by what a tool does. And a
-  local Claude Desktop scheduled task can be moved to the cloud after two runs unless something holds
-  it back, so a skill tested only on local scheduled runs can start running in the cloud.
+  local Claude Desktop scheduled task was observed (one machine, server-switched) moving to the cloud
+  after two runs unless something such as an attached Space, a working directory or a custom cron
+  schedule holds it back, so a skill tested only on local scheduled runs can start running in the
+  cloud.
 - **`relative-output-path` lint rule (advisory; `claude-ai` and `cowork` targets).** Flags `SKILL.md` or
   `references/` text that tells the model to write a file to a bare relative path. Outside Claude
   Code that path is invisible to the user (cloud Cowork), refused by the file tools (local Cowork),
@@ -175,20 +186,22 @@ All notable changes to this project will be documented in this file.
   imperative write verb plus a relative file path, silent on anchored bases, the skill's own files,
   URLs and links, and lines `outputs-prefix-relative` already reports. Suppress per file with
   `<!-- portability-allow: relative-output-path -->`.
-- **The `.skill` archive layout is documented**: a zip named `<skill-name>.skill` with the skill
-  folder as its single top-level entry, the folder name equal to `name`, and the files packaging
-  leaves out (root `evals/` and `tests/`, caches, `.DS_Store`, every symlink).
+- **The `.skill` archive layout is documented in `SKILL.md`'s packaging step**: a zip named
+  `<skill-name>.skill` with the skill folder as its single top-level entry, the folder name equal to
+  `name`, and the files packaging leaves out (root `evals/` and `tests/`, caches, `.DS_Store`, every
+  symlink).
 
 ### Changed
-- **Inline `` !`cmd` `` is documented per lane from live runs.** `official-guide-patterns.md` said its
-  behaviour in cloud Cowork was unverified, and did not mention permissions. Every command goes
-  through the shell permission check first. In Claude Code an allowed command runs and is
-  substituted, and a disallowed one makes the skill fail to load in the default permission mode.
-  Local Cowork replaces it with `[shell command execution disabled by policy]`. A cloud session
-  leaves it as literal text when the skill loads before the session's container exists; after that,
-  an allowed command (a read inside the working directory) runs, while one that writes a file or
-  reads outside the working directory is rewritten into an instruction for the model to run it
-  itself. Each run used a value the model had never seen.
+- **Inline `` !`cmd` `` is documented per lane, from live runs and the runtime's code.**
+  `official-guide-patterns.md` said its behaviour in cloud Cowork was unverified, and did not mention
+  permissions. Every command goes through the shell permission check first. In Claude Code an allowed
+  command runs and is substituted, and a disallowed one makes the skill fail to load in the default
+  permission mode; by the runtime's code, an uploaded skill's command stays literal in the CLI. Local
+  Cowork replaces it with `[shell command execution disabled by policy]`. A cloud session leaves it as
+  literal text when the skill loads before the session's container exists; after that, an allowed
+  command (a read inside the working directory) runs, while one that writes a file or reads outside
+  the working directory is rewritten into an instruction for the model to run it itself. A model asked
+  to report such a line may print an output it never computed, so test with a value nobody can guess.
 
 ## [0.14.0] - 2026-10-01
 
