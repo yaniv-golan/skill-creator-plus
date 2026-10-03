@@ -2,6 +2,84 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.17.0] - 2026-10-03
+
+### Changed
+- **SKILL.md now fits under its own compaction cap.** It was 47,992 characters, about 2.4× the
+  19,900-character limit it teaches, so after compaction the eval loop, packaging and environment
+  routing were cut. It is now about 18,300. The eval/improve loop moved to
+  `references/running-evals.md` and validation and packaging to `references/validate-and-package.md`,
+  both with tables of contents and mostly moved verbatim. SKILL.md keeps environment routing (moved
+  near the top), the workspace rules, a five-step eval skeleton with its two can't-miss rules (spawn
+  with-skill and baseline runs in the same turn; save timing from each task notification), and a
+  validate, package and deliver section with the commands the one-pass path needs.
+- **Commands in references use `<this-skill-dir>`.** `${CLAUDE_SKILL_DIR}` arrives literally in a
+  reference file, so SKILL.md resolves the skill directory once (the token or a `find` fallback) and
+  the references refer to it. This also fixes the eval-loop commands that ran `python -m scripts.*`
+  without changing to the skill's directory.
+- **`references/environments.md` has a table of contents and subsections** under *Sandboxed
+  sessions*; no text was reworded.
+- **`official-guide-patterns.md` is split under the agent's read cap.** At 88,635 bytes it was over the
+  60,000-byte limit for reading a file whole, so the model saw a partial view. *Advanced Skill Authoring
+  Features* and *Runtime Mechanics & Gotchas* moved verbatim to `references/advanced-features.md`.
+- **That reference no longer presents this project's findings as Anthropic's.** It was titled "Official
+  Skill-Building Patterns" while also carrying this project's measurements and code reading. It is
+  retitled "Anthropic's Guidance and This Project's Additions", and a provenance note lists the sections
+  that are ours, to be read as true of the version they name rather than as documented behaviour.
+
+### Added
+- **"Answering a question about skills."** A narrow question about skill mechanics now gets a direct
+  answer from the matching reference, not the build loop.
+- **`quick_validate` rejects a skill that would package more than one `SKILL.md`.** claude.ai and the
+  Skills API reject such uploads (from the skill-creator built into claude.ai). A `SKILL.md` under
+  `tests/`, `evals/`, a cache or behind a symlink doesn't count; the exclusions are shared with
+  `package_skill`.
+- **Description optimization says to export a credential first**, to check `isolated` and `canary`,
+  that exit 4 means nothing was measured, and that isolation leaves out the user's other skills, so
+  include near-miss queries a neighbouring skill should win.
+- **Pick slash commands from the `/` menu in the Claude app.** One typed in full can be refused with
+  "Unknown skill: <name>." before anything is sent (measured on macOS Desktop; anthropics/claude-code
+  #94309 on Windows).
+- **Same-name organization plugins.** When updating a plugin the organization also ships under the
+  same name, the `/` menu shows two identical entries, and in local sessions both loaded the
+  organization's copy; switching the organization's copy off for the user under Customize made theirs
+  load.
+
+### Fixed
+- **The grader's save location contradicted itself.** It now writes `grading.json` to the run
+  directory, where the benchmark reads it; a missing path is reported instead of asked for. The
+  comparator drafts its rubric before forming a view of either output, matching its step order.
+- **Static-mode feedback** is no longer described as auto-saving to `feedback.json` (that is server
+  mode); and the eval viewer goes in front of the user before your own analysis in every environment,
+  not only in sandboxed sessions.
+- **The reason not to delete from the outputs directory.** From Desktop 2.16120.0 the outputs
+  directory allows deletes outside bridge sessions; a connected folder in a local session still
+  refuses them until approved. The rule (build once, overwrite in place) stays.
+- **A path the shell printed is for the shell.** Stanza B now says to use the path `find` prints only
+  in shell commands: in a local session (the default host loop) it is the VM's path, which the file
+  tools refuse.
+- **Older-build and scope wording.** The "directory does not exist" fallback is attributed to older
+  local Desktop builds (current ones rewrite the path); the `bin/` launcher note says the cloud case is
+  untested; the read-only skill directory is scoped to sandboxed sessions (in Claude Code it is
+  writable but replaced on update); workspace trust is scoped to project skills.
+- **Small corrections:** the `schemas.md` example delta (+50%), `run_summary`'s improve-mode keys,
+  `check_portability`'s `--strict` description, `run_loop`'s exit 4, a stale "falls back to a
+  character count" reason in the grader, and the Save skill button shown only when the user's
+  organization allows skill creation.
+
+### Development
+- **cowork-harness 4.2.1** in CI (from 3.10.0); the cassette is re-recorded against its
+  desktop-2.16120.0 baseline.
+- **`harness/eval-scenarios/`**: eight Q&A scenarios for `cowork-harness eval`, plus `invoked/` variants
+  that tell the model to use the skill. Used to A/B this restructure against the previous text
+  (Sonnet 5.5 agent and judge, 5 reps per arm, about 150 runs): with the skill invoked, no claim
+  dropped, including after the reference split, and one wording gap the A/B surfaced (the eval
+  skeleton no longer mentioned the benchmark) was fixed and re-checked. Without the instruction to use it, Sonnet invoked the skill on only about a third of
+  these questions in a Cowork-like session, a triggering gap for a later release.
+- **Tests:** SKILL.md size asserts, pins for routing and the eval-loop pointer, pointer-resolution
+  tests (named files exist, section pointers resolve, no `${CLAUDE_SKILL_DIR}` in references or agent
+  prompts), and the shipped lint baseline drops to three rules.
+
 ## [0.16.2] - 2026-10-03
 
 ### Fixed
