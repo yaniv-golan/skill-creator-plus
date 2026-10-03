@@ -4,7 +4,6 @@ Skill Packager - Creates a distributable .skill file of a skill folder
 """
 
 import argparse
-import fnmatch
 import json
 import sys
 import zipfile
@@ -19,27 +18,10 @@ except ImportError:
         "  cd <skill-creator-plus skill dir> && python -m scripts.package_skill <skill-path>"
     )
 
-# Patterns to exclude when packaging skills.
-EXCLUDE_DIRS = {"__pycache__", "node_modules"}
-EXCLUDE_GLOBS = {"*.pyc"}
-EXCLUDE_FILES = {".DS_Store"}
-# Directories excluded only at the skill root (not when nested deeper).
-ROOT_EXCLUDE_DIRS = {"evals", "tests"}
-
-
-def should_exclude(rel_path: Path) -> bool:
-    """Check if a path should be excluded from packaging."""
-    parts = rel_path.parts
-    if any(part in EXCLUDE_DIRS for part in parts):
-        return True
-    # rel_path is relative to skill_path.parent, so parts[0] is the skill
-    # folder name and parts[1] (if present) is the first subdir.
-    if len(parts) > 1 and parts[1] in ROOT_EXCLUDE_DIRS:
-        return True
-    name = rel_path.name
-    if name in EXCLUDE_FILES:
-        return True
-    return any(fnmatch.fnmatch(name, pat) for pat in EXCLUDE_GLOBS)
+try:
+    from scripts._packaging_rules import should_exclude
+except ImportError:
+    from _packaging_rules import should_exclude
 
 
 def _plan_files(skill_path: Path) -> tuple[list[Path], list[Path]]:

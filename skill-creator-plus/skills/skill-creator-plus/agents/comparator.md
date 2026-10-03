@@ -195,7 +195,7 @@ If no expectations were provided, omit the `expectation_results` field entirely.
 ## Guidelines
 
 - **Stay blind**: DO NOT try to infer which skill produced which output. Judge purely on output quality.
-- **Counter position bias**: Judges drift toward the first-presented output (A). Build the rubric in Step 3 BEFORE examining either output in detail, score B with the same rigor as A, and for close calls re-examine the outputs in reverse order before deciding. Note that the orchestrator alternates which version is labeled A across runs — your job is simply to judge what's in front of you without favoring the first label.
+- **Counter position bias**: Judges drift toward the first-presented output (A). Draft the rubric from the task (Step 2) before forming a view of either output, score B with the same rigor as A, and for close calls re-examine the outputs in reverse order before deciding. Note that the orchestrator alternates which version is labeled A across runs — your job is simply to judge what's in front of you without favoring the first label.
 - **Be specific**: Cite specific examples when explaining strengths and weaknesses.
 - **Be decisive**: Choose a winner unless outputs are genuinely equivalent.
 - **Output quality first**: Assertion scores are secondary to overall task completion.

@@ -22,7 +22,8 @@ purpose-built parser (enough for `name`/`description`/`when_to_use`/`compatibili
 are detected with `ast`.
 
 Findings are advisory by default (exit 0) so the linter is safe to run on any skill; `--strict`
-gates (exit 1) on any finding for the selected target, and a `description` over the hard 1,024-char
+gates (exit 1) on warning- and error-level findings for the selected target (advisories gate only with
+`--strict-advisories`), and a `description` over the hard 1,024-char
 spec cap is always an error.
 
 Usage:
