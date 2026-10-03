@@ -1,0 +1,16 @@
+name: eval-script-path
+session: ../sessions/skill.yaml
+fidelity: container
+on_unanswered: fail
+prompt: |
+  I'm writing a skill that bundles scripts/validate.py. In SKILL.md, what exact line do I write so
+  Claude runs it? And if I also mention the script in references/usage.md, how should I refer to it
+  there? Answer briefly.
+assert:
+  - result: success
+  - skill_triggered: "skill-creator-plus"
+  - semantic_matches:
+      rubric:
+        - "Says to write the SKILL.md command using the ${CLAUDE_SKILL_DIR} token, e.g. python3 ${CLAUDE_SKILL_DIR}/scripts/validate.py."
+        - "Says the ${CLAUDE_SKILL_DIR} token is not substituted in a references/*.md file (it arrives as literal text there)."
+        - "Does NOT claim that Claude Code resolves bundled-script paths relative to the skill directory or that the working directory is the skill directory."

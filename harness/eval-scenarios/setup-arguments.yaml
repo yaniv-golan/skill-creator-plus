@@ -1,0 +1,15 @@
+name: eval-setup-arguments
+session: ../sessions/skill.yaml
+fidelity: container
+on_unanswered: fail
+prompt: |
+  My skill needs to know which Slack channel to post to. How should the skill get that from the user,
+  and where should it remember it between runs? Answer briefly.
+assert:
+  - result: success
+  - skill_triggered: "skill-creator-plus"
+  - semantic_matches:
+      rubric:
+        - "Recommends declaring argument-hint and reading $ARGUMENTS (or equivalent argument mechanism) for input supplied at invocation."
+        - "Says not to store the answer inside the skill's own directory (it can be read-only or replaced on upgrade)."
+        - "Mentions that some runs (sub-agents, forked skills or scheduled tasks) have nobody to answer a question, so inputs must be passed in or saved beforehand."
