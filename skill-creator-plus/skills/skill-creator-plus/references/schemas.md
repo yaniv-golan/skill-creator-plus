@@ -69,53 +69,6 @@ Written into each eval's directory during a run; the viewer reads `prompt` and `
 
 ---
 
-## history.json
-
-Tracks version progression in Improve mode. Located at workspace root.
-
-```json
-{
-  "started_at": "2026-01-15T10:30:00Z",
-  "skill_name": "pdf",
-  "current_best": "v2",
-  "iterations": [
-    {
-      "version": "v0",
-      "parent": null,
-      "expectation_pass_rate": 0.65,
-      "grading_result": "baseline",
-      "is_current_best": false
-    },
-    {
-      "version": "v1",
-      "parent": "v0",
-      "expectation_pass_rate": 0.75,
-      "grading_result": "won",
-      "is_current_best": false
-    },
-    {
-      "version": "v2",
-      "parent": "v1",
-      "expectation_pass_rate": 0.85,
-      "grading_result": "won",
-      "is_current_best": true
-    }
-  ]
-}
-```
-
-**Fields:**
-- `started_at`: ISO timestamp of when improvement started
-- `skill_name`: Name of the skill being improved
-- `current_best`: Version identifier of the best performer
-- `iterations[].version`: Version identifier (v0, v1, ...)
-- `iterations[].parent`: Parent version this was derived from
-- `iterations[].expectation_pass_rate`: Pass rate from grading
-- `iterations[].grading_result`: "baseline", "won", "lost", or "tie"
-- `iterations[].is_current_best`: Whether this is the current best version
-
----
-
 ## grading.json
 
 Output from the grader agent. Located at `<run-dir>/grading.json`.
@@ -245,7 +198,7 @@ Wall clock timing for a run. Located at `<run-dir>/timing.json`.
 
 ## benchmark.json
 
-Output from Benchmark mode. Located at `benchmarks/<timestamp>/benchmark.json`.
+Output from Benchmark mode. Located at `<benchmark_dir>/benchmark.json`, the directory passed to `aggregate_benchmark` (in the eval procedure, `<workspace>/iteration-N/`).
 
 ```json
 {
@@ -321,11 +274,11 @@ Output from Benchmark mode. Located at `benchmarks/<timestamp>/benchmark.json`.
 - `runs[]`: Individual run results
   - `eval_id`: Numeric eval identifier
   - `eval_name`: Human-readable eval name (used as section header in the viewer)
-  - `configuration`: One of `"with_skill"`/`"without_skill"` (create mode) or `"new_skill"`/`"old_skill"` (improve mode — SKILL.md's improve flow saves baselines to `old_skill/outputs/`). The viewer and aggregator accept exactly these four strings; the viewer treats `without_skill`/`old_skill` as the baseline for color coding.
+  - `configuration`: One of `"with_skill"`/`"without_skill"` (create mode) or `"with_skill"`/`"old_skill"` (improve mode — the improve flow saves baselines to `old_skill/outputs/`). The aggregator keys on whatever the directory is named; the viewer color-codes `with_skill`, `without_skill`, `new_skill` and `old_skill`, treating `without_skill`/`old_skill` as the baseline. The procedure never creates `new_skill/`.
   - `run_number`: Integer run number (1, 2, 3...)
   - `result`: Nested object with `pass_rate`, `passed`, `total`, `time_seconds`, `tokens`, `errors`
 - `run_summary`: Statistical aggregates per configuration
-  - `with_skill` / `without_skill` (`new_skill` / `old_skill` in improve mode): Each contains `pass_rate`, `time_seconds`, `tokens` objects with `mean` and `stddev` fields
+  - `with_skill` / `without_skill` (`with_skill` / `old_skill` in improve mode): Each contains `pass_rate`, `time_seconds`, `tokens` objects with `mean` and `stddev` fields
   - `delta`: Difference strings; `delta.pass_rate` is a percentage-point difference formatted like `+20%`; other fields like `"+13.0"`, `"+1700"` use raw units
 - `notes`: Freeform observations from the analyzer
 
@@ -335,7 +288,7 @@ Output from Benchmark mode. Located at `benchmarks/<timestamp>/benchmark.json`.
 
 ## comparison.json
 
-Output from blind comparator. Located at `<grading-dir>/comparison-N.json`.
+Output from blind comparator. Located at the comparator's `output_path`, or `comparison.json` in the iteration directory when none is given.
 
 ```json
 {

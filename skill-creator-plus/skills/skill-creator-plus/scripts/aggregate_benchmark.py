@@ -11,7 +11,7 @@ Usage:
     python aggregate_benchmark.py <benchmark_dir> --notes notes.json  # merge analyst notes
 
 Example:
-    python aggregate_benchmark.py benchmarks/2026-01-15T10-30-00/
+    python aggregate_benchmark.py <workspace>/iteration-1/
 
 Expected directory layout:
 

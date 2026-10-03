@@ -7,7 +7,7 @@ All notable changes to this project will be documented in this file.
 ### Changed
 - **SKILL.md now fits under its own compaction cap.** It was 47,992 characters, about 2.4× the
   19,900-character limit it teaches, so after compaction the eval loop, packaging and environment
-  routing were cut. It is now about 18,300. The eval/improve loop moved to
+  routing were cut. It is now about 18,470. The eval/improve loop moved to
   `references/running-evals.md` and validation and packaging to `references/validate-and-package.md`,
   both with tables of contents and mostly moved verbatim. SKILL.md keeps environment routing (moved
   near the top), the workspace rules, a five-step eval skeleton with its two can't-miss rules (spawn

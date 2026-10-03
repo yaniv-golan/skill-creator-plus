@@ -5,10 +5,10 @@
 model: claude-opus-5
 permission_parity: cowork          # allow unscripted tool calls (Cowork-like)
 
-# Cassette staleness covers the mounted plugin tree — 37 files today, and ANY edit to one of them
+# Cassette staleness covers the mounted plugin tree, and ANY edit to one of them
 # re-stales every cassette recorded against this session, curable only by a re-record (Docker +
 # staged agent + token). These two directories are never read by the agent during a run, so
-# excluding them costs no detection: 12 of the 37 files stop being a re-record trigger.
+# excluding them costs no detection: their files stop being a re-record trigger.
 # DELIBERATELY NOT ignored: `references/**`. Both stale-cassette recurrences here were references
 # edits, so ignoring them is what would actually stop the re-record tax — and it is exactly the
 # wrong trade. References ARE delivered to the model once the skill is invoked; this key is
