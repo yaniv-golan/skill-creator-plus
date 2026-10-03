@@ -1,10 +1,21 @@
-# Official Skill-Building Patterns & Best Practices
+# Skill-Building Patterns: Anthropic's Guidance and This Project's Additions
 
 Sources:
 - Anthropic's "The Complete Guide to Building Skills for Claude" (2026)
 - Thariq's "Lessons from Building Claude Code Skills: How We Use Skills" (Mar 2026) — battle-tested insights from hundreds of skills in active use at Anthropic
 
 Read this reference when designing or reviewing skills — it contains the canonical patterns, checklists, troubleshooting guidance, and hard-won practical lessons.
+
+**Provenance.** Most of this file comes from the two sources above. These parts are skill-creator-plus's own, not Anthropic's: they come from this project's measurements, live runs, or reading Claude Code's shipped code, and are scoped and hedged where they appear:
+
+- *Declare at authoring time, probe at run time — never detect the host*
+- *Claude-specific frontmatter: what these fields actually do*
+- *A default body skeleton (optional)* and *Designing Scripts for Agent Use*
+- *SKILL.md Size* (the compaction mechanics)
+- *Claude-specific addenda* under *Description Field Formula*
+- *A Skill's Description Disappears From the Listing* under *Troubleshooting Guide*
+
+`references/advanced-features.md` is likewise this project's, apart from the feature descriptions it cites. Treat a measured or code-read statement as true of the version it names, not as documented behaviour.
 
 ---
 
