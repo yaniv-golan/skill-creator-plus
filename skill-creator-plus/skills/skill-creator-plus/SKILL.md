@@ -155,7 +155,7 @@ Pass `<output-dir>` explicitly (the default is unwritable in a sandboxed session
 - `references/running-evals.md` — Steps 1–5, viewer, feedback, improving, blind comparison
 - `references/validate-and-package.md` — checklist, validators, packaging, delivery
 - `references/environments.md` — no sub-agents, no display, sandboxed sessions
-- `references/official-guide-patterns.md` — Anthropic's guidance and authoring rules
+- `references/official-guide-patterns.md` — Anthropic's guidance, plus this project's marked additions
 - `references/advanced-features.md` — Claude-specific features, runtime mechanics
 - `references/description-optimization.md`, `references/schemas.md`
 - `agents/grader.md`, `agents/comparator.md`, `agents/analyzer.md` — sub-agent instructions
