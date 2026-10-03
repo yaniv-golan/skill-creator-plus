@@ -52,19 +52,20 @@ cd skill-creator-plus/skills/skill-creator-plus && python -m scripts.check_porta
 # one that vanishes is rarely the largest. Deliberately a LOWER BOUND: the runtime's budget spans
 # every skill invoked in the session across all enabled plugins, not one plugin's. Reached by
 # walking up from the linted skill to `.claude-plugin/plugin.json`; a standalone or single-skill
-# plugin never fires it, which is why this repo's own baseline stays at 4).
+# plugin never fires it, which is why this repo's own baseline does not include it).
 # --strict gates on warnings/errors only; advisories report but never gate (add --strict-advisories
 # to gate on those too). Exit codes: 0 no gating findings, 1 gated, 2 usage error, 3 path not found.
 # NOTE: CI does NOT run check_portability — `.github/workflows/validate.yml` runs
 # quick_validate + unittest only. What actually guards this baseline in CI is the
 # SelfLintTests in tests/test_check_portability.py, which lint the shipped tree. Don't
 # read a green CI as the CLI having gated these rules. Two of those tests enforce what
-# this comment claims: one asserts the finding-id SET is exactly the four below (so a NEW
+# this comment claims: one asserts the finding-id SET is exactly the three below (so a NEW
 # rule id reds CI rather than silently changing the baseline), and one asserts the
-# load-bearing workspace instructions still fall inside SKILL.md's compaction-surviving
-# prefix (they nearly didn't, twice — a version bump and an added clause both push them).
-# Note this skill's own baseline: 4 findings (subagent / claude-CLI / browser deps, all Claude-Code-
-# first by design, plus its own compaction-truncation-risk at ~2.0x cap) — so `--target all` is exit 0,
+# whole SKILL.md fits its compaction cap (<= 19,300 with a load-time margin; 18,500 target)
+# and that the load-bearing workspace, routing and running-evals-gate phrases are in it.
+# Note this skill's own baseline: 3 findings (subagent / claude-CLI / browser deps, all Claude-Code-
+# first by design; compaction-truncation-risk left in 0.17.0, when SKILL.md was cut under the cap) —
+# so `--target all` is exit 0,
 # and `--target cowork --strict` is exit 1 on the browser-display warning. A NEW rule id is the
 # regression signal, not a non-empty finding list.
 
