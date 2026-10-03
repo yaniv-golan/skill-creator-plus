@@ -1,0 +1,16 @@
+name: eval-workspace-location
+session: ../sessions/skill.yaml
+fidelity: container
+on_unanswered: fail
+prompt: |
+  I'm using your skill from the Claude app (a Cowork session, not Claude Code) to build and test a new
+  skill. Where should the skill's working files and test outputs go, and how should paths be written?
+  Answer briefly.
+assert:
+  - result: success
+  - skill_triggered: "skill-creator-plus"
+  - semantic_matches:
+      rubric:
+        - "Says to put the workspace in the directory the session's own instructions designate for work (not beside the installed skill)."
+        - "Says paths for file tools should be absolute, not bare relative paths."
+        - "Says the files must be delivered/sent to the user, because the user cannot see the session's working directory (or equivalent)."
