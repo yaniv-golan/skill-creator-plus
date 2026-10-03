@@ -1,0 +1,16 @@
+name: eval-invoked-viewer-no-display
+session: ../../sessions/skill.yaml
+fidelity: container
+on_unanswered: fail
+prompt: |
+  Use the skill-creator-plus skill to answer this.
+  You're running my skill's test cases in a session with no browser or display. How will I review the
+  outputs and give you feedback? Answer briefly.
+assert:
+  - result: success
+  - skill_triggered: "skill-creator-plus"
+  - semantic_matches:
+      rubric:
+        - "Says the eval viewer is generated as a static, standalone HTML file instead of a local server."
+        - "Says the HTML file is delivered to the user (sent as a file, or published as an Artifact) rather than just giving a path or localhost link."
+        - "Says the user's feedback comes back by copying the feedback JSON from the page and pasting it into the conversation."

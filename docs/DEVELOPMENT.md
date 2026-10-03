@@ -99,8 +99,8 @@ python -m scripts.aggregate_benchmark <dir> --notes notes.json  # merge analyst 
 # measured), which is a different fact from a low score and must not be treated as one.
 
 # cowork-harness static checks on the shipped skill (token-free, no Docker; needs cowork-harness
-# >= 3.10.0 (the committed cassette is recorded against a desktop-2.x baseline, which a CLI
-# before 3.8.0 does not ship, so an older CLI reports it stale) — see `harness/README.md`. 3.0.0 renamed the `l0_plugin_divergence` signal to
+# >= 4.2.1 (the committed cassette is recorded against its desktop-2.16120.0 baseline, so an older
+# CLI reports it stale) — see `harness/README.md`. 3.0.0 renamed the `l0_plugin_divergence` signal to
 # `l0_host_config_contamination` and added the `allow_host_hooks` scenario key; the loader is a
 # strictObject, so an older CLI hard-errors on a scenario using the new key rather than ignoring it.)
 cowork-harness lint-skill   --strict skill-creator-plus/skills/skill-creator-plus
@@ -132,8 +132,8 @@ maintainer CI, not part of the user-facing skill workflow. Full instructions: `h
   Desktop agent binary + a token — a maintainer step, not CI. Run `cowork-harness doctor --tier
   container` first.
 - **Install caveat:** `npx cowork-harness@<ver>` can silently serve a stale cached CLI. Verify
-  `cowork-harness --version` reports **3.10.x** (write-back detector landed in 1.1.0; the
-  `verify-cassettes` claude.com handshake fix landed in 1.2.0); the CI job pins `cowork-harness@3.10.0`
+  `cowork-harness --version` reports **4.2.x** (write-back detector landed in 1.1.0; the
+  `verify-cassettes` claude.com handshake fix landed in 1.2.0); the CI job pins `cowork-harness@4.2.1`
   in an isolated prefix and asserts the version.
 
 ### Cassette privacy policy (public repo — BLOCKING)

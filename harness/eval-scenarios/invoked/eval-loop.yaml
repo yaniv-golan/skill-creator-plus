@@ -1,0 +1,15 @@
+name: eval-invoked-eval-loop
+session: ../../sessions/skill.yaml
+fidelity: container
+on_unanswered: fail
+prompt: |
+  Use the skill-creator-plus skill to answer this.
+  Before I trust a skill you write for me, how will you test it? Walk me through the steps briefly.
+assert:
+  - result: success
+  - skill_triggered: "skill-creator-plus"
+  - semantic_matches:
+      rubric:
+        - "Describes running each test prompt both with the skill and without it (a baseline) to compare."
+        - "Describes grading the outputs against assertions/expectations and aggregating results into a benchmark (pass rate, time, tokens)."
+        - "Describes showing the outputs to the user for review (e.g. in a viewer) and iterating on the skill based on their feedback."
