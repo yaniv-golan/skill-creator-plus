@@ -1,0 +1,16 @@
+name: eval-invoked-deliver-and-save
+session: ../../sessions/skill.yaml
+fidelity: container
+on_unanswered: fail
+prompt: |
+  Use the skill-creator-plus skill to answer this.
+  Once you've finished building a skill for me in the Claude app, how do I actually get it and install
+  it into my account? Answer briefly.
+assert:
+  - result: success
+  - skill_triggered: "skill-creator-plus"
+  - semantic_matches:
+      rubric:
+        - "Says the skill is packaged into a .skill file (a zip of the skill folder), using the bundled packaging script rather than by hand."
+        - "Says the .skill file is sent/delivered to the user in the conversation; telling them a file path alone is not enough."
+        - "Says the user saves it via a Save skill button on the delivered file's card (or equivalent wording)."

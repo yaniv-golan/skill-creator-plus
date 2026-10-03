@@ -1,0 +1,16 @@
+name: eval-invoked-compaction-size
+session: ../../sessions/skill.yaml
+fidelity: container
+on_unanswered: fail
+prompt: |
+  Use the skill-creator-plus skill to answer this.
+  My skill's SKILL.md is about 40,000 characters long. Is that a problem? What should I do about it?
+  Answer briefly.
+assert:
+  - result: success
+  - skill_triggered: "skill-creator-plus"
+  - semantic_matches:
+      rubric:
+        - "Says it is a problem because after context compaction the SKILL.md is truncated to roughly 19,900 characters (about 5,000 tokens)."
+        - "Recommends moving content out of SKILL.md into reference files that are read on demand."
+        - "Says to measure the size in characters (e.g. wc -m) rather than in lines."

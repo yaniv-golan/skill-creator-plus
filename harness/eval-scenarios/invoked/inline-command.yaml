@@ -1,0 +1,16 @@
+name: eval-invoked-inline-command
+session: ../../sessions/skill.yaml
+fidelity: container
+on_unanswered: fail
+prompt: |
+  Use the skill-creator-plus skill to answer this.
+  My skill's SKILL.md has a line !`git log --oneline -5` to inject recent commits. Users run it in Claude
+  Code and in Claude app cloud sessions. Anything I should worry about? Answer briefly.
+assert:
+  - result: success
+  - skill_triggered: "skill-creator-plus"
+  - semantic_matches:
+      rubric:
+        - "Says the inline command goes through a permission check, so it must be allowed (for example declared in allowed-tools) to run."
+        - "Warns that in a cloud session a failing inline command can hang the conversation (no reply, no error) or otherwise break the skill, so the command should not be able to fail."
+        - "Says the skill should not depend on the inline command's output (it can arrive literal, disabled or rewritten depending on where the skill runs)."
