@@ -37,6 +37,9 @@ different mounts of the same content), locate the file from the SHELL's side and
 
     find / -path "*<skill-name>/scripts/<script>.py" -print -quit 2>/dev/null
 
+Use the path it prints only in shell commands. In a local session (the default host loop) it is the VM's path,
+which the file tools refuse; for Read or Write, use the path from this file's text.
+
 Do not type `$CLAUDE_SKILL_DIR` or `$CLAUDE_PLUGIN_ROOT` into a shell command. Neither is
 exported: the first expands to nothing, and the second may be set to a *different* plugin's
 directory, so checking whether it is empty will not tell you it is wrong.

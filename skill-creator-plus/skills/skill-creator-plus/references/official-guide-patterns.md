@@ -909,7 +909,7 @@ argument-hint: <service-name> [environment]
 Deploy the service "$0" to the "$1" environment (default: staging).
 ```
 
-When the user types `/deploy api-gateway production`, `$0` becomes `api-gateway` and `$1` becomes `production`.
+When the user types `/deploy api-gateway production`, `$0` becomes `api-gateway` and `$1` becomes `production`. In the Claude app, the user should pick the command from the `/` menu: one typed in full can be refused with "Unknown skill: <name>." before anything is sent, and no session starts.
 
 In a cloud session, a skill invoked before the conversation has started its cloud session (typically its first message) receives `$ARGUMENTS` unfilled; the positional placeholders were not checked. Write the skill so it still works then.
 

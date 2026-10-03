@@ -19,7 +19,7 @@ Use this section when your tool list has no tool that dispatches a sub-agent —
 **Packaging**: The `package_skill.py` script works anywhere with Python and a filesystem. Run it, then deliver the resulting `.skill` file as described under *Delivering files to the user* below.
 
 **Updating an existing skill**: The user might be asking you to update an existing skill, not create a new one. In this case:
-- **Preserve the original name.** Note the skill's directory name and `name` frontmatter field -- use them unchanged. E.g., if the installed skill is `research-helper`, output `research-helper.skill` (not `research-helper-v2`).
+- **Preserve the original name.** Note the skill's directory name and `name` frontmatter field -- use them unchanged. E.g., if the installed skill is `research-helper`, output `research-helper.skill` (not `research-helper-v2`). If it's a plugin your organization also ships under that name, the `/` menu shows two identical entries, and in local sessions both loaded the organization's copy; to test the user's copy, have them switch the organization's copy off for themselves under Customize.
 - **Copy to a writeable location before editing.** The installed skill path may be read-only. Copy it into the directory your instructions designate for your work, by absolute path (`<abs-workspace>/<skill-name>/`), edit the copy there, and package from that copy with `package_skill.py`. Don't stage in `/tmp`, and don't assemble the `.skill` archive by hand.
 
 ## Sandboxed sessions (cloud and local sessions, and the chat runtime)
