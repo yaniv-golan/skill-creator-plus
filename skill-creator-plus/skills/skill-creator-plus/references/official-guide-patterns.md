@@ -14,6 +14,7 @@ Read this reference when designing or reviewing skills — it contains the canon
 - *SKILL.md Size* (the compaction mechanics)
 - *Claude-specific addenda* under *Description Field Formula*
 - *A Skill's Description Disappears From the Listing* under *Troubleshooting Guide*
+- Within sections otherwise from the sources: the *What the model cannot see* list under *Think Through the Setup*, the host-shell note under *On-Demand Hooks*, the counting note under *Measuring Skill Usage*, and the run counts under `context: fork` in *Additional Frontmatter Fields*
 
 `references/advanced-features.md` is likewise this project's, apart from the feature descriptions it cites. Treat a measured or code-read statement as true of the version it names, not as documented behaviour.
 
@@ -507,7 +508,7 @@ guesses is worse than an argument that is missing, because the missing argument 
 
 **`allowed-tools` / `disallowed-tools` / `shell`.** `allowed-tools` **grants**: it pre-approves tools for the invoking turn so Claude uses them without a permission prompt, and the grant clears on the user's next message. Populating it does **not** cause a prompt. `disallowed-tools` is the denylist that removes tools while the skill is active. `shell` only selects an interpreter (`bash`/`powershell`) and carries no permission semantics.
 
-The one real gate is **workspace trust**: for a skill in a project's `.claude/skills/`, its capability frontmatter (`allowed-tools`, `hooks`) takes effect only after the trust dialog is accepted for that folder — once per folder, not per invocation. Review project skills before trusting a repo; a skill can grant itself broad tool access. MCP-sourced and shared-memory skills drop these fields entirely — see the carve-outs below.
+The one real gate is **workspace trust**: for a skill in a project's `.claude/skills/`, its capability frontmatter (`allowed-tools`, `hooks`) takes effect only after the trust dialog is accepted for that folder — once per folder, not per invocation. Review project skills before trusting a repo; a skill can grant itself broad tool access. MCP-sourced and shared-memory skills drop these fields entirely — see `references/advanced-features.md` (*MCP-bundled skills — Claude carve-outs*, *Shared-memory skills*).
 
 ### A default body skeleton (optional)
 
@@ -527,7 +528,7 @@ deviate wherever the work has a different shape. This is a starting point, not a
 
 A script that works fine for a human can be unusable for an agent. When an agent runs your script, it reads stdout and stderr to decide what to do next — design choices that seem cosmetic to a human are load-bearing for agents. Apply these conventions to every script you bundle.
 
-**Accept absolute output paths, and echo back the absolute path you actually wrote.** A script runs under the shell, whose working directory is not the one the calling agent's file tools use. A relative output path can land somewhere neither the user nor the agent can reach, and the script will report success anyway. Resolve the path and print it — a bundled script is the only component that can honestly report where the bytes went, because `Write`'s own result echoes the path it was *given*, not a resolved one. Related: shell calls are independent, with no cwd carried between them, so a `cd` in one call cannot set up state for the next.
+**Accept absolute output paths, and echo back the absolute path you actually wrote.** A script runs under the shell, whose working directory is not the one the calling agent's file tools use. A relative output path can land somewhere neither the user nor the agent can reach, and the script will report success anyway. Resolve the path and print it — a bundled script is the only component that can honestly report where the bytes went, because `Write`'s own result echoes the path it was *given*, not a resolved one. Related: cwd carryover between shell calls is unreliable across hosts, so a `cd` in one call cannot be relied on to set up the next.
 
 **When your skill text names a sandbox path, phrase it as the shell's location or a script's argument — never as a file-tool write target.** Static checkers flag prose describing a file-tool write/save/read/edit to a VM path (that operation really is denied), while "the shell starts in `<path>`" or "pass `<path>` to the script" is both correct and clean. A skill that gets this backwards fails its own author's lint.
 
@@ -559,7 +560,7 @@ Error: --format must be one of: json, csv, table.
 
 **Idempotent by default.** Agents may retry commands after a partial failure or timeout. "Create if not exists" is safer than "create and fail on duplicate." Where genuine destructive operations are unavoidable, require an explicit `--confirm` or `--force` flag rather than running silently.
 
-**Dry-run support for destructive operations.** A `--dry-run` flag lets the agent preview what will happen and surface it to the user before committing. This pairs naturally with the [Plan-validate-execute](#validation-loops) pattern.
+**Dry-run support for destructive operations.** A `--dry-run` flag lets the agent preview what will happen and surface it to the user before committing. This pairs naturally with the plan-validate-execute pattern.
 
 **Predictable output size.** Many agent harnesses truncate tool output beyond a threshold (often 10–30 K characters), silently dropping critical information. If your script can produce large output, default to a summary or a reasonable limit and support pagination flags (`--limit`, `--offset`). For genuinely large output that doesn't paginate, require an `--output FILE` flag so the agent explicitly opts in to capturing it on disk.
 
@@ -697,9 +698,9 @@ One trap, because it looks like the answer and isn't: the `Path:` field the mode
 
 ## Advanced Features and Runtime Mechanics
 
-Moved to `references/advanced-features.md`: Dynamic Context Injection, path variables, Claude-specific
-frontmatter, hooks, MCP-bundled skills, compaction and SKILL.md size, inline shell substitution, and
-the runtime mechanics and gotchas of Claude Code.
+Moved to `references/advanced-features.md`: Dynamic Context Injection, path variables, hook token
+substitution, MCP-bundled skills, inline shell substitution, and the runtime mechanics and gotchas of
+Claude Code. *Claude-specific frontmatter*, *On-Demand Hooks* and *SKILL.md Size* stay in this file.
 
 ## Troubleshooting Guide
 

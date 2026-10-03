@@ -189,7 +189,7 @@ Two traps around that restriction:
   admin-side UI error is unhelpful too — Claude Desktop shows a generic "Marketplace sync failed.
   Check the repository URL and try again," with the real message only in the renderer log
   (`~/Library/Logs/Claude/claude.ai-web.log`, grep `MARKETPLACE_ERROR`). The one local gate is this
-  skill's own linter: `python -m scripts.check_portability <skill> --target claude-ai` carries
+  skill's own linter: `cd <this-skill-dir> && python -m scripts.check_portability <skill> --target claude-ai` carries
   `plugin-bin-directory` (warning), which walks up to `.claude-plugin/plugin.json` and fires when
   that root holds a non-empty `bin/`.
 - **The documented substitute is narrower than it reads.** The docs say to keep executables in

@@ -139,7 +139,7 @@ Once all runs are done:
    ```
    For iteration 2+, also pass `--previous-workspace <abs-workspace>/iteration-<N-1>`.
 
-   **Sandboxed sessions / headless environments:** If `webbrowser.open()` is not available or the environment has no display, use `--static <absolute-output-path>` to write a standalone HTML file instead of starting a server. When the user clicks "Submit All Reviews", the viewer displays the raw JSON in a copyable textarea (no file is downloaded — blob downloads blank the page in embedded viewers). The user pastes the JSON directly into the chat, or saves it themselves into the workspace as `feedback.json`. **Important: In static mode, you cannot read feedback.json from disk** — see `references/environments.md` → *Sandboxed sessions* for how to handle the feedback loop.
+   **Sandboxed sessions / headless environments:** If `webbrowser.open()` is not available or the environment has no display, use `--static <absolute-output-path>` to write a standalone HTML file instead of starting a server. When the user clicks "Submit All Reviews", the viewer displays the raw JSON in a copyable textarea (no file is downloaded — blob downloads blank the page in embedded viewers). The user pastes the JSON directly into the chat, or saves it themselves into the workspace as `feedback.json`. Nothing reaches disk on its own — see `references/environments.md` → *Sandboxed sessions* for how to handle the feedback loop.
 
 Note: please use generate_review.py to create the viewer; there's no need to write custom HTML.
 

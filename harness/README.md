@@ -23,7 +23,7 @@ harness/
     stanza-split-namespace.yaml # assets/ stanza B in the lane it exists for, hostloop
   sessions/fixture.yaml      # mounts fixtures/widget-fixture instead of this repo's plugin
   fixtures/widget-fixture/   # throwaway plugin built FROM assets/ — tests the templates we SHIP
-  cassettes/                 # (no committed cassettes — see below; recorded on-demand / locally)
+  cassettes/                 # one committed cassette (no-trigger); the other scenarios are live-only — see below
 ```
 
 **`fixtures/widget-fixture/` tests the shipped templates, not this skill.** It is a plugin assembled
@@ -66,13 +66,13 @@ pruned-binary fallback **and the sha verification** — microvm had been the one
 ELF in a VM without verifying it. Re-measured after upgrading: the lane runs, and the L2 guest
 firewall it uniquely provides is available again.
 
-**One cassette is committed; the other two are live-only — the CI gate is mostly the static lane.**
+**One cassette is committed; the other scenarios are live-only — the CI gate is mostly the static lane.**
 A cassette records the skill's *own* behavior, so its staleness hash is tied to the skill's source.
 skill-creator-plus is edited constantly, so a committed cassette goes stale on nearly every PR — and
 re-recording needs Docker + a staged Claude Desktop agent + a token, a wall external contributors
 can't clear. `no-trigger` is the exception and is committed: it is a cheap negative control with no
 artifact, and over-triggering is a live risk every time the `description` changes — so a free replay
-gate on every PR is worth its re-record cost. The other two stay live-only for the reasons below.
+gate on every PR is worth its re-record cost. The others stay live-only for the reasons below.
 
 **What replay does NOT cover, and it is the important half.** Guards (`outputs-delete`, `host-path`)
 run off the live run's scan, which a cassette does not carry — a replay reports them as `—`, not as
@@ -82,7 +82,7 @@ and never as a substitute for a live run. So the committed CI gate (`.github/wor
 lane** (`lint-skill`, `analyze-skill`, scenario `lint`, `record --dry-run --quiet`), which is robust
 to skill edits. Cassettes are
 recorded **on demand / locally** (and in the deferred nightly live lane) — the recipe below still
-applies; the resulting cassettes just aren't committed.
+applies; apart from `no-trigger`, the resulting cassettes aren't committed.
 - `no-trigger` — cheap negative control; records + replays cleanly.
 - `create-skill` — non-deterministic (LLM-authored gates) and bakes an un-scannable `.skill` artifact
   into the cassette; live-only by nature.
@@ -115,8 +115,8 @@ cowork-harness --version          # MUST report 4.2.x — `npx` can silently ser
   agent binary (or `COWORK_AGENT_BINARY`) **and** an Anthropic/OAuth token. Run
   `cowork-harness doctor --tier container` to check.
 - **If you ever add a host-inheriting scenario** (`protocol` / `hostloop`, or `cowork` resolving to
-  hostloop), note two 1.18+ behaviours that do not affect today's suite — every scenario here is
-  `fidelity: container`, which is tier-gated out of both. First, `record` **refuses before spending**
+  hostloop), note two 1.18+ behaviours. Every scenario here is `fidelity: container`, which is tier-gated out of
+  both, except `stanza-split-namespace.yaml` (`hostloop`, live-only, never recorded). First, `record` **refuses before spending**
   to write such a recording into a repo-visible path. 3.2.0 states the refusal predicate where the
   refusal is explained rather than as an aside ~130 lines away, and it is a conjunction of three
   things: a host-inheriting tier **and** a repo-visible destination **and** nothing there yet — so an
@@ -163,7 +163,7 @@ cowork-harness run harness/scenarios/remote-delivery.yaml  # remote-lane deliver
 
 ## Recording cassettes (the one maintainer step this suite still needs)
 
-The scenarios are **lint-clean but not recorded** — no committed cassettes. *Recorded* and *run* differ: `create-skill.yaml` has been run live and passed, it simply has no cassette. `create-skill.yaml` has **no `answers:`
+Apart from `no-trigger`, the scenarios are **lint-clean but not recorded**. *Recorded* and *run* differ: `create-skill.yaml` has been run live and passed, it simply has no cassette. `create-skill.yaml` has **no `answers:`
 block at all** — the Capture Intent interview asks gates whose exact option labels are
 model-decided and reworded every run, so it uses `on_unanswered: llm` instead of scripted labels
 (see "What a live run checks" below). Run it live once to see the real gates before recording the

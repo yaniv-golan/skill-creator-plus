@@ -508,7 +508,8 @@ def main():
             "Exit codes:\n"
             "  0  evaluation completed (regardless of pass rate)\n"
             "  1  eval-set unreadable, skill not found, or every run errored\n"
-            "  4  INSTRUMENT FAILURE — the canary did not trigger, so nothing was measured\n"
+            "  4  INSTRUMENT FAILURE — the canary did not trigger, or a run invoked an installed\n"
+            "     copy of the skill instead of the one under test, so nothing was measured\n"
             "     and no scores are reported (distinct from a low score, which is a finding)"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,

@@ -44,7 +44,7 @@ This step matters — bad eval queries lead to bad descriptions.
 
 Tell the user: "This will take some time — I'll run the optimization loop in the background and check on it periodically."
 
-**Export a credential first** (`ANTHROPIC_API_KEY`, `CLAUDE_CODE_OAUTH_TOKEN` or `ANTHROPIC_AUTH_TOKEN`). With one, each `claude -p` run gets an isolated home directory, so a copy of the skill the user already has installed can't answer in place of the version under test. Without one, the run uses the user's real configuration and refuses to score if an installed copy answered. Check `isolated` and `canary` in the output JSON. **Exit 4 means nothing was measured** (the detector never fired), which is different from a low score; don't report it as a bad description.
+**Export a credential first** (`ANTHROPIC_API_KEY`, `CLAUDE_CODE_OAUTH_TOKEN` or `ANTHROPIC_AUTH_TOKEN`). With one, each `claude -p` run gets an isolated home directory, so a copy of the skill the user already has installed can't answer in place of the version under test. Without one, the run uses the user's real configuration and refuses to score if an installed copy answered. Check `isolated` and `canary` in the output JSON. **Exit 4 means nothing was measured** (the canary did not trigger, or a run invoked an installed copy of the skill instead of the one under test), which is different from a low score; don't report it as a bad description.
 
 Isolation has a cost: the test listing holds only this skill, so the user's other skills aren't there to compete for a query. Include should-not-trigger queries that a neighbouring skill should win, and read a high score as "clear on its own", not "wins against everything installed".
 

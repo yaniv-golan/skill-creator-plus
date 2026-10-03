@@ -113,8 +113,11 @@ cowork-harness lint --strict --min-severity WARN harness/scenarios/
 # The directory arm is NOT recursive and reports a `prompt:`-less file as *skipped*, not broken.
 cowork-harness record harness/scenarios/ --dry-run --quiet
 # CI also runs this one, and omitting it locally is how a stale cassette reaches a PR: a cassette
-# records the SKILL's behaviour, so its staleness hash is tied to the skill's source and ANY edit
-# under skills/ invalidates it. Re-record with:
+# records the SKILL's behaviour, so its staleness hash is tied to the skill's source and nearly any
+# edit under skills/ invalidates it. `staleness.hash_ignore` in harness/sessions/skill.yaml excludes
+# tests/ and eval-viewer/ (none read by the agent at run time); everything else —
+# SKILL.md, plugin.json, scripts/, references/, assets/, agents/ — still re-stales on edit, and the
+# only cure is a re-record (Docker + staged agent + token). Re-record with:
 #   cowork-harness record harness/scenarios/no-trigger.yaml --out harness/cassettes/no-trigger.cassette.json
 cowork-harness verify-cassettes harness/cassettes --allow-empty
 ```
@@ -126,8 +129,7 @@ maintainer CI, not part of the user-facing skill workflow. Full instructions: `h
 
 - **CI** (`.github/workflows/harness.yml`) runs the token-free static lane on every PR/push:
   `lint-skill --strict`, `analyze-skill --strict`, scenario `lint`, a `record --dry-run --quiet`
-  load-check (catches an unloadable scenario that `lint` only warned on), and (once cassettes exist)
-  a guarded `verify-cassettes` + `replay`.
+  load-check (catches an unloadable scenario that `lint` only warned on), and a guarded `verify-cassettes` + `replay`.
 - **Recording cassettes** and the live `container`-fidelity `run` need Docker + a staged Claude
   Desktop agent binary + a token — a maintainer step, not CI. Run `cowork-harness doctor --tier
   container` first.

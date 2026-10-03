@@ -265,7 +265,7 @@ Your job ends at writing this JSON array. The orchestrator merges it into
 benchmark.json by re-running the aggregator:
 
 ```bash
-python -m scripts.aggregate_benchmark <benchmark-dir> --notes <output_path>
+cd <this-skill-dir> && python -m scripts.aggregate_benchmark <benchmark-dir> --notes <output_path>
 ```
 
 (Without this merge step the notes file sits orphaned next to benchmark.json
