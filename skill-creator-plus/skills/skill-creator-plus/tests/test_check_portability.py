@@ -1,4 +1,5 @@
 import math
+import re
 import sys
 import tempfile
 import unittest
@@ -1044,20 +1045,33 @@ class SelfLintTests(unittest.TestCase):
                              f"{p.name} suppresses the rule instead of complying with it")
 
     def test_load_bearing_workspace_facts_survive_compaction(self):
-        """The instructions an agent needs AT the workspace step must be in the surviving prefix.
+        """SKILL.md fits under its own compaction cap, and what an agent acts on is in it.
 
-        Not a delta gate: `SKILL.md` may legitimately grow. What must stay true is that the three
-        facts an agent acts on when it creates the workspace are still readable after a session
-        auto-compacts, because compaction truncates to COMPACTION_CAP_CHARS and writes the
-        truncation back. This nearly regressed twice while it was being written -- once from a
-        routine version bump (frontmatter sits ahead of this text) and once from adding an
-        explanatory clause earlier in the file -- so it is pinned rather than trusted.
+        Since 0.17.0 the whole file is meant to survive compaction: the eval loop and the
+        validate/package detail live in references/ (running-evals.md, validate-and-package.md),
+        which are read on demand and never truncated, and SKILL.md keeps the routing, the
+        workspace rules, a five-step eval skeleton and the one-pass commands. So the invariant is
+        the WHOLE FILE under COMPACTION_CAP_CHARS, with a 600-char margin for what the runtime adds
+        at load (the prepended `Base directory for this skill:` line and the expansion of the
+        skill-directory variable into an absolute path), plus a tighter 18,500 target that leaves
+        headroom for future edits.
 
-        If this fails, do NOT move the cap. Move content out of SKILL.md into references/, which
-        is read on demand and never truncated.
+        The phrase pins still matter: they catch a fact being condensed or reworded out of the
+        file, which a size check cannot see. Earlier versions of this test pinned these facts into
+        a 19,900-char PREFIX of a 48k file; that nearly regressed twice (a version bump and an added
+        clause both pushed them past the cut).
+
+        If this fails, do NOT move the cap or the target. Move content out of SKILL.md into
+        references/ and leave a one-line pointer.
         """
         skill_md = (Path(__file__).resolve().parent.parent / "SKILL.md").read_text()
-        surviving = skill_md[:COMPACTION_CAP_CHARS]
+        self.assertLessEqual(
+            len(skill_md), COMPACTION_CAP_CHARS - 600,
+            "SKILL.md no longer fits its own compaction cap with the load-time margin")
+        self.assertLessEqual(
+            len(skill_md), 18_500,
+            "SKILL.md is past its 18,500-char target -- move content to references/")
+        surviving = skill_md[:COMPACTION_CAP_CHARS - 600]
         for fact, why in [
             ("<abs-workspace>", "the shell/sub-agent path placeholder is never defined"),
             ("**file tools** need the absolute path",
@@ -1066,39 +1080,60 @@ class SelfLintTests(unittest.TestCase):
              "the shell-vs-file-tool split is lost"),
             ("give sub-agents both, labelled", "sub-agents get one form and misuse it"),
             ("Put it where your instructions say to work", "the location rule for the workspace is lost"),
-            # The one-pass route's verification doctrine. Both sentences were ported INLINE rather
-            # than cross-referenced, because the eval-section text they came from sits past the cut
-            # -- a pointer into it would dangle in exactly the compacted session this guards.
+            # The one-pass route's verification doctrine, kept inline rather than behind a pointer.
             ("whether the script or the *test* is wrong",
              "the one-pass route loses its 'the fixture can be wrong' epistemics"),
             ("belongs in the skill's own `scripts/`",
              "the one-pass route loses the bundle-the-check guidance"),
-            # The size rule must state the metric that actually binds. A line count cannot protect
-            # a character budget -- this very file passes "under 500 lines" at 2.07x the cap.
+            # The size rule must state the metric that actually binds; a line count cannot
+            # protect a character budget.
             ("under 19,900 characters — measure with `wc -m`",
              "the size rule reverts to a line count, which cannot enforce the real limit"),
             # Truncation recovery is only useful if it survives the truncation it describes.
             ("re-read `SKILL.md` from disk",
              "the truncation-recovery instruction is itself truncated away"),
+            # Routing decides which reference governs; without it a sandboxed session follows the
+            # Claude Code defaults.
+            ("## Environment-specific instructions", "the environment routing section is lost"),
+            ("→ *Without sub-agents*", "the no-sub-agent route is lost"),
+            ("→ *Sandboxed sessions* for paths and delivery", "the sandboxed-session route is lost"),
+            # The eval loop now lives in a reference; the gate that sends the agent there must
+            # survive, or an agent runs Step 1 from the five-line skeleton alone.
+            ("**Before running any test case, read `references/running-evals.md`.**",
+             "the intro's running-evals gate is lost"),
+            ("**Read `references/running-evals.md` before Step 1**",
+             "the eval skeleton's running-evals gate is lost"),
+            ("**in the same turn**", "the with-skill/baseline same-turn rule is lost"),
+            ("exist only in the task notification",
+             "the timing-capture rule is lost, and the data with it"),
+            # The references write commands with this placeholder; SKILL.md must define it.
+            ("**`<this-skill-dir>`**", "the placeholder every reference command uses is undefined"),
+            ("find / -path '*skill-creator-plus/scripts/quick_validate.py'",
+             "the fallback for an unexpanded skill-directory variable is lost"),
+            ("Sending the `.skill` file is also how the user saves it",
+             "the save-the-skill delivery rule is lost"),
         ]:
             self.assertIn(fact, surviving,
-                          f"dropped past the compaction cut: {why}. Move content to references/.")
+                          f"missing from SKILL.md: {why}. Move content to references/, not this.")
 
     def test_shipped_baseline_rule_ids_are_exactly_these(self):
         """`docs/DEVELOPMENT.md` says a NEW rule id is the regression signal -- enforce that.
 
-        The docs state a baseline of 4 findings and that the suite (not the CLI, which CI does not
-        run) is what guards it. Nothing asserted the SET, so a new rule firing on our own tree
-        would have gone unnoticed. Adding a rule that legitimately fires here means updating this
-        list deliberately, which is the point.
+        The suite (not the CLI, which CI does not run) is what guards the baseline. Nothing else
+        asserts the SET, so a new rule firing on our own tree would go unnoticed. Adding a rule
+        that legitimately fires here means updating this list deliberately, which is the point.
+
+        `compaction-truncation-risk` left the set in 0.17.0, when SKILL.md was cut below the
+        compaction cap. The other three are Claude-Code-first by design: the eval loop uses
+        sub-agents, description optimization uses the `claude` CLI, and the viewer's server mode
+        assumes a display (now flagged in references/running-evals.md, which carries that text).
         """
         skill_root = Path(__file__).resolve().parent.parent
         findings, structural_error = lint_portability(skill_root)
         self.assertIsNone(structural_error)
         self.assertEqual(
             _rules(findings),
-            {"compaction-truncation-risk", "subagent-dependency",
-             "claude-cli-dependency", "browser-display-dependency"},
+            {"subagent-dependency", "claude-cli-dependency", "browser-display-dependency"},
             "the shipped skill's finding set changed -- a NEW rule id here is a regression signal, "
             "not a number to update without reading why it fired",
         )
@@ -1141,6 +1176,108 @@ class SelfLintTests(unittest.TestCase):
             "SKILL.md is expected to name no file-delivery tool, so suppressing the rule "
             "there would hide a real regression instead of proving one doesn't exist.",
         )
+
+
+def _headings(path):
+    """Heading texts of a markdown file, '#'s stripped, fenced code blocks skipped."""
+    out, fenced = [], False
+    for line in path.read_text().splitlines():
+        if line.lstrip().startswith("```"):
+            fenced = not fenced
+            continue
+        if not fenced and re.match(r"#{1,6} ", line):
+            out.append(line.lstrip("#").strip())
+    return out
+
+
+def _italics(text):
+    """`*Name*` spans, with `**bold**` markers removed first so they cannot pair up."""
+    return re.findall(r"\*([^*\n]+)\*", text.replace("**", ""))
+
+
+class SkillPointerTests(unittest.TestCase):
+    """SKILL.md's pointers into references/ and assets/ must not dangle.
+
+    0.17.0 moved most of SKILL.md into references and left one-line pointers; a pointer to a
+    renamed file or heading fails silently at run time (the agent opens the file and finds no such
+    section). These checks cover the pointer forms SKILL.md actually uses -- conservative on
+    purpose, so a new form needs adding here rather than being guessed at.
+    """
+
+    ROOT = Path(__file__).resolve().parent.parent
+
+    def _resolves(self, name, path):
+        heads = [h.casefold() for h in _headings(path)]
+        return any(h.startswith(name.casefold()) for h in heads)
+
+    def test_named_reference_and_asset_paths_exist(self):
+        text = (self.ROOT / "SKILL.md").read_text()
+        paths = set(re.findall(r"(?:references|assets|agents|scripts)/[\w.-]+\.\w+", text))
+        self.assertTrue(any(p.startswith("references/") for p in paths), "no pointers found")
+        for rel in sorted(paths):
+            if "<" in rel or rel.startswith("references/aws"):
+                continue
+            self.assertTrue((self.ROOT / rel).exists(), f"SKILL.md names {rel}, which does not exist")
+
+    def test_reference_files_are_all_listed(self):
+        """Every shipped reference and asset is in SKILL.md's reference list (C18)."""
+        text = (self.ROOT / "SKILL.md").read_text()
+        listing = text[text.index("## Reference files"):]
+        for sub in ("references", "assets"):
+            for p in sorted((self.ROOT / sub).iterdir()):
+                if p.is_file() and not p.name.startswith("."):
+                    self.assertIn(f"{sub}/{p.name}", listing, f"{sub}/{p.name} is not listed")
+
+    def test_section_pointers_into_references_resolve(self):
+        text = (self.ROOT / "SKILL.md").read_text()
+        checked = 0
+        # `references/X.md` (*A*, *B* ...)   and   `references/X.md` → *A*
+        for m in re.finditer(r"`(references/[\w.-]+\.md)`\s*(?:\(([^)]*)\)|→\s*(\*[^*]+\*))", text):
+            target = self.ROOT / m.group(1)
+            for name in _italics(m.group(2) or m.group(3)):
+                checked += 1
+                self.assertTrue(self._resolves(name, target),
+                                f"SKILL.md points at *{name}* in {m.group(1)}, which has no such heading")
+        # The routing bullets name environments.md sections after an arrow.
+        routing = text[text.index("## Environment-specific instructions"):]
+        routing = routing[:routing.index("\n## ", 1)]
+        env = self.ROOT / "references/environments.md"
+        for line in routing.splitlines():
+            if "→" in line:
+                after = line.split("→", 1)[1].split(":", 1)[0]
+                for name in _italics(after):
+                    checked += 1
+                    self.assertTrue(self._resolves(name, env),
+                                    f"routing points at *{name}*, which environments.md lacks")
+        self.assertGreaterEqual(checked, 10, "pointer patterns no longer match -- update this test")
+
+    def test_internal_and_back_pointers_resolve(self):
+        """`(see *X*)` inside SKILL.md, and references' `SKILL.md ... *X*`, name SKILL.md headings."""
+        skill = self.ROOT / "SKILL.md"
+        text = skill.read_text().replace("**", "")
+        names = re.findall(r"\(see \*([^*]+)\*", text)
+        names += re.findall(r"\(\*([^*]+)\* → \*([^*]+)\*", text)
+        flat = [n for item in names for n in ((item,) if isinstance(item, str) else item)]
+        for ref in sorted((self.ROOT / "references").glob("*.md")):
+            flat += re.findall(r"SKILL\.md(?:'s|,| \()\s*\*([^*]+)\*", ref.read_text())
+        self.assertGreaterEqual(len(flat), 5, "pointer patterns no longer match -- update this test")
+        for name in flat:
+            self.assertTrue(self._resolves(name, skill), f"*{name}* is not a SKILL.md heading")
+
+    def test_no_skill_dir_token_in_references_or_agents(self):
+        """`${CLAUDE_SKILL_DIR}` is substituted in SKILL.md only; elsewhere it arrives literally.
+
+        References write `<this-skill-dir>`, which SKILL.md defines. official-guide-patterns.md is
+        excluded: it DOCUMENTS the token (what it does, where it is dead), it does not use it in a
+        command this skill runs.
+        """
+        token = "${" + "CLAUDE_SKILL_DIR}"
+        files = sorted((self.ROOT / "agents").glob("*.md"))
+        files += [p for p in sorted((self.ROOT / "references").glob("*.md"))
+                  if p.name != "official-guide-patterns.md"]
+        self.assertTrue(files)
+        for p in files:
+            self.assertNotIn(token, p.read_text(), f"{p.name} uses the token, which is dead there")
 
 
 if __name__ == "__main__":

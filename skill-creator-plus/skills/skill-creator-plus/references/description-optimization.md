@@ -48,10 +48,10 @@ Tell the user: "This will take some time — I'll run the optimization loop in t
 
 Isolation has a cost: the test listing holds only this skill, so the user's other skills aren't there to compete for a query. Include should-not-trigger queries that a neighbouring skill should win, and read a high score as "clear on its own", not "wins against everything installed".
 
-Save the eval set to the workspace, then run in the background. The command must run from the skill-creator-plus skill directory (the one containing `scripts/`) — `-m scripts.run_loop` resolves the package from the cwd and fails with `ModuleNotFoundError` anywhere else:
+Save the eval set to the workspace, then run in the background. The command must run from the skill-creator-plus skill directory (the one containing `scripts/`) — `-m scripts.run_loop` resolves the package from the cwd and fails with `ModuleNotFoundError` anywhere else. `<this-skill-dir>` is the skill directory you resolved in SKILL.md (*Validate, package and deliver*):
 
 ```bash
-cd <skill-creator-plus-skill-path> && python -m scripts.run_loop \
+cd <this-skill-dir> && python -m scripts.run_loop \
   --eval-set <path-to-trigger-eval.json> \
   --skill-path <path-to-skill> \
   --model <model-id-powering-this-session> \
