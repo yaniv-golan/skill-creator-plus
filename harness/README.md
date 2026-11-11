@@ -99,8 +99,8 @@ applies; apart from `no-trigger`, the resulting cassettes aren't committed.
 `cowork-harness` is a separate npm CLI (the Claude plugin ships only the skill, not the built CLI):
 
 ```bash
-npm i -g "cowork-harness@>=4.2.1"    # needs Node >= 22
-cowork-harness --version          # MUST report 4.2.x — `npx` can silently serve a stale cache
+npm i -g "cowork-harness@>=5.0.0"    # needs Node >= 22
+cowork-harness --version          # MUST report 5.0.x — `npx` can silently serve a stale cache
 ```
 
 - **Static checks + `lint` + `replay`**: token-free, no Docker, no staged agent, no token.
