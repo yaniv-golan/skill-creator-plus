@@ -43,6 +43,8 @@ All notable changes to this project will be documented in this file.
   run without isolation prints once, not once per `run_loop` iteration; `improve_description.py`
   refuses compare-mode output with a clear message instead of a `KeyError`; `run_eval` warns about a
   query starting with `/`, since the CLI handles slash commands itself without asking the model.
+- **Maintainer CI pins cowork-harness 5.0.0** (was 4.2.1): the cassette is now recorded against
+  the desktop-4.23118.0 baseline, which 4.2.1 reports as stale.
 
 ## [0.17.0] - 2026-10-03
 
