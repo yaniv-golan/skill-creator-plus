@@ -25,6 +25,8 @@ For the **should-not-trigger** queries (8-10), the most valuable ones are the ne
 
 The key thing to avoid: don't make should-not-trigger queries obviously irrelevant. "Write a fibonacci function" as a negative test for a PDF skill is too easy — it doesn't test anything. The negative cases should be genuinely tricky.
 
+**Testing a change to an existing description.** Write the queries from the skill's body and from real user requests *before* you write or re-read the candidate description. Queries written afterwards tend to echo the candidate's new words, and a gain on such a query only confirms that wording; it is not independent evidence. If the candidate already exists when you write the queries, say so in the report, and report a gain on a query that reuses a word the change added as confirmation of that wording. When the skill is someone else's, the evidence its owner most needs is the should-not-trigger side: near-misses that fire under neither description, including rate rises that stay below the threshold (0/3 → 1/3).
+
 ### Step 2: Review with user
 
 Present the eval set to the user for review using the HTML template:
@@ -44,7 +46,7 @@ This step matters — bad eval queries lead to bad descriptions.
 
 Tell the user: "This will take some time — I'll run the optimization loop in the background and check on it periodically."
 
-**Export a credential first** (`ANTHROPIC_API_KEY`, `CLAUDE_CODE_OAUTH_TOKEN` or `ANTHROPIC_AUTH_TOKEN`). With one, each `claude -p` run gets an isolated home directory, so a copy of the skill the user already has installed can't answer in place of the version under test. Without one, the run uses the user's real configuration and refuses to score if an installed copy answered. Check `isolated` and `canary` in the output JSON. **Exit 4 means nothing was measured** (the canary did not trigger, or a run invoked an installed copy of the skill instead of the one under test), which is different from a low score; don't report it as a bad description.
+**Export a credential first** (`ANTHROPIC_API_KEY`, `CLAUDE_CODE_OAUTH_TOKEN` or `ANTHROPIC_AUTH_TOKEN`), or pass `--dotenv <path-to-.env>` to `run_eval` or `run_loop`. `--dotenv` reads only `ANTHROPIC_API_KEY` and `CLAUDE_CODE_OAUTH_TOKEN`, hands them to the eval's `claude -p` runs only (not to the improver, not to your shell), never overrides a variable already set, prints the names it loaded and never the values, and refuses when `ANTHROPIC_BASE_URL` is set (a gateway setup exports its own token and URL). If the file holds both credentials, both reach the runs and the `claude` CLI prefers the API key, so a stale key there fails every run with a 401 even when the OAuth token beside it is valid; add `--dotenv-key CLAUDE_CODE_OAUTH_TOKEN` (or `ANTHROPIC_API_KEY`) to load only one. With a credential, each `claude -p` run gets an isolated home directory, so a copy of the skill the user already has installed can't answer in place of the version under test. Without one, the run uses the user's real configuration and refuses to score if an installed copy answered. Check `isolated` and `canary` in the output JSON. **Exit 4 means nothing was measured** (the canary did not trigger, or a run invoked an installed copy of the skill instead of the one under test), which is different from a low score; don't report it as a bad description. A run that hit an API error (a bad credential, a rate limit the CLI was still retrying when the run timed out, an overload) counts as **errored**, not as a non-trigger: it is left out of the trigger rate and counted in `errored_runs`. A canary that errored on an authentication failure says `CANARY ERRORED` and names the credential variables present. If many runs time out, raise `--timeout`.
 
 Isolation has a cost: the test listing holds only this skill, so the user's other skills aren't there to compete for a query. Include should-not-trigger queries that a neighbouring skill should win, and read a high score as "clear on its own", not "wins against everything installed".
 
@@ -73,6 +75,25 @@ Use the model ID from your system prompt (the one powering the current session) 
 While it runs, periodically tail the output to give the user updates on which iteration it's on, what the scores look like, and how description length is trending.
 
 This handles the full optimization loop automatically. It splits the eval set into 60% train and 40% held-out test, evaluates the current description (running each query 3 times to get a reliable trigger rate), then calls Claude to propose improvements based on what failed. It re-evaluates each new description on both train and test, iterating up to 5 times (or until plateau). When it's done, it writes an HTML report of the results per iteration to the results directory and returns JSON with `best_description` — selected by test score (with shorter winning ties) rather than train score to avoid overfitting.
+
+### Comparing two descriptions
+
+To check whether a change to a description helped, run both in one command, from `<this-skill-dir>`:
+
+```bash
+cd <this-skill-dir> && python -m scripts.run_eval \
+  --eval-set <path-to-trigger-eval.json> \
+  --skill-path <path-to-skill> \
+  --baseline-description-file <path-to-old-description.txt> \
+  --model <model-id-powering-this-session> \
+  --dotenv <path-to-.env> --verbose
+```
+
+The candidate is the skill's current description, or `--description` when given. `--baseline-description "<text>"` works too, but a file avoids shell-quoting a long description. Compare mode costs twice a single run. The two descriptions run one after the other, baseline first, so a rate limit or an error burst can land in one of them only; check `errored_runs` in both.
+
+Each query is reported as **fixed**, **regressed**, **within noise**, **same** or **errored**. A query counts as fixed or regressed only when its pass/fail result flips *and* the trigger count moves by at least 2 runs and at least half the runs. So at the default 3 runs, 1/3 → 2/3 is within noise, and at `--runs-per-query 1` every flip is within noise. Use 5 or more runs when a decision rests on a single query. Read the `same` rows too: a should-not-trigger rate rising from 0/3 to 1/3 is not a flip, but it is the earliest sign of over-triggering.
+
+Duplicate queries are rejected in every mode. Compare-mode output (`"mode": "compare"`) is not an input to `improve_description.py`.
 
 ### How skill triggering works
 

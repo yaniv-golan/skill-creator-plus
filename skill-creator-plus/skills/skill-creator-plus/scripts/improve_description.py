@@ -205,7 +205,9 @@ def main():
             "  python -m scripts.improve_description \\\n"
             "    --eval-results results.json \\\n"
             "    --skill-path ./my-skill \\\n"
-            "    --model claude-opus-5\n"
+            "    --model <model-id>\n"
+            "\n"
+            "Use the model ID of the session whose triggering you want to match.\n"
             "\n"
             "Output: writes the improved description JSON to stdout.\n"
             "\n"
@@ -228,6 +230,12 @@ def main():
         sys.exit(1)
 
     eval_results = json.loads(Path(args.eval_results).read_text())
+    if eval_results.get("mode") == "compare":
+        print("Error: --eval-results is a compare-mode result (mode == \"compare\"), which holds "
+              "two descriptions' results and is not an improver input. Pass a single-description "
+              "run_eval result instead, e.g. the \"baseline\" or \"candidate\" object from it.",
+              file=sys.stderr)
+        sys.exit(1)
     history = []
     if args.history:
         history = json.loads(Path(args.history).read_text())

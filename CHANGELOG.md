@@ -2,6 +2,48 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.18.0] - 2026-11-11
+
+### Fixed
+- **API errors no longer count as "did not trigger".** `run_eval` read the CLI's final event without
+  checking `is_error`, so a run that failed with a bad credential, a rate limit or an overload was
+  scored as a clean non-trigger: should-not-trigger queries passed and should-trigger queries failed.
+  Rate limits were the worst case, because the CLI retries them itself (`system/api_retry`) and the
+  run timed out before any error event arrived. Such runs are now **errored**: left out of the trigger
+  rate and counted in `errored_runs`. The end of a run that produced no verdict is now decided by one
+  explicit table: a timeout while answer text is streaming is still a non-trigger (a long answer to a
+  near-miss query), while a timeout before any answer text, during thinking, mid tool call or while
+  the CLI is retrying is an error. The lines the CLI writes just before exiting are now parsed too.
+  **Scores can differ from earlier runs** that hit API errors or timeouts; a slow model may need a
+  larger `--timeout`.
+- **A canary that fails on authentication says so.** It reports `CANARY ERRORED` with the API's
+  message and the names (never the values) of the credential variables present, instead of
+  suggesting the CLI, the model or the detector.
+
+### Added
+- **Compare mode for `run_eval`.** `--baseline-description-file <old.txt>` (or
+  `--baseline-description "<text>"`) runs the old and new descriptions in one command and labels each
+  query fixed, regressed, within noise, same or errored. A query counts as fixed or regressed only when
+  its result flips and the trigger count moves by at least 2 runs and at least half the runs, so one
+  run's difference at the default 3 runs is reported as noise.
+- **`--dotenv <path>` for `run_eval` and `run_loop`.** Reads `ANTHROPIC_API_KEY` and
+  `CLAUDE_CODE_OAUTH_TOKEN` from a `.env` file and passes them only to the eval's `claude -p` runs,
+  never into the script's own environment or the description improver's. It never overrides a
+  variable already set, prints names and never values, and refuses when `ANTHROPIC_BASE_URL` is set.
+  `--dotenv-key <name>` loads only one of the two: with both in the file, the CLI prefers the API key.
+
+### Changed
+- **Guidance on testing a description change** (`references/description-optimization.md`): write the
+  trigger queries before the new description, and read a gain on a query that repeats the new
+  wording as confirmation of that wording, not independent evidence.
+- **SKILL.md** now says not to widen an existing skill's trigger scope unasked.
+- **Duplicate queries are rejected** in `run_eval` and `run_loop`; runs are keyed by query text, so
+  duplicates silently pooled their runs.
+- `--help` examples use `--model <model-id>` instead of a specific model ID; the warning about a
+  run without isolation prints once, not once per `run_loop` iteration; `improve_description.py`
+  refuses compare-mode output with a clear message instead of a `KeyError`; `run_eval` warns about a
+  query starting with `/`, since the CLI handles slash commands itself without asking the model.
+
 ## [0.17.0] - 2026-10-03
 
 ### Changed
