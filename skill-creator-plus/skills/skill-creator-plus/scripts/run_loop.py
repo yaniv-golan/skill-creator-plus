@@ -18,7 +18,10 @@ from pathlib import Path
 try:
     from scripts.generate_report import generate_html
     from scripts.improve_description import improve_description
-    from scripts.run_eval import InstrumentError, run_eval
+    from scripts.run_eval import (
+        InstrumentError, _warn_unisolated, isolation_available, load_dotenv_extra_env,
+        reject_duplicate_queries, run_eval,
+    )
     from scripts.utils import parse_skill_md
 except ImportError:
     sys.exit(
@@ -75,6 +78,7 @@ def run_loop(
     log_dir: Path | None = None,
     target_length: int = 500,
     plateau_patience: int = 2,
+    extra_env: dict | None = None,
 ) -> dict:
     """Run the eval + improvement loop."""
     name, original_description, content = parse_skill_md(skill_path)
@@ -111,6 +115,9 @@ def run_loop(
             runs_per_query=runs_per_query,
             trigger_threshold=trigger_threshold,
             model=model,
+            # Eval children only. improve_description and webbrowser keep os.environ, so the
+            # improver's billing does not change.
+            extra_env=extra_env,
         )
         eval_elapsed = time.time() - t0
 
@@ -289,15 +296,22 @@ def main():
             "  python -m scripts.run_loop \\\n"
             "    --eval-set trigger-eval.json \\\n"
             "    --skill-path ./my-skill \\\n"
-            "    --model claude-opus-5 \\\n"
+            "    --model <model-id> \\\n"
             "    --max-iterations 5 --target-length 500 --plateau-patience 2 --verbose\n"
+            "\n"
+            "Use the model ID of the session whose triggering you want to match.\n"
+            "\n"
+            "--dotenv PATH loads ANTHROPIC_API_KEY / CLAUDE_CODE_OAUTH_TOKEN for the eval children\n"
+            "only (not the description improver); refused when ANTHROPIC_BASE_URL is set.\n"
+            "If the file holds both, the CLI prefers the API key; --dotenv-key NAME loads only one.\n"
             "\n"
             "Output: JSON results to stdout; HTML report opened in browser unless --report=none.\n"
             "Note: makes real (paid) `claude -p` calls. Use --report=none for headless runs.\n"
             "\n"
             "Exit codes:\n"
             "  0  loop completed (returned a best_description)\n"
-            "  1  eval-set unreadable, skill not found, or all iterations failed\n"
+            "  1  eval-set unreadable or has duplicate queries, skill not found, --dotenv refused,\n"
+            "     or all iterations failed\n"
             "  4  INSTRUMENT FAILURE — the trigger eval measured nothing (see run_eval); no score"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -319,7 +333,17 @@ def main():
     parser.add_argument("--verbose", action="store_true", help="Print progress to stderr")
     parser.add_argument("--report", default="auto", help="Generate HTML report at this path. Default 'auto' writes it beside --results-dir when that is given, else the system temp dir; 'none' disables. Pass an ABSOLUTE path — this script runs under the shell, whose working directory may differ from the calling agent's.")
     parser.add_argument("--results-dir", default=None, help="Save all outputs (results.json, report.html, log.txt) to a timestamped subdirectory here. Pass an ABSOLUTE path — this script runs under the shell, whose working directory may differ from the calling agent's.")
+    parser.add_argument("--dotenv", default=None,
+                        help="Dotenv file to read ANTHROPIC_API_KEY / CLAUDE_CODE_OAUTH_TOKEN from (eval children only)")
+    parser.add_argument("--dotenv-key", default=None,
+                        choices=("ANTHROPIC_API_KEY", "CLAUDE_CODE_OAUTH_TOKEN"),
+                        help="With --dotenv: load only this credential from the file")
     args = parser.parse_args()
+
+    # Before any file write or browser launch: a refused dotenv must leave nothing behind.
+    if args.dotenv_key and not args.dotenv:
+        parser.error("--dotenv-key needs --dotenv")
+    extra_env = load_dotenv_extra_env(args.dotenv, args.dotenv_key) if args.dotenv else None
 
     eval_set = json.loads(Path(args.eval_set).read_text())
     skill_path = Path(args.skill_path)
@@ -328,7 +352,13 @@ def main():
         print(f"Error: No SKILL.md found at {skill_path}", file=sys.stderr)
         sys.exit(1)
 
+    reject_duplicate_queries(eval_set)  # the train/test split below works by query text
+
     name, _, _ = parse_skill_md(skill_path)
+
+    # Once per invocation, not once per iteration (run_eval no longer warns).
+    if not isolation_available(extra_env):
+        _warn_unisolated(name)
 
     # Set up live report path
     if args.report != "none":
@@ -380,6 +410,7 @@ def main():
             log_dir=log_dir,
             target_length=args.target_length,
             plateau_patience=args.plateau_patience,
+            extra_env=extra_env,
         )
     except ValueError as e:
         print(f"Error: {e}", file=sys.stderr)

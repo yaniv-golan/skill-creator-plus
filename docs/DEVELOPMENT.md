@@ -97,6 +97,14 @@ python -m scripts.aggregate_benchmark <dir> --notes notes.json  # merge analyst 
 # description. The run refuses rather than scoring when it detects this, but isolation avoids it.
 # Check `isolated` and `canary` in the output JSON; exit 4 means INSTRUMENT FAILURE (nothing was
 # measured), which is a different fact from a low score and must not be treated as one.
+# `--dotenv <path>` (run_eval and run_loop) reads ANTHROPIC_API_KEY / CLAUDE_CODE_OAUTH_TOKEN from a
+# .env and passes them to the eval's `claude -p` children only, never into os.environ; it refuses
+# when ANTHROPIC_BASE_URL is set; with both in the file the CLI prefers the API key, so pass
+# `--dotenv-key CLAUDE_CODE_OAUTH_TOKEN` to load only one. API errors (bad credential, rate limit still retrying at timeout)
+# are ERRORED runs, excluded from rates, not non-triggers. Compare two descriptions in one run with
+# `--baseline-description-file <old.txt>` (or `--baseline-description "<text>"`): rows are
+# fixed / regressed / within_noise / same / errored, and a flip needs a swing of >= 2 runs and
+# >= half the runs.
 
 # cowork-harness static checks on the shipped skill (token-free, no Docker; needs cowork-harness
 # >= 4.2.1 (the committed cassette is recorded against its desktop-2.16120.0 baseline, so an older

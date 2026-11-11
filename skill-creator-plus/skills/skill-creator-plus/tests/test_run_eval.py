@@ -80,24 +80,46 @@ class IsolationTest(unittest.TestCase):
             self.assertNotIn("CLAUDECODE", env)
 
 
-def drive(events, installed=frozenset(), clean_hex="a" * 32):
+def drive(events, installed=frozenset(), clean_hex="a" * 32, exit_code=None, tail=(),
+          polls_before_exit=None, timeout=5):
     """Run the REAL run_single_query against canned stream-json, offline.
 
     No network, no credential, no `claude` binary. Everything below is reachable this way, which
     is why the fix's own behaviour is now testable at all — the first version of these tests
     mocked os.environ and asserted on dicts, and could not see the defect that mattered.
+
+    Default: the pipe holds `events`, then EOF while the process is still "alive" -- the run ends
+    with was_killed True, i.e. a timeout. With `exit_code` the fake process exits by itself: poll()
+    is None for `polls_before_exit` calls (default 1 when there are events, so they are read from
+    the pipe first, else 0) and then returns the code, and stdout.read() hands back `tail` (a list
+    of event dicts, or a raw str/bytes for an unterminated line) -- the self-exit branch.
     """
     import scripts.run_eval as m
     r, w = os.pipe()
     os.write(w, ("".join(json.dumps(e) + "\n" for e in events)).encode())
     os.close(w)
 
+    if isinstance(tail, (str, bytes)):
+        tail_bytes = tail.encode() if isinstance(tail, str) else tail
+    else:
+        tail_bytes = "".join(json.dumps(e) + "\n" for e in tail).encode()
+    if polls_before_exit is None:
+        polls_before_exit = 1 if events else 0
+
     class FakeProc:
         def __init__(self):
-            self.stdout = types.SimpleNamespace(fileno=lambda: r, read=lambda: b"")
+            self.polls = 0
+            self.stdout = types.SimpleNamespace(fileno=lambda: r, read=self._read)
+
+        def _read(self):
+            out, self._tail = getattr(self, "_tail", tail_bytes), b""
+            return out
 
         def poll(self):
-            return None
+            if exit_code is None:
+                return None
+            self.polls += 1
+            return None if self.polls <= polls_before_exit else exit_code
 
         def kill(self):
             pass
@@ -109,7 +131,7 @@ def drive(events, installed=frozenset(), clean_hex="a" * 32):
     m.subprocess.Popen = lambda *a, **k: FakeProc()
     m.uuid = types.SimpleNamespace(uuid4=lambda: types.SimpleNamespace(hex=clean_hex))
     try:
-        return m.run_single_query("q", "skill-creator-plus", "d", 5, None, None, installed)
+        return m.run_single_query("q", "skill-creator-plus", "d", timeout, None, None, installed)
     finally:
         m.subprocess.Popen, m.uuid = real_popen, real_uuid
         os.close(r)
@@ -174,6 +196,277 @@ class HijackDetectionTest(unittest.TestCase):
         out = drive(skill_events("totally-unrelated"), INSTALLED)
         self.assertFalse(out["triggered"])
         self.assertIsNone(out["hijacked_by"])
+
+
+# Event shapes below are trimmed from a real CLI (2.1.322) run: a bogus ANTHROPIC_API_KEY, no
+# credential at all, and a refused connection.
+INIT = {"type": "system", "subtype": "init", "model": "claude-opus-5-5"}
+STATUS = {"type": "system", "subtype": "status", "status": "requesting"}
+SYNTH = {"model": "<synthetic>", "role": "assistant", "stop_reason": "stop_sequence",
+         "content": [{"type": "text", "text": "Invalid API key \u00b7 Fix external API key"}]}
+A401 = {"type": "assistant", "message": SYNTH, "error": "authentication_failed",
+        "is_api_error_message": True, "api_error_status": 401}
+R401 = {"type": "result", "subtype": "success", "is_error": True, "api_error_status": 401,
+        "terminal_reason": "api_error", "result": "Invalid API key \u00b7 Fix external API key"}
+A_NOCRED = {"type": "assistant", "error": "authentication_failed", "is_api_error_message": True,
+            "message": {**SYNTH, "content": [{"type": "text",
+                                              "text": "Not logged in \u00b7 Please run /login"}]}}
+R_NOCRED = {"type": "result", "subtype": "success", "is_error": True, "api_error_status": None,
+            "result": "Not logged in \u00b7 Please run /login"}
+
+
+def retry(status=None, error="unknown", attempt=1):
+    return {"type": "system", "subtype": "api_retry", "attempt": attempt, "max_retries": 10,
+            "retry_delay_ms": 500, "error_status": status, "error": error}
+
+
+def block_start(kind):
+    cb = {"type": kind} if kind != "tool_use" else {"type": "tool_use", "name": "Bash"}
+    return {"type": "stream_event", "event": {"type": "content_block_start", "content_block": cb}}
+
+
+def text_delta(t="hello"):
+    return {"type": "stream_event", "event": {"type": "content_block_delta",
+            "delta": {"type": "text_delta", "text": t}}}
+
+
+def pending_skill_start():
+    return {"type": "stream_event", "event": {"type": "content_block_start",
+            "content_block": {"type": "tool_use", "name": "Skill"}}}
+
+
+def partial_delta(fragment):
+    return {"type": "stream_event", "event": {"type": "content_block_delta",
+            "delta": {"type": "input_json_delta", "partial_json": fragment}}}
+
+
+class ApiErrorScoringTest(unittest.TestCase):
+    """Item 0: an API error is an errored run, never a clean non-trigger.
+
+    One test per row of the end-of-run decision table (comments name the row), plus the streaming
+    returns and the edges around them.
+    """
+
+    def setUp(self):
+        p = mock.patch.dict(os.environ, {v: "" for v in CREDENTIAL_ENV_VARS + ("ANTHROPIC_BASE_URL",)})
+        p.start()
+        self.addCleanup(p.stop)
+
+    def assertErrored(self, out, *fragments):
+        self.assertFalse(out["triggered"])
+        self.assertTrue(out["error"], out)
+        for f in fragments:
+            self.assertIn(f, out["error"])
+        self.assertNotIn("None", out["error"])
+
+    def assertCleanNonTrigger(self, out):
+        self.assertFalse(out["triggered"])
+        self.assertIsNone(out["error"])
+
+    # --- immediate errored returns while streaming
+    def test_result_is_error_with_success_subtype_is_errored(self):
+        out = drive([INIT, R401])
+        self.assertErrored(out, "api error 401", "Invalid API key")
+        self.assertEqual(out["api_status"], 401)
+
+    def test_assistant_with_top_level_error_is_errored(self):
+        out = drive([INIT, STATUS, A401, R401])
+        self.assertErrored(out, "api error 401")
+        self.assertEqual(out["api_error"], "authentication_failed")
+
+    def test_clean_result_is_still_a_clean_non_trigger(self):
+        out = drive([INIT, {"type": "result", "subtype": "success", "is_error": False}])
+        self.assertCleanNonTrigger(out)
+
+    # --- row 2 plus the post-exit tail
+    def test_401_delivered_only_in_the_post_exit_tail_without_earlier_events(self):
+        out = drive([], exit_code=1, tail=[INIT, STATUS, A401, R401])
+        self.assertErrored(out, "api error 401")
+
+    def test_401_delivered_only_in_the_post_exit_tail_after_earlier_events(self):
+        out = drive([INIT, STATUS], exit_code=1, tail=[A401, R401])
+        self.assertErrored(out, "api error 401")
+
+    def test_final_unterminated_line_is_parsed(self):
+        out = drive([INIT], exit_code=1, tail=json.dumps(R401))
+        self.assertErrored(out, "api error 401")
+
+    def test_row2_nonzero_exit_with_no_error_event(self):
+        out = drive([INIT, STATUS], exit_code=2)
+        self.assertErrored(out, "claude exited with code 2")
+
+    def test_row2_nonzero_exit_before_any_output(self):
+        out = drive([], exit_code=1)
+        self.assertErrored(out, "claude exited with code 1 before any output")
+
+    def test_row2_names_the_last_api_retry_error(self):
+        out = drive([INIT, retry(529, "overloaded")], exit_code=1)
+        self.assertErrored(out, "claude exited with code 1", "529")
+
+    # --- row 1
+    def test_row1_pending_skill_call_then_end(self):
+        out = drive([pending_skill_start(), partial_delta('{"ski')])
+        self.assertErrored(out, "mid tool call")
+
+    def test_row1_pending_skill_call_then_clean_exit(self):
+        out = drive([pending_skill_start(), partial_delta('{"ski')], exit_code=0)
+        self.assertErrored(out, "mid tool call")
+
+    # --- row 3
+    def test_row3_init_and_retry_then_timeout(self):
+        out = drive([INIT, retry(429, "rate_limit")])
+        self.assertErrored(out, "api error 429", "retrying")
+
+    def test_row3_text_then_retry_then_timeout_last_event_wins(self):
+        out = drive([INIT, block_start("text"), text_delta(), retry(529, "overloaded")])
+        self.assertErrored(out, "api error 529")
+
+    def test_row3_connection_failure_has_null_status_and_no_credential_blame(self):
+        out = drive([INIT, STATUS, retry(None, "unknown", 1), retry(None, "unknown", 2)])
+        self.assertErrored(out, "api error (unknown)")
+        self.assertIsNone(out["api_status"])
+
+    # --- row 5 vs row 4
+    def test_row5_retry_then_recovered_text_then_timeout_is_clean(self):
+        out = drive([INIT, retry(429, "rate_limit"), block_start("text"), text_delta()])
+        self.assertCleanNonTrigger(out)
+
+    def test_row5_text_then_timeout_is_a_clean_non_trigger(self):
+        out = drive([INIT, block_start("text"), text_delta("a"), text_delta("b")])
+        self.assertCleanNonTrigger(out)
+
+    def test_row5_status_event_after_text_does_not_turn_it_into_an_error(self):
+        # A status/hook system event mid-answer is bookkeeping; the long-answer timeout must stay
+        # a clean non-trigger rather than fall into row 4.
+        out = drive([INIT, block_start("text"), text_delta("a"), STATUS, text_delta("b")])
+        self.assertCleanNonTrigger(out)
+
+    def test_row4_init_then_timeout(self):
+        out = drive([INIT, STATUS])
+        self.assertErrored(out, "timeout", "before answer text")
+
+    def test_row4_thinking_only_then_timeout(self):
+        out = drive([INIT, block_start("thinking")])
+        self.assertErrored(out, "timeout", "mid-thinking")
+
+    def test_row4_no_events_at_all_keeps_the_no_output_message(self):
+        out = drive([])
+        self.assertErrored(out, "no output from claude")
+
+    # --- row 6
+    def test_row6_text_then_clean_exit_without_a_result(self):
+        out = drive([INIT, block_start("text"), text_delta()], exit_code=0)
+        self.assertErrored(out, "without a result")
+
+    # --- not model output
+    def test_synthetic_assistant_without_error_is_not_model_output(self):
+        out = drive([INIT, {"type": "assistant", "message": SYNTH}])
+        self.assertErrored(out, "timeout")
+
+    # --- null statuses
+    def test_null_api_error_status_has_no_None_and_no_credential_claim(self):
+        out = drive([INIT, A_NOCRED, R_NOCRED])
+        self.assertErrored(out, "api error (authentication_failed)")
+        self.assertIsNone(out["api_status"])
+        out = drive([INIT, R_NOCRED])
+        self.assertErrored(out, "api error (")
+
+    # --- regression guards: unchanged early returns
+    def test_real_skill_trigger_still_returns_triggered(self):
+        out = drive(skill_events(CLEAN))
+        self.assertTrue(out["triggered"])
+        self.assertIsNone(out["error"])
+
+    def test_non_skill_tool_use_still_a_clean_non_trigger(self):
+        out = drive([INIT, block_start("tool_use")])
+        self.assertCleanNonTrigger(out)
+
+    def test_message_stop_still_a_clean_non_trigger(self):
+        out = drive([INIT, block_start("text"),
+                     {"type": "stream_event", "event": {"type": "message_stop"}}])
+        self.assertCleanNonTrigger(out)
+
+
+class CanaryErrorTest(unittest.TestCase):
+    """The canary names the credential only when the API rejected it."""
+
+    def setUp(self):
+        p = mock.patch.dict(os.environ, {v: "" for v in CREDENTIAL_ENV_VARS + ("ANTHROPIC_BASE_URL",)})
+        p.start()
+        self.addCleanup(p.stop)
+
+    def run_inner(self, canary, env=None):
+        import scripts.run_eval as m
+        with mock.patch.dict(os.environ, env or {}), \
+                mock.patch.object(m, "run_canary", return_value=canary), \
+                mock.patch.object(m, "installed_skill_names", return_value=set()):
+            with self.assertRaises(InstrumentError) as cm:
+                m._run_eval_inner([], "s", "d", 1, 5, 1, 0.5, None, None)
+        return str(cm.exception)
+
+    def test_canary_401_names_credentials_by_name_only(self):
+        canary = drive([INIT, A401, R401])
+        msg = self.run_inner(canary, {"ANTHROPIC_API_KEY": "sk-secret-value"})
+        self.assertIn("CANARY ERRORED", msg)
+        self.assertIn("api error 401", msg)
+        self.assertIn("ANTHROPIC_API_KEY", msg)
+        self.assertNotIn("sk-secret-value", msg)
+
+    def test_canary_authentication_failed_with_null_status_and_no_credential(self):
+        msg = self.run_inner(drive([INIT, A_NOCRED, R_NOCRED]))
+        self.assertIn("CANARY ERRORED", msg)
+        self.assertIn("none of", msg)
+
+    def test_canary_cli_not_found_is_neutral(self):
+        msg = self.run_inner({"triggered": False, "error": "claude CLI not found on PATH"},
+                             {"ANTHROPIC_API_KEY": "x"})
+        self.assertIn("CANARY FAILED", msg)
+        self.assertNotIn("CANARY ERRORED", msg)
+
+    def test_canary_connection_failure_is_neutral(self):
+        canary = drive([INIT, STATUS, retry(None, "unknown")])
+        msg = self.run_inner(canary, {"ANTHROPIC_API_KEY": "x"})
+        self.assertIn("CANARY FAILED", msg)
+        self.assertIn("api error (unknown)", msg)
+        self.assertNotIn("CANARY ERRORED", msg)
+
+    def test_credential_names_helper_reads_environ_and_extra_env(self):
+        from scripts.run_eval import credential_names_present
+        with mock.patch.dict(os.environ, {"CLAUDE_CODE_OAUTH_TOKEN": "t"}):
+            self.assertEqual(credential_names_present(), ["CLAUDE_CODE_OAUTH_TOKEN"])
+            self.assertEqual(credential_names_present({"ANTHROPIC_API_KEY": "k"}),
+                             ["ANTHROPIC_API_KEY", "CLAUDE_CODE_OAUTH_TOKEN"])
+
+
+class SlashQueryWarningTest(unittest.TestCase):
+    def setUp(self):
+        p = mock.patch.dict(os.environ, {v: "" for v in CREDENTIAL_ENV_VARS + ("ANTHROPIC_BASE_URL",)})
+        p.start()
+        self.addCleanup(p.stop)
+
+    def test_slash_prefixed_query_warns_on_stderr_without_failing(self):
+        import contextlib
+        import io
+        import tempfile
+        import scripts.run_eval as m
+        with tempfile.TemporaryDirectory() as d:
+            skill = Path(d) / "s"
+            skill.mkdir()
+            (skill / "SKILL.md").write_text("---\nname: s\ndescription: does things\n---\nbody\n")
+            ev = Path(d) / "ev.json"
+            ev.write_text(json.dumps([{"query": "/cost", "should_trigger": True},
+                                      {"query": "plain", "should_trigger": False}]))
+            fake = {"results": [], "summary": {"errored_runs": 0, "total_runs": 2,
+                                               "passed": 0, "total": 0, "failed": 0}}
+            err, out = io.StringIO(), io.StringIO()
+            argv = ["run_eval", "--eval-set", str(ev), "--skill-path", str(skill)]
+            with mock.patch.object(sys, "argv", argv), \
+                    mock.patch.object(m, "run_eval", return_value=fake), \
+                    contextlib.redirect_stderr(err), contextlib.redirect_stdout(out):
+                m.main()
+        self.assertIn("starts with '/'", err.getvalue())
+        self.assertIn("/cost", err.getvalue())
+        self.assertNotIn("plain", err.getvalue())
 
 
 class ClassifyInvocationTest(unittest.TestCase):
